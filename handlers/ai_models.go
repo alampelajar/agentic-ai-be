@@ -102,7 +102,7 @@ func CreateAIModel(c *gin.Context) {
 	}
 
 	req.ProviderName = strings.TrimSpace(req.ProviderName)
-	req.ProviderType = strings.TrimSpace(req.ProviderType)
+	req.ProviderType = normalizeProviderType(req.ProviderType)
 	req.BaseURL = strings.TrimRight(strings.TrimSpace(req.BaseURL), "/")
 	req.APIKey = strings.TrimSpace(req.APIKey)
 	req.Name = strings.TrimSpace(req.Name)
@@ -245,7 +245,10 @@ func CreateAIModel(c *gin.Context) {
 
 	agentID := req.AgentIDs[0]
 	var agent models.Agent
-	if err := config.DB.Where("id = ? AND user_id = ? AND is_active = ?", agentID, userID, true).First(&agent).Error; err != nil {
+	// Agent bersifat shared/global — tidak ada kolom user_id di tabel agents.
+	// Validasi hanya berdasarkan id dan is_active.
+	// Ownership tetap dijaga lewat user_id pada ai_models dan ai_providers.
+	if err := config.DB.Where("id = ? AND is_active = ?", agentID, true).First(&agent).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent yang dipilih tidak ditemukan atau tidak aktif."})
 		return
 	}
