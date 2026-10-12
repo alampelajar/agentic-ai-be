@@ -27,7 +27,7 @@ func main() {
 			"Peringatan: file .env tidak ditemukan, menggunakan environment system.",
 		)
 	} else {
-		fmt.Println("✓ File .env berhasil dimuat")
+		fmt.Println("[OK] File .env berhasil dimuat")
 	}
 
 	// ============================================================
@@ -38,11 +38,11 @@ func main() {
 		os.Getenv("GOOGLE_CLIENT_ID"),
 	) == "" {
 		fmt.Println(
-			"⚠ GOOGLE_CLIENT_ID belum diatur",
+			"[WARN] GOOGLE_CLIENT_ID belum diatur",
 		)
 	} else {
 		fmt.Println(
-			"✓ GOOGLE_CLIENT_ID berhasil dimuat",
+			"[OK] GOOGLE_CLIENT_ID berhasil dimuat",
 		)
 	}
 
@@ -51,12 +51,12 @@ func main() {
 	// ============================================================
 
 	if strings.TrimSpace(
-		os.Getenv("AI_ENCRYPTION_KEY"),
-	) == "" {
-		fmt.Println(
-			"⚠ AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
-		)
-	}
+    os.Getenv("AI_ENCRYPTION_KEY"),
+) == "" {
+    fmt.Println(
+        "[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
+    )
+}
 
 	// ============================================================
 	// DATABASE
@@ -191,6 +191,15 @@ func main() {
 			"/me",
 			handlers.UpdateMe,
 		)
+		protected.POST(
+			"/me/verify-delete-password",
+			handlers.VerifyDeleteAccountPassword,
+		)
+
+		protected.DELETE(
+			"/me",
+			handlers.DeleteMe,
+		)
 
 		// ========================================================
 		// AGENTIC
@@ -221,9 +230,9 @@ func main() {
 		)
 
 		protected.GET(
-	"/tasks/:id",
-	handlers.GetTask,
-)
+			"/tasks/:id",
+			handlers.GetTask,
+		)
 
 		protected.POST(
 			"/tasks",

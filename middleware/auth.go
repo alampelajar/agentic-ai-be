@@ -1,13 +1,17 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"gorm.io/gorm"
 
+	"agentic-ai-backend/config"
+	"agentic-ai-backend/models"
 	"agentic-ai-backend/utils"
 )
 
@@ -77,6 +81,22 @@ func AuthMiddleware() gin.HandlerFunc {
 		c.Set("user_email", claims.Email)
 		c.Set("user_role", claims.Role)
 
+		// Reject still-unexpired JWTs for accounts that have been deleted.
+		var activeUser models.User
+		if err := config.DB.Select("id").First(&activeUser, claims.UserID).Error; err != nil {
+			status := http.StatusUnauthorized
+			message := "Akun pengguna sudah tidak tersedia"
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				status = http.StatusServiceUnavailable
+				message = "Tidak dapat memverifikasi akun saat ini"
+			}
+			c.JSON(status, gin.H{
+				"ok":      false,
+				"message": message,
+			})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }
