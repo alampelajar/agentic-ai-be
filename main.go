@@ -51,12 +51,12 @@ func main() {
 	// ============================================================
 
 	if strings.TrimSpace(
-		os.Getenv("AI_ENCRYPTION_KEY"),
-	) == "" {
-		fmt.Println(
-			"[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
-		)
-	}
+    os.Getenv("AI_ENCRYPTION_KEY"),
+) == "" {
+    fmt.Println(
+        "[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
+    )
+}
 
 	// ============================================================
 	// DATABASE
@@ -196,7 +196,6 @@ func main() {
 			"/me/password",
 			handlers.ChangePassword,
 		)
-
 		protected.POST(
 			"/me/verify-delete-password",
 			handlers.VerifyDeleteAccountPassword,
@@ -287,26 +286,31 @@ func main() {
 		// AI PROVIDERS
 		// ========================================================
 
+		// GET PROVIDERS
 		protected.GET(
 			"/ai/providers",
 			handlers.GetAIProviders,
 		)
 
+		// CREATE PROVIDER
 		protected.POST(
 			"/ai/providers",
 			handlers.CreateAIProvider,
 		)
 
+		// TEST CONNECTION
 		protected.POST(
 			"/ai/providers/test",
 			handlers.TestAIProviderConnection,
 		)
 
+		// UPDATE PROVIDER
 		protected.PUT(
 			"/ai/providers/:id",
 			handlers.UpdateAIProvider,
 		)
 
+		// DELETE PROVIDER
 		protected.DELETE(
 			"/ai/providers/:id",
 			handlers.DeleteAIProvider,
@@ -316,26 +320,45 @@ func main() {
 		// AI MODELS
 		// ========================================================
 
+		// GET ALL MODELS
 		protected.GET(
 			"/ai/models",
 			handlers.GetAIModels,
 		)
 
+		// CREATE MODEL
 		protected.POST(
 			"/ai/models",
 			handlers.CreateAIModel,
 		)
 
+		// UPDATE MODEL
 		protected.PUT(
 			"/ai/models/:id",
 			handlers.UpdateAIModel,
 		)
 
-		// Remove a model from one agent without deleting the model.
+		// ========================================================
+		// REMOVE MODEL FROM ONE AGENT
+		//
+		// Ini hanya menghapus relasi:
+		//
+		// agent_models
+		//
+		// Model AI tetap ada dan Agent lain yang memakai model
+		// tersebut tidak akan terpengaruh.
+		// ========================================================
+
 		protected.DELETE(
 			"/ai/models/:id/agents",
 			handlers.RemoveModelFromAgent,
 		)
+
+		// ========================================================
+		// DELETE MODEL
+		//
+		// Ini menghapus model AI beserta relasinya.
+		// ========================================================
 
 		protected.DELETE(
 			"/ai/models/:id",
@@ -349,10 +372,18 @@ func main() {
 
 	admin := api.Group("/admin")
 
+	// ============================================================
+	// ADMIN LOGIN
+	// ============================================================
+
 	admin.POST(
 		"/login",
 		handlers.AdminLogin,
 	)
+
+	// ============================================================
+	// ADMIN PROTECTED ROUTES
+	// ============================================================
 
 	admin.Use(
 		middleware.AuthMiddleware(),
@@ -383,6 +414,10 @@ func main() {
 			"/users/:id",
 			handlers.AdminDeleteUser,
 		)
+
+		// ========================================================
+		// MAINTENANCE MODE
+		// ========================================================
 
 		admin.PUT(
 			"/settings/maintenance",
