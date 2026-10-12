@@ -191,6 +191,11 @@ func main() {
 			"/me",
 			handlers.UpdateMe,
 		)
+
+		protected.PUT(
+			"/me/password",
+			handlers.ChangePassword,
+		)
 		protected.POST(
 			"/me/verify-delete-password",
 			handlers.VerifyDeleteAccountPassword,
