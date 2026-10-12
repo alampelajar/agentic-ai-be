@@ -394,75 +394,62 @@ func Chat(c *gin.Context) {
 	// ------------------------------------------------------------
 
 	if aiModel.Provider.IsSystem {
-
-		switch strings.ToLower(
-			strings.TrimSpace(
-				aiModel.Provider.Type,
-			),
-		) {
-
-		case "nararouter":
-
-			apiKey = strings.TrimSpace(
-				os.Getenv(
-					"NARAROUTER_API_KEY",
-				),
-			)
-
-		default:
-
-			apiKey = strings.TrimSpace(
-				os.Getenv(
-					"NARAROUTER_API_KEY",
-				),
-			)
+		// Admin-provisioned system providers store the shared key encrypted
+		// in PostgreSQL. Keep environment-variable fallback for legacy seeds.
+		if strings.TrimSpace(aiModel.Provider.APIKeyEncrypted) != "" {
+			decryptedKey, err := utils.DecryptString(aiModel.Provider.APIKeyEncrypted)
+			if err != nil {
+				log.Printf("[CHAT] ERROR decrypt system provider API key: %v", err)
+				c.JSON(http.StatusInternalServerError, gin.H{
+					"ok": false, "error": "Gagal membaca API key provider sistem.",
+				})
+				return
+			}
+			apiKey = strings.TrimSpace(decryptedKey)
+		} else {
+			switch strings.ToLower(strings.TrimSpace(aiModel.Provider.Type)) {
+			case "nararouter":
+				apiKey = strings.TrimSpace(os.Getenv("NARAROUTER_API_KEY"))
+			case "openrouter":
+				apiKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
+			case "openai":
+				apiKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+			case "google":
+				apiKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
+				if apiKey == "" {
+					apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+				}
+			case "deepseek":
+				apiKey = strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
+			}
 		}
-
 	} else {
-
 		// --------------------------------------------------------
-		// USER PROVIDER
+		// USER-OWNED PROVIDER: never use another user's provider.
 		// --------------------------------------------------------
-
-		if aiModel.Provider.UserID == nil ||
-			*aiModel.Provider.UserID != userID {
-
+		if aiModel.Provider.UserID == nil || *aiModel.Provider.UserID != userID {
 			c.JSON(http.StatusForbidden, gin.H{
-				"ok":    false,
-				"error": "Provider bukan milik user.",
+				"ok": false, "error": "Provider bukan milik user.",
 			})
 			return
 		}
 
-		if aiModel.Provider.APIKeyEncrypted == "" {
+		if strings.TrimSpace(aiModel.Provider.APIKeyEncrypted) == "" {
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"ok":    false,
-				"error": "API key provider belum dikonfigurasi.",
+				"ok": false, "error": "API key provider belum dikonfigurasi.",
 			})
 			return
 		}
 
-		decryptedKey, err :=
-			utils.DecryptString(
-				aiModel.Provider.APIKeyEncrypted,
-			)
-
+		decryptedKey, err := utils.DecryptString(aiModel.Provider.APIKeyEncrypted)
 		if err != nil {
-			log.Printf(
-				"[CHAT] ERROR decrypt API key: %v",
-				err,
-			)
-
+			log.Printf("[CHAT] ERROR decrypt user provider API key: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{
-				"ok":    false,
-				"error": "Gagal membaca API key provider.",
+				"ok": false, "error": "Gagal membaca API key provider.",
 			})
 			return
 		}
-
-		apiKey = strings.TrimSpace(
-			decryptedKey,
-		)
+		apiKey = strings.TrimSpace(decryptedKey)
 	}
 
 	// ============================================================
