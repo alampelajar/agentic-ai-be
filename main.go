@@ -80,6 +80,12 @@ func main() {
 		allowedOrigins := map[string]bool{
 			"http://localhost:5173": true,
 			"http://localhost:5174": true,
+			"http://localhost:5175": true,
+			"http://localhost:5176": true,
+			"http://127.0.0.1:5173": true,
+			"http://127.0.0.1:5174": true,
+			"http://127.0.0.1:5175": true,
+			"http://127.0.0.1:5176": true,
 		}
 
 		if allowedOrigins[origin] {
@@ -87,6 +93,7 @@ func main() {
 				"Access-Control-Allow-Origin",
 				origin,
 			)
+			c.Header("Vary", "Origin")
 		}
 
 		c.Header(
@@ -96,7 +103,7 @@ func main() {
 
 		c.Header(
 			"Access-Control-Allow-Headers",
-			"Content-Type, Authorization",
+			"Content-Type, Authorization, Accept",
 		)
 
 		c.Header(
@@ -387,6 +394,7 @@ func main() {
 
 	admin.Use(
 		middleware.AuthMiddleware(),
+		middleware.AdminMiddleware(),
 	)
 
 	{
@@ -398,6 +406,21 @@ func main() {
 		admin.GET(
 			"/tasks",
 			handlers.AdminGetTasks,
+		)
+
+		// GLOBAL AI MODEL CATALOG
+		// Only verified admins can manage models provided by the system.
+		admin.GET(
+			"/ai/models",
+			handlers.AdminGetSystemAIModels,
+		)
+		admin.POST(
+			"/ai/models",
+			handlers.AdminCreateSystemAIModel,
+		)
+		admin.PATCH(
+			"/ai/models/:id",
+			handlers.AdminUpdateSystemAIModel,
 		)
 
 		admin.POST(
