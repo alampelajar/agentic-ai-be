@@ -408,6 +408,21 @@ func main() {
 			handlers.AdminGetTasks,
 		)
 
+		// GLOBAL AI MODEL CATALOG
+		// Only verified admins can manage models provided by the system.
+		admin.GET(
+			"/ai/models",
+			handlers.AdminGetSystemAIModels,
+		)
+		admin.POST(
+			"/ai/models",
+			handlers.AdminCreateSystemAIModel,
+		)
+		admin.PATCH(
+			"/ai/models/:id",
+			handlers.AdminUpdateSystemAIModel,
+		)
+
 		admin.POST(
 			"/users",
 			handlers.AdminCreateUser,
