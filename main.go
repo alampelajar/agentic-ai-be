@@ -422,6 +422,10 @@ func main() {
 			"/ai/models/:id",
 			handlers.AdminUpdateSystemAIModel,
 		)
+		admin.DELETE(
+			"/ai/models/:id",
+			handlers.AdminDeleteSystemAIModel,
+		)
 
 		admin.POST(
 			"/users",
