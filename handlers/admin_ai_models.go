@@ -28,6 +28,7 @@ type createSystemAIModelRequest struct {
 
 type updateSystemAIModelRequest struct {
 	Name        *string `json:"name"`
+	ModelID     *string `json:"model_id"`
 	Description *string `json:"description"`
 	IsActive    *bool   `json:"is_active"`
 }
@@ -271,6 +272,27 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 		}
 		updates["name"] = name
 	}
+	if req.ModelID != nil {
+		modelID := strings.TrimSpace(*req.ModelID)
+		if modelID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Model ID tidak boleh kosong."})
+			return
+		}
+
+		var duplicate int64
+		if err := config.DB.Model(&models.AIModel{}).
+			Where("provider_id = ? AND model_id = ? AND id <> ? AND is_system = ? AND deleted_at IS NULL",
+				aiModel.ProviderID, modelID, aiModel.ID, true).
+			Count(&duplicate).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memeriksa duplikasi Model ID."})
+			return
+		}
+		if duplicate > 0 {
+			c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "Model ID tersebut sudah digunakan oleh model lain pada provider ini."})
+			return
+		}
+		updates["model_id"] = modelID
+	}
 	if req.Description != nil {
 		updates["description"] = strings.TrimSpace(*req.Description)
 	}
@@ -288,4 +310,48 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 	}
 	config.DB.Preload("Provider").Preload("Agents").First(&aiModel, aiModel.ID)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Model global berhasil diperbarui.", "model": aiModel})
+}
+
+// AdminDeleteSystemAIModel removes one model from the shared system catalog.
+// It does not delete the provider because other models may use that provider.
+func AdminDeleteSystemAIModel(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "ID model tidak valid."})
+		return
+	}
+
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memulai transaksi penghapusan."})
+		return
+	}
+	defer tx.Rollback()
+
+	var aiModel models.AIModel
+	if err := tx.Where("id = ? AND is_system = ?", id, true).First(&aiModel).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Model global tidak ditemukan."})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal mengambil model global."})
+		return
+	}
+
+	if err := tx.Where("ai_model_id = ?", aiModel.ID).Delete(&models.AgentModel{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menghapus hubungan model dengan agent."})
+		return
+	}
+
+	if err := tx.Delete(&aiModel).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menghapus model global."})
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menyimpan penghapusan model."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Model global berhasil dihapus."})
 }
