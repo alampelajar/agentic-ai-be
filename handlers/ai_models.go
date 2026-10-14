@@ -721,6 +721,20 @@ func DeleteAIModel(c *gin.Context) {
 		return
 	}
 
+	audit := newAuditLog(
+		c,
+		"model.deleted",
+		"ai_model",
+		strconv.FormatUint(uint64(aiModel.ID), 10),
+		aiModel.Name,
+		"Model AI milik pengguna \""+aiModel.Name+"\" (provider model ID: "+aiModel.ModelID+") dihapus oleh pemiliknya.",
+	)
+	if err := tx.Create(&audit).Error; err != nil {
+		tx.Rollback()
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal mencatat aktivitas penghapusan model."})
+		return
+	}
+
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":    false,

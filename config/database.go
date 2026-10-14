@@ -68,6 +68,7 @@ func ConnectDatabase() {
 		&models.AgentModel{},
 		&models.Task{},
 		&models.TaskMessage{},
+		&models.AuditLog{},
 	)
 
 	if err != nil {

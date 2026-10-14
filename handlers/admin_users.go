@@ -531,10 +531,21 @@ func AdminDeleteUser(c *gin.Context) {
 	// row benar-benar dihapus dari PostgreSQL.
 	// --------------------------------------------------------
 
-	if err := config.DB.
-		Unscoped().
-		Delete(&user).
-		Error; err != nil {
+	audit := newAuditLog(
+		c,
+		"user.deleted_by_admin",
+		"user",
+		strconv.FormatUint(userID, 10),
+		user.Name,
+		"Akun pengguna \""+user.Email+"\" dihapus oleh administrator.",
+	)
+	err = config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&audit).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&user).Error
+	})
+	if err != nil {
 
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
