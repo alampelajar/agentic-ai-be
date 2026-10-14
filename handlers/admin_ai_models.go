@@ -348,6 +348,19 @@ func AdminDeleteSystemAIModel(c *gin.Context) {
 		return
 	}
 
+	audit := newAuditLog(
+		c,
+		"model.deleted",
+		"ai_model",
+		strconv.FormatUint(id, 10),
+		aiModel.Name,
+		"Model global \""+aiModel.Name+"\" (provider model ID: "+aiModel.ModelID+") dihapus.",
+	)
+	if err := tx.Create(&audit).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal mencatat aktivitas penghapusan model."})
+		return
+	}
+
 	if err := tx.Commit().Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menyimpan penghapusan model."})
 		return

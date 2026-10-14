@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -82,6 +83,15 @@ func DeleteMe(c *gin.Context) {
 		return
 	}
 
+	audit := newAuditLog(
+		c,
+		"user.account_deleted",
+		"user",
+		strconv.FormatUint(uint64(user.ID), 10),
+		user.Name,
+		"Pengguna menghapus akun miliknya sendiri (email: "+user.Email+").",
+	)
+
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
 		// Do not allow deletion of the final administrator account.
 		if user.Role == "admin" {
@@ -156,6 +166,9 @@ func DeleteMe(c *gin.Context) {
 		}
 
 		if err := tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&audit).Error; err != nil {
 			return err
 		}
 		return tx.Unscoped().Delete(&user).Error

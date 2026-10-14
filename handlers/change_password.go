@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,9 +81,21 @@ func ChangePassword(c *gin.Context) {
 		currentTokenHash = hashToken(currentRefreshToken)
 	}
 
+	audit := newAuditLog(
+		c,
+		"user.password_changed",
+		"user",
+		strconv.FormatUint(uint64(user.ID), 10),
+		user.Name,
+		"Pengguna berhasil mengubah kata sandi. Nilai kata sandi tidak disimpan dalam log.",
+	)
+
 	err = config.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&models.User{}).Where("id = ?", user.ID).
 			Update("password", string(hashedPassword)).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&audit).Error; err != nil {
 			return err
 		}
 

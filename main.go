@@ -399,6 +399,11 @@ func main() {
 
 	{
 		admin.GET(
+			"/logs",
+			handlers.AdminGetAuditLogs,
+		)
+
+		admin.GET(
 			"/users",
 			handlers.AdminGetUsers,
 		)
