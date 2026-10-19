@@ -36,19 +36,19 @@ const (
 )
 
 type requestPasswordResetPayload struct {
-	Email string \`json:"email" binding:"required"\`
+	Email string `json:"email" binding:"required"`
 }
 
 type verifyPasswordResetPayload struct {
-	Email string \`json:"email" binding:"required"\`
-	OTP   string \`json:"otp" binding:"required"\`
+	Email string `json:"email" binding:"required"`
+	OTP   string `json:"otp" binding:"required"`
 }
 
 type resetPasswordWithOTPPayload struct {
-	Email           string \`json:"email" binding:"required"\`
-	ResetToken      string \`json:"reset_token" binding:"required"\`
-	NewPassword     string \`json:"new_password" binding:"required"\`
-	ConfirmPassword string \`json:"confirm_password" binding:"required"\`
+	Email           string `json:"email" binding:"required"`
+	ResetToken      string `json:"reset_token" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
 }
 
 func normalizeResetEmail(value string) (string, bool) {
@@ -114,23 +114,23 @@ func hashPasswordResetOTP(email, otp, pepper string) string {
 
 func sendPasswordResetEmail(ctx context.Context, apiKey, sender, recipient, otp string) error {
 	message := struct {
-		From    string   \`json:"from"\`
-		To      []string \`json:"to"\`
-		Subject string   \`json:"subject"\`
-		HTML    string   \`json:"html"\`
-		Text    string   \`json:"text"\`
+		From    string   `json:"from"`
+		To      []string `json:"to"`
+		Subject string   `json:"subject"`
+		HTML    string   `json:"html"`
+		Text    string   `json:"text"`
 	}{
 		From:    sender,
 		To:      []string{recipient},
 		Subject: "Your Agentic AI password reset code",
 		HTML: fmt.Sprintf(
-			\`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#171717">
+			`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#171717">
 <h2 style="margin-bottom:12px">Reset your Agentic AI password</h2>
 <p>Use this verification code to continue resetting your password.</p>
 <p style="font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 0">%s</p>
 <p>This code expires in 5 minutes and can be used only once.</p>
 <p style="color:#737373;font-size:13px">If you did not request this, you can safely ignore this email.</p>
-</div>\`,
+</div>`,
 			otp,
 		),
 		Text: fmt.Sprintf(
