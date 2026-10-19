@@ -172,6 +172,21 @@ func main() {
 			"/logout",
 			handlers.Logout,
 		)
+
+		auth.POST(
+			"/forgot-password/request",
+			handlers.RequestPasswordReset,
+		)
+
+		auth.POST(
+			"/forgot-password/verify",
+			handlers.VerifyPasswordResetOTP,
+		)
+
+		auth.POST(
+			"/forgot-password/reset",
+			handlers.ResetPasswordWithOTP,
+		)
 	}
 
 	// ============================================================
