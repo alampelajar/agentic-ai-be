@@ -62,6 +62,7 @@ func ConnectDatabase() {
 	err = DB.AutoMigrate(
 		&models.User{},
 		&models.RefreshToken{},
+		&models.PasswordResetChallenge{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},
