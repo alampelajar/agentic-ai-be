@@ -419,6 +419,11 @@ func main() {
 		)
 
 		admin.GET(
+			"/agents",
+			handlers.AdminGetAgents,
+		)
+
+		admin.GET(
 			"/users",
 			handlers.AdminGetUsers,
 		)
