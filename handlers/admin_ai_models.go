@@ -9,7 +9,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
@@ -24,6 +23,7 @@ type createSystemAIModelRequest struct {
 	Name         string `json:"name" binding:"required"`
 	ModelID      string `json:"model_id" binding:"required"`
 	Description  string `json:"description"`
+	AgentID      uint   `json:"agent_id" binding:"required"`
 }
 
 type updateSystemAIModelRequest struct {
@@ -31,6 +31,7 @@ type updateSystemAIModelRequest struct {
 	ModelID     *string `json:"model_id"`
 	Description *string `json:"description"`
 	IsActive    *bool   `json:"is_active"`
+	AgentID     *uint   `json:"agent_id"`
 }
 
 func systemProviderSlug(name string) string {
@@ -43,6 +44,23 @@ func systemProviderSlug(name string) string {
 		return "system-provider"
 	}
 	return value
+}
+
+// AdminGetAgents returns active agents available for system-model assignment.
+func AdminGetAgents(c *gin.Context) {
+	var agents []models.Agent
+	if err := config.DB.
+		Select("id", "slug", "name", "description", "status", "is_active").
+		Where("is_active = ?", true).
+		Order("id ASC").
+		Find(&agents).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok": false, "error": "Gagal mengambil daftar agent.",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "agents": agents})
 }
 
 // AdminGetSystemAIModels returns only system-managed models. API keys are never
@@ -89,6 +107,12 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		})
 		return
 	}
+	if req.AgentID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok": false, "error": "Agent tujuan wajib dipilih.",
+		})
+		return
+	}
 
 	parsedURL, err := url.ParseRequestURI(req.BaseURL)
 	if err != nil || parsedURL.Host == "" || (parsedURL.Scheme != "https" && parsedURL.Scheme != "http") {
@@ -114,6 +138,20 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		return
 	}
 	defer tx.Rollback()
+
+	var targetAgent models.Agent
+	if err := tx.Where("id = ? AND is_active = ?", req.AgentID, true).First(&targetAgent).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{
+				"ok": false, "error": "Agent tujuan tidak ditemukan atau tidak aktif.",
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok": false, "error": "Gagal memeriksa agent tujuan.",
+		})
+		return
+	}
 
 	slug := systemProviderSlug(req.ProviderName)
 	var provider models.AIProvider
@@ -199,25 +237,16 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		return
 	}
 
-	var agents []models.Agent
-	if err := tx.Where("is_active = ?", true).Find(&agents).Error; err != nil {
+	link := models.AgentModel{
+		AgentID:   targetAgent.ID,
+		AIModelID: aiModel.ID,
+		IsDefault: false,
+	}
+	if err := tx.Create(&link).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"ok": false, "error": "Gagal mengambil daftar agent.",
+			"ok": false, "error": "Gagal menghubungkan model ke agent yang dipilih.",
 		})
 		return
-	}
-	for _, agent := range agents {
-		link := models.AgentModel{
-			AgentID: agent.ID,
-			AIModelID: aiModel.ID,
-			IsDefault: false,
-		}
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&link).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"ok": false, "error": "Gagal menghubungkan model ke agent.",
-			})
-			return
-		}
 	}
 
 	if err := tx.Commit().Error; err != nil {
@@ -234,7 +263,9 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{
-		"ok": true, "message": "Model global berhasil ditambahkan dan tersedia untuk semua akun.", "model": aiModel,
+		"ok": true,
+		"message": "Model global berhasil ditambahkan dan dihubungkan ke agent yang dipilih untuk semua akun.",
+		"model": aiModel,
 	})
 }
 
@@ -299,16 +330,71 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 	if req.IsActive != nil {
 		updates["is_active"] = *req.IsActive
 	}
-	if len(updates) == 0 {
+
+	if len(updates) == 0 && req.AgentID == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Tidak ada perubahan yang dikirim."})
 		return
 	}
 
-	if err := config.DB.Model(&aiModel).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memperbarui model global."})
+	var targetAgent *models.Agent
+	if req.AgentID != nil {
+		if *req.AgentID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Agent tujuan wajib dipilih."})
+			return
+		}
+		var agent models.Agent
+		if err := config.DB.Where("id = ? AND is_active = ?", *req.AgentID, true).First(&agent).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent tujuan tidak ditemukan atau tidak aktif."})
+				return
+			}
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memeriksa agent tujuan."})
+			return
+		}
+		targetAgent = &agent
+	}
+
+	tx := config.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memulai transaksi pembaruan model."})
 		return
 	}
-	config.DB.Preload("Provider").Preload("Agents").First(&aiModel, aiModel.ID)
+	defer tx.Rollback()
+
+	if len(updates) > 0 {
+		if err := tx.Model(&aiModel).Updates(updates).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memperbarui model global."})
+			return
+		}
+	}
+
+	if targetAgent != nil {
+		// Replace every previous assignment so legacy models that were
+		// linked to all agents can be moved back to one selected agent.
+		if err := tx.Where("ai_model_id = ?", aiModel.ID).Delete(&models.AgentModel{}).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal membersihkan hubungan agent lama."})
+			return
+		}
+		link := models.AgentModel{
+			AgentID:   targetAgent.ID,
+			AIModelID: aiModel.ID,
+			IsDefault: false,
+		}
+		if err := tx.Create(&link).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menghubungkan model ke agent yang dipilih."})
+			return
+		}
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menyimpan perubahan model global."})
+		return
+	}
+
+	if err := config.DB.Preload("Provider").Preload("Agents").First(&aiModel, aiModel.ID).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Model diperbarui tetapi gagal memuat ulang data."})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Model global berhasil diperbarui.", "model": aiModel})
 }
 
