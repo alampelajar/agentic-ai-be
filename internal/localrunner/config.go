@@ -35,9 +35,6 @@ func LoadConfig() (Config, error) {
 	if err := json.Unmarshal([]byte(raw), &workspaces); err != nil {
 		return Config{}, fmt.Errorf("parse LOCAL_RUNNER_WORKSPACES_JSON: %w", err)
 	}
-	if len(workspaces) == 0 {
-		return Config{}, errors.New("configure at least one workspace")
-	}
 	seen := map[string]bool{}
 	for i := range workspaces {
 		w := &workspaces[i]
