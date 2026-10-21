@@ -22,6 +22,7 @@ const maxCommandOutput = 64 << 10
 
 type executeRequest struct {
 	Action string `json:"action" binding:"required"`
+	Runtime string `json:"runtime"` // native or docker
 }
 
 func (s *Server) workspace(id string) (Workspace, bool) {
@@ -126,7 +127,7 @@ func (s *Server) execute(c *gin.Context) {
 	if len(output) > maxCommandOutput { output = append(output[:maxCommandOutput], []byte("\n...[output truncated]")...) }
 	status := "success"; code := 0
 	if runErr != nil { status = "failed"; code = 1; var exitErr *exec.ExitError; if errors.As(runErr, &exitErr) { code = exitErr.ExitCode() } }
-	c.JSON(http.StatusOK, gin.H{"action":req.Action,"status":status,"exit_code":code,"output":string(output),"error":errorString(runErr)})
+	c.JSON(http.StatusOK, gin.H{"action":req.Action,"runtime":runtimeMode,"status":status,"exit_code":code,"output":string(output),"error":errorString(runErr)})
 }
 
 func actionCommand(root, action string) ([]string, error) {
