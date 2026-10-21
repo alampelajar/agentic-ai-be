@@ -19,6 +19,7 @@ type Config struct {
 	Token         string
 	Workspaces    []Workspace
 	AllowedOrigins []string
+	GitRoot string
 }
 
 func LoadConfig() (Config, error) {
@@ -62,5 +63,8 @@ func LoadConfig() (Config, error) {
 	if len(origins) == 0 {
 		origins = []string{"http://localhost:5173", "http://127.0.0.1:5173"}
 	}
-	return Config{ListenAddress: addr, Token: token, Workspaces: workspaces, AllowedOrigins: origins}, nil
+	gitRoot := strings.TrimSpace(os.Getenv("LOCAL_RUNNER_GIT_ROOT"))
+	if gitRoot == "" { home, err := os.UserHomeDir(); if err != nil { return Config{}, err }; gitRoot = home + string(os.PathSeparator) + "AgenticAIWorkspaces" }
+	if err := os.MkdirAll(gitRoot, 0750); err != nil { return Config{}, fmt.Errorf("create Git workspace root: %w", err) }
+	return Config{ListenAddress: addr, Token: token, Workspaces: workspaces, AllowedOrigins: origins, GitRoot: gitRoot}, nil
 }
