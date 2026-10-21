@@ -118,7 +118,17 @@ func (s *Server) execute(c *gin.Context) {
 	var req executeRequest
 	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"action is required"}); return }
 	root, err := s.resolve(w, ".", false); if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":"workspace root is unavailable"}); return }
-	args, err := actionCommand(root, req.Action); if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }
+	runtimeMode := strings.ToLower(strings.TrimSpace(req.Runtime))
+	if runtimeMode == "" { runtimeMode = "native" }
+	var args []string
+	if runtimeMode == "docker" {
+		args, err = dockerAction(root, req.Action)
+	} else if runtimeMode == "native" {
+		args, err = actionCommand(root, req.Action)
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error":"runtime must be native or docker"}); return
+	}
+	if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute); defer cancel()
 	var cmd *exec.Cmd
 	if runtimeMode == "docker" {
