@@ -121,7 +121,9 @@ func (s *Server) execute(c *gin.Context) {
 	args, err := actionCommand(root, req.Action); if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Minute); defer cancel()
 	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
+	if runtimeMode == "docker" {
+		cmd = exec.CommandContext(ctx, "docker", args...)
+	} else if runtime.GOOS == "windows" {
 		// The action is mapped to fixed command strings; no user-supplied shell text is interpolated.
 		cmd = exec.CommandContext(ctx, "cmd.exe", append([]string{"/D","/S","/C"}, args...)...)
 	} else { cmd = exec.CommandContext(ctx, args[0], args[1:]...) }
