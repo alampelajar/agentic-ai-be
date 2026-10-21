@@ -218,16 +218,16 @@ func Chat(c *gin.Context) {
 	// FIND AGENT
 	// ============================================================
 
-	if agentID != 0 {
-		var agent models.Agent
+	var selectedAgent models.Agent
 
+	if agentID != 0 {
 		if err := config.DB.
 			Where(
 				"id = ? AND is_active = ?",
 				agentID,
 				true,
 			).
-			First(&agent).
+			First(&selectedAgent).
 			Error; err != nil {
 
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -468,24 +468,7 @@ func Chat(c *gin.Context) {
 	// SYSTEM PROMPT
 	// ============================================================
 
-	systemPrompt := `
-You are Agentic AI, a helpful AI assistant.
-
-Your job is to answer the user's questions directly and naturally.
-
-IMPORTANT:
-- Answer the user's actual question.
-- Use the conversation history to understand context.
-- Remember information from previous messages in the current conversation.
-- If the user refers to something like "itu", "yang tadi", "sebelumnya", or "tersebut", use the conversation history to determine what they mean.
-- Do not create a website unless the user explicitly asks you to create one.
-- Do not return HTML, CSS, JavaScript, or JSON unless the user specifically asks for them.
-- If the user asks about an uploaded image, analyze the image and explain what you can see.
-- If an image is provided but the user does not ask about it, use it only when relevant.
-- Be concise but helpful.
-- Use Indonesian when the user speaks Indonesian.
-- Do not pretend that you can see an image if no image was provided.
-`
+	systemPrompt := buildAgentSystemPrompt(&selectedAgent)
 
 	// ============================================================
 	// CURRENT MESSAGE CONTENT
