@@ -26,6 +26,8 @@ type executeRequest struct {
 }
 
 func (s *Server) workspace(id string) (Workspace, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	for _, w := range s.cfg.Workspaces { if w.ID == id { return w, true } }
 	return Workspace{}, false
 }
@@ -64,6 +66,8 @@ func (s *Server) resolve(w Workspace, relative string, allowMissing bool) (strin
 
 func (s *Server) listWorkspaces(c *gin.Context) {
 	type item struct { ID string `json:"id"`; Name string `json:"name"` }
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	items := make([]item, 0, len(s.cfg.Workspaces))
 	for _, w := range s.cfg.Workspaces { items = append(items, item{w.ID, w.Name}) }
 	c.JSON(http.StatusOK, gin.H{"workspaces": items})
