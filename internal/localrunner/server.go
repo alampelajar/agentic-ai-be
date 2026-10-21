@@ -2,6 +2,7 @@ package localrunner
 
 import (
 	"crypto/subtle"
+	"sync"
 	"net/http"
 	"strings"
 	"time"
@@ -9,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type Server struct { cfg Config }
+type Server struct { cfg Config; mu sync.RWMutex }
 
 func NewServer(cfg Config) (*gin.Engine, error) {
 	gin.SetMode(gin.ReleaseMode)
