@@ -120,3 +120,27 @@ func TestLoadConfigRestoresClonedWorkspaces(t *testing.T) {
 	}
 }
 
+func TestPersistedWorkspaceRejectsSymlinkEscape(t *testing.T) {
+	gitRoot := t.TempDir()
+	outside := t.TempDir()
+	workspaceID := "github-example-repo"
+	workspacePath := filepath.Join(gitRoot, workspaceID)
+	if err := os.Symlink(outside, workspacePath); err != nil {
+		t.Skipf("symlink unavailable on this platform: %v", err)
+	}
+
+	registry := filepath.Join(gitRoot, ".local-agent-runner-workspaces.json")
+	cloned := []Workspace{{
+		ID:   workspaceID,
+		Name: "example/repo",
+		Path: workspacePath,
+	}}
+	if err := persistClonedWorkspaces(registry, cloned); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadPersistedWorkspaces(registry, gitRoot, map[string]bool{}); err == nil {
+		t.Fatal("expected cloned workspace symlink escape to be rejected")
+	}
+}
+
