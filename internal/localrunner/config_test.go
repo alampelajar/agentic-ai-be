@@ -76,3 +76,47 @@ func TestPersistedWorkspaceIgnoresConfiguredID(t *testing.T) {
 		t.Fatalf("expected environment-configured workspace to take precedence, got %#v", got)
 	}
 }
+
+func TestLoadConfigRestoresClonedWorkspaces(t *testing.T) {
+	gitRoot := t.TempDir()
+	workspaceID := "github-example-repo"
+	workspacePath := filepath.Join(gitRoot, workspaceID)
+	if err := os.MkdirAll(workspacePath, 0750); err != nil {
+		t.Fatal(err)
+	}
+
+	registryPath := filepath.Join(gitRoot, ".local-agent-runner-workspaces.json")
+	persisted := []Workspace{{
+		ID:   workspaceID,
+		Name: "example/repo",
+		Path: workspacePath,
+	}}
+	if err := persistClonedWorkspaces(registryPath, persisted); err != nil {
+		t.Fatalf("persist workspace registry: %v", err)
+	}
+
+	t.Setenv("LOCAL_RUNNER_TOKEN", "test-token-with-at-least-32-characters")
+	t.Setenv("LOCAL_RUNNER_WORKSPACES_JSON", "[]")
+	t.Setenv("LOCAL_RUNNER_ADDR", "127.0.0.1:8765")
+	t.Setenv("LOCAL_RUNNER_ALLOWED_ORIGINS", "http://localhost:5173")
+	t.Setenv("LOCAL_RUNNER_GIT_ROOT", gitRoot)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		t.Fatalf("load runner config after restart: %v", err)
+	}
+
+	if len(cfg.Workspaces) != 1 {
+		t.Fatalf("expected one restored workspace, got %d", len(cfg.Workspaces))
+	}
+	if len(cfg.DynamicWorkspaces) != 1 {
+		t.Fatalf("expected one dynamic workspace, got %d", len(cfg.DynamicWorkspaces))
+	}
+	if cfg.Workspaces[0].ID != workspaceID || cfg.Workspaces[0].Name != "example/repo" {
+		t.Fatalf("unexpected restored workspace: %#v", cfg.Workspaces[0])
+	}
+	if cfg.WorkspaceRegistryPath != registryPath {
+		t.Fatalf("unexpected registry path: got %q, want %q", cfg.WorkspaceRegistryPath, registryPath)
+	}
+}
+
