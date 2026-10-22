@@ -193,10 +193,10 @@ func loadPersistedWorkspaces(path, gitRoot string, configuredIDs map[string]bool
 		}
 		canonicalExpectedPath := filepath.Join(canonicalGitRoot, workspace.ID)
 		resolvedClean := filepath.Clean(resolvedWorkspacePath)
-		expectedClean := filepath.Clean(canonicalExpectedPath)
-		sameResolvedPath := resolvedClean == expectedClean
+		canonicalExpectedClean := filepath.Clean(canonicalExpectedPath)
+		sameResolvedPath := resolvedClean == canonicalExpectedClean
 		if runtime.GOOS == "windows" {
-			sameResolvedPath = strings.EqualFold(resolvedClean, expectedClean)
+			sameResolvedPath = strings.EqualFold(resolvedClean, canonicalExpectedClean)
 		}
 		if !sameResolvedPath {
 			return nil, fmt.Errorf("cloned workspace %q resolves outside its expected directory", workspace.ID)
