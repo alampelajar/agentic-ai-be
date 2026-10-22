@@ -125,6 +125,11 @@ func loadPersistedWorkspaces(path, gitRoot string, configuredIDs map[string]bool
 		return nil, fmt.Errorf("invalid workspace registry JSON: %w", err)
 	}
 
+	canonicalGitRoot, err := filepath.EvalSymlinks(gitRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve Git workspace root: %w", err)
+	}
+
 	seen := make(map[string]bool, len(persisted))
 	result := make([]Workspace, 0, len(persisted))
 	for i, workspace := range persisted {
@@ -176,6 +181,25 @@ func loadPersistedWorkspaces(path, gitRoot string, configuredIDs map[string]bool
 		}
 		if !info.IsDir() {
 			return nil, fmt.Errorf("cloned workspace %q is not a directory", workspace.ID)
+		}
+
+		// Do not trust a registry entry merely because its path string is under
+		// GitRoot: the workspace directory itself could have been replaced by a
+		// symlink pointing elsewhere. Require its resolved path to match the
+		// expected child directory of the resolved GitRoot.
+		resolvedWorkspacePath, err := filepath.EvalSymlinks(expectedPath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve cloned workspace %q: %w", workspace.ID, err)
+		}
+		canonicalExpectedPath := filepath.Join(canonicalGitRoot, workspace.ID)
+		resolvedClean := filepath.Clean(resolvedWorkspacePath)
+		expectedClean := filepath.Clean(canonicalExpectedPath)
+		sameResolvedPath := resolvedClean == expectedClean
+		if runtime.GOOS == "windows" {
+			sameResolvedPath = strings.EqualFold(resolvedClean, expectedClean)
+		}
+		if !sameResolvedPath {
+			return nil, fmt.Errorf("cloned workspace %q resolves outside its expected directory", workspace.ID)
 		}
 
 		workspace.Path = expectedPath
