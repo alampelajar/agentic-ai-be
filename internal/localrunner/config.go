@@ -24,6 +24,8 @@ type Config struct {
 	WorkspaceRegistryPath string
 	AllowedOrigins        []string
 	GitRoot               string
+	DesktopEnabled        bool
+	DesktopSidecarCommand string
 }
 
 func LoadConfig() (Config, error) {
@@ -108,6 +110,8 @@ func LoadConfig() (Config, error) {
 		WorkspaceRegistryPath: registryPath,
 		AllowedOrigins:        origins,
 		GitRoot:               gitRoot,
+		DesktopEnabled:        strings.EqualFold(strings.TrimSpace(os.Getenv("LOCAL_RUNNER_DESKTOP_ENABLED")), "true"),
+		DesktopSidecarCommand: strings.TrimSpace(os.Getenv("LOCAL_RUNNER_DESKTOP_SIDECAR_COMMAND")),
 	}, nil
 }
 

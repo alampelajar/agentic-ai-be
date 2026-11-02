@@ -43,6 +43,14 @@ The `create` flag must be true to create a new file. Paths are always relative t
 ## Security notes
 
 - The service binds to loopback only. Do not expose port 8765 to the LAN or internet.
+
+## Read-only Windows desktop runtime
+
+Desktop access is opt-in and disabled unless `LOCAL_RUNNER_DESKTOP_ENABLED=true`.
+Create a Python 3.11 virtual environment and install `internal/localrunner/desktop-requirements.txt`.
+Configure `LOCAL_RUNNER_DESKTOP_SIDECAR_COMMAND` to run `desktop_sidecar.py` with that environment's
+Python executable. The sidecar supports only status, window listing, screenshot, and UIA inspection;
+it does not implement click, typing, hotkeys, scrolling, or browser automation.
 - The bearer token grants file read/write and execution access to every configured workspace. Keep it private and use a strong random value.
 - Only public GitHub HTTPS URLs are accepted for cloning. Private repository authentication is not implemented.
 - Native test/build commands execute project scripts and therefore can run arbitrary code from that project. Only run trusted code natively. Docker is a defense-in-depth option, not a perfect security boundary; review Docker settings and project files before executing untrusted repositories.
