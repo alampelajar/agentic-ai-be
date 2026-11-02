@@ -126,6 +126,15 @@ func CreateAIModel(c *gin.Context) {
 		return
 	}
 
+	// Agent bisa dipakai jika global (user_id IS NULL) atau milik user ini.
+	// Dicek sebelum provider dibuat/diubah agar request yang ditolak tidak
+	// meninggalkan efek samping, dan agar model tidak tertaut ke agent user lain.
+	var agent models.Agent
+	if err := config.DB.Where("id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)", req.AgentIDs[0], true, userID).First(&agent).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent yang dipilih tidak ditemukan atau tidak aktif."})
+		return
+	}
+
 	var provider models.AIProvider
 
 	if req.ProviderID == 0 {
@@ -241,16 +250,6 @@ func CreateAIModel(c *gin.Context) {
 				return
 			}
 		}
-	}
-
-	agentID := req.AgentIDs[0]
-	var agent models.Agent
-	// Agent bersifat shared/global — tidak ada kolom user_id di tabel agents.
-	// Validasi hanya berdasarkan id dan is_active.
-	// Ownership tetap dijaga lewat user_id pada ai_models dan ai_providers.
-	if err := config.DB.Where("id = ? AND is_active = ?", agentID, true).First(&agent).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent yang dipilih tidak ditemukan atau tidak aktif."})
-		return
 	}
 
 	var duplicate int64
@@ -457,7 +456,7 @@ func UpdateAIModel(c *gin.Context) {
 		}
 
 		var targetAgent models.Agent
-		if err := tx.Where("id = ? AND is_active = ?", (*req.AgentIDs)[0], true).First(&targetAgent).Error; err != nil {
+		if err := tx.Where("id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)", (*req.AgentIDs)[0], true, userID).First(&targetAgent).Error; err != nil {
 			tx.Rollback()
 			c.JSON(http.StatusNotFound, gin.H{
 				"ok":    false,
@@ -588,9 +587,10 @@ func RemoveModelFromAgent(c *gin.Context) {
 
 	err = config.DB.
 		Where(
-			"id = ? AND is_active = ?",
+			"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 			req.AgentID,
 			true,
+			userID,
 		).
 		First(&agent).
 		Error

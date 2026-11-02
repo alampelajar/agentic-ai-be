@@ -199,9 +199,10 @@ func CreateTask(c *gin.Context) {
 
 		if err := config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				*req.AgentID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error; err != nil {
@@ -348,9 +349,10 @@ func UpdateTask(c *gin.Context) {
 
 		if err := config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				*req.AgentID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error; err != nil {
