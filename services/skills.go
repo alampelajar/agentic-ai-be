@@ -28,8 +28,8 @@ const (
 var AllowedSkillTools = map[string]bool{
 	"workspace.list": true, "workspace.read": true, "workspace.write": true,
 	"workspace.execute": true, "desktop.status": true, "desktop.screenshot": true,
-	"desktop.list_windows": true, "desktop.inspect": true, "desktop.activate_window": true,
-	"desktop.launch_application": true, "desktop.click": true, "desktop.type": true,
+	"desktop.windows": true, "desktop.list_windows": true, "desktop.inspect": true, "desktop.focus_window": true, "desktop.activate_window": true,
+	"desktop.launch_application": true, "desktop.click": true, "desktop.double_click": true, "desktop.type": true,
 	"desktop.hotkey": true, "desktop.scroll": true, "desktop.wait": true, "desktop.stop": true,
 }
 

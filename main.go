@@ -263,6 +263,8 @@ func main() {
 		protected.POST("/agents/:id/skills", handlers.AssignSkillToAgent)
 		protected.PATCH("/agents/:id/skills/:skill_id", handlers.UpdateAgentSkill)
 		protected.DELETE("/agents/:id/skills/:skill_id", handlers.RemoveSkillFromAgent)
+		protected.POST("/tool-activities", handlers.CreateToolActivity)
+		protected.GET("/tool-activities", handlers.GetToolActivities)
 
 		// ========================================================
 		// TASKS

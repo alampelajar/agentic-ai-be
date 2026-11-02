@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -97,9 +99,20 @@ func TestDesktopRuntimeUsesReadOnlyProviderAndStops(t *testing.T) {
 	engine := gin.New()
 	engine.GET("/status", runtime.status)
 	engine.GET("/windows", func(c *gin.Context) { runtime.call(c, desktopRequest{Operation: "windows"}) })
+	engine.GET("/screenshot", func(c *gin.Context) { runtime.call(c, desktopRequest{Operation: "screenshot"}) })
+	engine.POST("/inspect", func(c *gin.Context) {
+		var req struct {
+			Window string `json:"window"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Window) == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "window is required"})
+			return
+		}
+		runtime.call(c, desktopRequest{Operation: "inspect", Window: strings.TrimSpace(req.Window)})
+	})
 	engine.POST("/stop", func(c *gin.Context) { runtime.stop(); c.Status(204) })
 
-	for _, path := range []string{"/status", "/windows"} {
+	for _, path := range []string{"/status", "/windows", "/screenshot"} {
 		req := httptest.NewRequest("GET", path, nil)
 		res := httptest.NewRecorder()
 		engine.ServeHTTP(res, req)
@@ -107,13 +120,21 @@ func TestDesktopRuntimeUsesReadOnlyProviderAndStops(t *testing.T) {
 			t.Fatalf("%s status = %d", path, res.Code)
 		}
 	}
+	inspectReq := httptest.NewRequest("POST", "/inspect", bytes.NewBufferString(`{"window":"Untitled - Notepad"}`))
+	inspectReq.Header.Set("Content-Type", "application/json")
+	inspectRes := httptest.NewRecorder()
+	engine.ServeHTTP(inspectRes, inspectReq)
+	if inspectRes.Code != 200 {
+		t.Fatalf("/inspect status = %d", inspectRes.Code)
+	}
+
 	stopReq := httptest.NewRequest("POST", "/stop", nil)
 	stopRes := httptest.NewRecorder()
 	engine.ServeHTTP(stopRes, stopReq)
 	if !mock.stopped {
 		t.Fatal("expected provider stop")
 	}
-	if len(mock.calls) != 2 || mock.calls[0] != "status" || mock.calls[1] != "windows" {
+	if len(mock.calls) != 4 || mock.calls[0] != "status" || mock.calls[1] != "windows" || mock.calls[2] != "screenshot" || mock.calls[3] != "inspect" {
 		t.Fatalf("unexpected calls: %#v", mock.calls)
 	}
 }

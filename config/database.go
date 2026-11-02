@@ -73,6 +73,7 @@ func ConnectDatabase() {
 		&models.Skill{},
 		&models.SkillVersion{},
 		&models.AgentSkill{},
+		&models.ToolActivity{},
 	)
 
 	if err != nil {
@@ -184,8 +185,17 @@ func seedAgents() {
 		existing.Description = agent.Description
 		existing.Status = agent.Status
 		existing.IsActive = true
+		existing.UserID = nil
 
-		DB.Save(&existing)
+		if err := DB.Model(&existing).Select("Name", "Description", "Status", "IsActive", "UserID").Updates(map[string]any{
+			"name":        agent.Name,
+			"description": agent.Description,
+			"status":      agent.Status,
+			"is_active":   true,
+			"user_id":     nil,
+		}).Error; err != nil {
+			log.Printf("Gagal memperbarui agent %s: %v", agent.Name, err)
+		}
 	}
 }
 
