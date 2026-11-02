@@ -70,6 +70,8 @@ func ConnectDatabase() {
 		&models.Task{},
 		&models.TaskMessage{},
 		&models.AuditLog{},
+		&models.Feedback{},
+		&models.FeedbackReply{},
 	)
 
 	if err != nil {
