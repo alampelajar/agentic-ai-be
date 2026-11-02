@@ -1,9 +1,12 @@
 package localrunner
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -11,6 +14,74 @@ import (
 type mockDesktopProvider struct {
 	calls   []string
 	stopped bool
+}
+
+func TestDesktopActionApprovalDenyExpiryAndEmergencyStop(t *testing.T) {
+	mock := &mockDesktopProvider{}
+	runtime := &desktopRuntime{provider: mock, pending: map[string]pendingDesktopAction{}}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/request", runtime.requestAction)
+	engine.POST("/approve/:id", runtime.approveAction)
+	engine.POST("/deny/:id", runtime.denyAction)
+	engine.POST("/emergency", runtime.emergencyStop)
+
+	request := func(body any) *httptest.ResponseRecorder {
+		data, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "/request", bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		engine.ServeHTTP(res, req)
+		return res
+	}
+	first := request(map[string]any{"action": "desktop.focus_window", "agent": "coding", "reason": "Focus Notepad", "window": "Untitled - Notepad"})
+	if first.Code != 202 {
+		t.Fatalf("request status = %d", first.Code)
+	}
+	var payload struct {
+		Action pendingDesktopAction `json:"action"`
+	}
+	_ = json.Unmarshal(first.Body.Bytes(), &payload)
+	approve := httptest.NewRequest("POST", "/approve/"+payload.Action.ID, bytes.NewBufferString(`{"mode":"once"}`))
+	approve.Header.Set("Content-Type", "application/json")
+	approved := httptest.NewRecorder()
+	engine.ServeHTTP(approved, approve)
+	if approved.Code != 200 || len(mock.calls) != 1 {
+		t.Fatalf("approve status=%d calls=%#v", approved.Code, mock.calls)
+	}
+	denied := request(map[string]any{"action": "desktop.type", "agent": "coding", "reason": "Type test", "window": "Untitled - Notepad", "arguments": map[string]any{"text": "x"}})
+	var deniedPayload struct {
+		Action pendingDesktopAction `json:"action"`
+	}
+	_ = json.Unmarshal(denied.Body.Bytes(), &deniedPayload)
+	denyReq := httptest.NewRequest("POST", "/deny/"+deniedPayload.Action.ID, nil)
+	denyRes := httptest.NewRecorder()
+	engine.ServeHTTP(denyRes, denyReq)
+	if denyRes.Code != 200 {
+		t.Fatalf("deny status=%d", denyRes.Code)
+	}
+	expired := request(map[string]any{"action": "desktop.scroll", "agent": "coding", "reason": "Scroll test", "window": "Untitled - Notepad"})
+	var expiredPayload struct {
+		Action pendingDesktopAction `json:"action"`
+	}
+	_ = json.Unmarshal(expired.Body.Bytes(), &expiredPayload)
+	runtime.mu.Lock()
+	item := runtime.pending[expiredPayload.Action.ID]
+	item.ExpiresAt = time.Now().Add(-time.Second)
+	runtime.pending[item.ID] = item
+	runtime.mu.Unlock()
+	expireReq := httptest.NewRequest("POST", "/approve/"+item.ID, bytes.NewBufferString(`{"mode":"once"}`))
+	expireRes := httptest.NewRecorder()
+	engine.ServeHTTP(expireRes, expireReq)
+	if expireRes.Code != 410 {
+		t.Fatalf("expired status=%d", expireRes.Code)
+	}
+	emergencyReq := httptest.NewRequest("POST", "/emergency", nil)
+	emergencyRes := httptest.NewRecorder()
+	engine.ServeHTTP(emergencyRes, emergencyReq)
+	if emergencyRes.Code != 200 || !mock.stopped || len(runtime.pending) != 0 {
+		t.Fatalf("emergency failed: status=%d stopped=%v pending=%d", emergencyRes.Code, mock.stopped, len(runtime.pending))
+	}
 }
 
 func (m *mockDesktopProvider) Call(_ context.Context, req desktopRequest) (desktopResponse, error) {

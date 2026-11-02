@@ -34,6 +34,11 @@ func NewServer(cfg Config) (*gin.Engine, error) {
 	api.GET("/desktop/screenshot", s.desktopScreenshot)
 	api.POST("/desktop/inspect", s.desktopInspect)
 	api.POST("/desktop/stop", s.desktopStop)
+	api.POST("/desktop/actions/request", s.desktop.requestAction)
+	api.POST("/desktop/actions/:id/approve", s.desktop.approveAction)
+	api.POST("/desktop/actions/:id/deny", s.desktop.denyAction)
+	api.POST("/desktop/permissions/revoke", s.desktop.revokePermission)
+	api.POST("/desktop/emergency-stop", s.desktop.emergencyStop)
 	return r, nil
 }
 

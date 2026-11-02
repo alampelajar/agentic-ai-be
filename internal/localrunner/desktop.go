@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -36,13 +37,26 @@ type desktopResponse struct {
 }
 
 type desktopRuntime struct {
-	provider DesktopProvider
-	mu       sync.Mutex
-	stopped  bool
+	provider   DesktopProvider
+	mu         sync.Mutex
+	stopped    bool
+	pending    map[string]pendingDesktopAction
+	allowAgent string
+}
+
+type pendingDesktopAction struct {
+	ID        string         `json:"id"`
+	Action    string         `json:"action"`
+	Agent     string         `json:"agent"`
+	Reason    string         `json:"reason"`
+	Window    string         `json:"window,omitempty"`
+	Target    map[string]any `json:"target,omitempty"`
+	Arguments map[string]any `json:"arguments,omitempty"`
+	ExpiresAt time.Time      `json:"expires_at"`
 }
 
 func newDesktopRuntime(cfg Config) *desktopRuntime {
-	return &desktopRuntime{provider: &sidecarProvider{enabled: cfg.DesktopEnabled, command: cfg.DesktopSidecarCommand}}
+	return &desktopRuntime{provider: &sidecarProvider{enabled: cfg.DesktopEnabled, command: cfg.DesktopSidecarCommand}, pending: map[string]pendingDesktopAction{}}
 }
 
 func (r *desktopRuntime) call(c *gin.Context, req desktopRequest) {
@@ -107,6 +121,98 @@ func (s *Server) desktopStop(c *gin.Context) {
 	s.desktop.stop()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "stopped"})
 }
+
+var allowedDesktopActions = map[string]bool{"desktop.click": true, "desktop.double_click": true, "desktop.scroll": true, "desktop.type": true, "desktop.hotkey": true, "desktop.focus_window": true}
+
+func (r *desktopRuntime) requestAction(c *gin.Context) {
+	var req pendingDesktopAction
+	if err := c.ShouldBindJSON(&req); err != nil || !allowedDesktopActions[req.Action] || strings.TrimSpace(req.Agent) == "" || strings.TrimSpace(req.Reason) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "action, agent, and reason are required; action is not allowed"})
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.stopped {
+		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "desktop runtime stopped"})
+		return
+	}
+	if r.allowAgent != "" && r.allowAgent != req.Agent {
+		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "another agent owns the desktop session"})
+		return
+	}
+	if r.allowAgent == "" {
+		r.allowAgent = req.Agent
+	}
+	req.ID = newActionID()
+	req.ExpiresAt = time.Now().Add(60 * time.Second)
+	r.pending[req.ID] = req
+	c.JSON(http.StatusAccepted, gin.H{"ok": true, "approval_required": true, "action": req})
+}
+
+func (r *desktopRuntime) approveAction(c *gin.Context) {
+	id := c.Param("id")
+	var body struct {
+		Mode string `json:"mode"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	r.mu.Lock()
+	action, ok := r.pending[id]
+	if ok {
+		delete(r.pending, id)
+	}
+	r.mu.Unlock()
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "action not found or already resolved"})
+		return
+	}
+	if time.Now().After(action.ExpiresAt) {
+		c.JSON(http.StatusGone, gin.H{"ok": false, "error": "approval expired"})
+		return
+	}
+	if body.Mode == "session" {
+		r.mu.Lock()
+		r.allowAgent = action.Agent
+		r.mu.Unlock()
+	}
+	req := desktopRequest{Operation: "action", Options: map[string]any{"action": action.Action, "agent": action.Agent, "window": action.Window, "target": action.Target, "arguments": action.Arguments}}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), desktopTimeout)
+	defer cancel()
+	result, err := r.provider.Call(ctx, req)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "action": action, "result": result})
+}
+
+func (r *desktopRuntime) denyAction(c *gin.Context) {
+	r.mu.Lock()
+	_, ok := r.pending[c.Param("id")]
+	delete(r.pending, c.Param("id"))
+	r.mu.Unlock()
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "action not found or already resolved"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "denied"})
+}
+
+func (r *desktopRuntime) revokePermission(c *gin.Context) {
+	r.mu.Lock()
+	r.allowAgent = ""
+	r.mu.Unlock()
+	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "permission_revoked"})
+}
+func (r *desktopRuntime) emergencyStop(c *gin.Context) {
+	r.mu.Lock()
+	r.pending = map[string]pendingDesktopAction{}
+	r.allowAgent = ""
+	r.mu.Unlock()
+	r.provider.Stop()
+	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "stopped"})
+}
+
+func newActionID() string { return fmt.Sprintf("desktop-%d", time.Now().UnixNano()) }
 
 type sidecarProvider struct {
 	enabled bool
