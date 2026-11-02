@@ -70,6 +70,9 @@ func ConnectDatabase() {
 		&models.Task{},
 		&models.TaskMessage{},
 		&models.AuditLog{},
+		&models.Skill{},
+		&models.SkillVersion{},
+		&models.AgentSkill{},
 	)
 
 	if err != nil {

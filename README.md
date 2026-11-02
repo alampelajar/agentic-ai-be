@@ -21,7 +21,12 @@ REST API untuk platform Agentic AI. Backend dibuat menggunakan Go, Gin, GORM, da
 - Daftar Agent dan pengelolaan task beserta pesan task
 - Endpoint chat dan generator landing page
 - Pengelolaan AI provider dan model, termasuk model sistem/admin
+- Skills System foundation: CRUD skill, validasi manifest, import ZIP, dan import GitHub publik
 - Endpoint kesehatan layanan di `GET /api/health`
+
+Skills API yang terlindungi autentikasi tersedia pada `/api/skills`, termasuk `POST /import/zip`,
+`POST /import/github`, dan `POST /:id/validate`. Paket skill hanya divalidasi dan disimpan sebagai
+metadata/instruksi; file yang diimpor tidak dieksekusi.
 
 ## Persyaratan
 
