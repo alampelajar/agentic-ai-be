@@ -324,10 +324,7 @@ func Chat(c *gin.Context) {
 				"a_iproviders.is_active = ?",
 				true,
 			).
-			Where(`
-				ai_models.is_system = ?
-				OR ai_models.user_id = ?
-			`,
+			Where("(ai_models.is_system = ? OR ai_models.user_id = ?)",
 				true,
 				userID,
 			).
@@ -369,10 +366,7 @@ func Chat(c *gin.Context) {
 				"a_iproviders.is_active = ?",
 				true,
 			).
-			Where(`
-				ai_models.is_system = ?
-				OR ai_models.user_id = ?
-			`,
+			Where("(ai_models.is_system = ? OR ai_models.user_id = ?)",
 				true,
 				userID,
 			)

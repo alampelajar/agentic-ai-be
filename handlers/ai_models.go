@@ -61,10 +61,7 @@ func GetAIModels(c *gin.Context) {
 	err := config.DB.
 		Preload("Provider").
 		Preload("Agents").
-		Where(`
-			is_system = ?
-			OR user_id = ?
-		`, true, userID).
+		Where("(is_system = ? OR user_id = ?)", true, userID).
 		Where("deleted_at IS NULL").
 		Order("is_system DESC, name ASC").
 		Find(&aiModels).
