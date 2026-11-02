@@ -6,13 +6,52 @@ import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"regexp"
 	"strings"
 )
+
+const (
+	maxActivityErrorLength  = 500
+	maxActivityTargetLength = 200
+	maxActivityArgsBytes    = 8192
+	redactedValue           = "[REDACTED]"
+)
+
+// Keys whose values are never stored. "text" and "content" cover typed or
+// written free text, which the server cannot tell apart from a secret.
+var activitySecretKeyParts = []string{"token", "password", "passwd", "secret", "api_key", "apikey", "otp", "credential", "clipboard", "authorization", "cookie", "passphrase", "text", "content"}
+
+// Value patterns catch secrets that sit under an innocuous key or inside free
+// text such as sidecar error messages and window titles.
+var activitySecretValuePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{8,}`),
+	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*`),
+	regexp.MustCompile(`\b(?:sk|pk|rk)-[A-Za-z0-9_-]{16,}`),
+	regexp.MustCompile(`\b(?:ghp|gho|ghs|ghu|github_pat)_[A-Za-z0-9_]{16,}`),
+	regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`),
+}
+
+var activitySecretAssignment = regexp.MustCompile(`(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|otp|authorization)\b(\s*[=:]\s*)("[^"]*"|'[^']*'|\S+)`)
+
+func redactActivityString(s string) string {
+	for _, pattern := range activitySecretValuePatterns {
+		s = pattern.ReplaceAllString(s, redactedValue)
+	}
+	return activitySecretAssignment.ReplaceAllString(s, "${1}${2}"+redactedValue)
+}
+
+func truncateRunes(s string, max int) string {
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s
+	}
+	return string(runes[:max]) + "…"
+}
 
 func redactActivity(v any) any {
 	secret := func(key string) bool {
 		key = strings.ToLower(key)
-		for _, part := range []string{"token", "password", "secret", "api_key", "otp", "credential", "clipboard"} {
+		for _, part := range activitySecretKeyParts {
 			if strings.Contains(key, part) {
 				return true
 			}
@@ -38,6 +77,8 @@ func redactActivity(v any) any {
 				out[i] = walk(child)
 			}
 			return out
+		case string:
+			return redactActivityString(item)
 		default:
 			return item
 		}
@@ -79,8 +120,15 @@ func CreateToolActivity(c *gin.Context) {
 			return
 		}
 	}
+	if len(req.ToolName) > 100 || len(req.ApprovalStatus) > 30 || len(req.ExecutionStatus) > 30 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "tool_name, approval_status atau execution_status terlalu panjang."})
+		return
+	}
 	args, _ := json.Marshal(redactActivity(req.Arguments))
-	row := models.ToolActivity{UserID: uid, AgentID: req.AgentID, SkillID: req.SkillID, ToolName: req.ToolName, ArgumentsJSON: string(args), TargetApplication: req.TargetApplication, ApprovalStatus: req.ApprovalStatus, ExecutionStatus: req.ExecutionStatus, Error: req.Error, DurationMS: req.DurationMS}
+	if len(args) > maxActivityArgsBytes {
+		args = []byte(`{"truncated":true}`)
+	}
+	row := models.ToolActivity{UserID: uid, AgentID: req.AgentID, SkillID: req.SkillID, ToolName: req.ToolName, ArgumentsJSON: string(args), TargetApplication: truncateRunes(redactActivityString(req.TargetApplication), maxActivityTargetLength), ApprovalStatus: req.ApprovalStatus, ExecutionStatus: req.ExecutionStatus, Error: truncateRunes(redactActivityString(req.Error), maxActivityErrorLength), DurationMS: req.DurationMS}
 	if err := config.DB.Create(&row).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menyimpan aktivitas tool."})
 		return
