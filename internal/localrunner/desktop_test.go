@@ -86,6 +86,56 @@ func TestDesktopActionApprovalDenyExpiryAndEmergencyStop(t *testing.T) {
 	}
 }
 
+// The "session" approval mode must not grant anything beyond "once": it runs
+// only the approved action, cannot be replayed, and the next action still
+// needs its own approval. UI labels rely on this.
+func TestSessionApprovalModeGrantsNothingBeyondOnce(t *testing.T) {
+	for _, mode := range []string{"once", "session", ""} {
+		mock := &mockDesktopProvider{}
+		runtime := &desktopRuntime{provider: mock, pending: map[string]pendingDesktopAction{}}
+		gin.SetMode(gin.TestMode)
+		engine := gin.New()
+		engine.POST("/request", runtime.requestAction)
+		engine.POST("/approve/:id", runtime.approveAction)
+		post := func(path, body string) *httptest.ResponseRecorder {
+			req := httptest.NewRequest("POST", path, bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			res := httptest.NewRecorder()
+			engine.ServeHTTP(res, req)
+			return res
+		}
+		request := func() (int, string) {
+			res := post("/request", `{"action":"desktop.focus_window","agent":"a","reason":"test","window":"1"}`)
+			var payload struct {
+				Action pendingDesktopAction `json:"action"`
+			}
+			_ = json.Unmarshal(res.Body.Bytes(), &payload)
+			return res.Code, payload.Action.ID
+		}
+
+		_, first := request()
+		if res := post("/approve/"+first, `{"mode":"`+mode+`"}`); res.Code != 200 {
+			t.Fatalf("mode %q: approve = %d", mode, res.Code)
+		}
+		if len(mock.calls) != 1 {
+			t.Fatalf("mode %q: provider calls after the approval = %d, want 1", mode, len(mock.calls))
+		}
+		if res := post("/approve/"+first, `{"mode":"`+mode+`"}`); res.Code != 404 || len(mock.calls) != 1 {
+			t.Fatalf("mode %q: an approval was replayed (status %d, calls %d)", mode, res.Code, len(mock.calls))
+		}
+		code, second := request()
+		if code != 202 {
+			t.Fatalf("mode %q: the owner's next request = %d, want 202 (pending approval)", mode, code)
+		}
+		if len(mock.calls) != 1 {
+			t.Fatalf("mode %q: the next action ran without its own approval", mode)
+		}
+		if res := post("/approve/"+second, `{"mode":"`+mode+`"}`); res.Code != 200 || len(mock.calls) != 2 {
+			t.Fatalf("mode %q: second approval status %d, calls %d", mode, res.Code, len(mock.calls))
+		}
+	}
+}
+
 func TestDesktopActionIDsAreUnique(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < 5000; i++ {

@@ -172,6 +172,10 @@ func (r *desktopRuntime) requestAction(c *gin.Context) {
 
 func (r *desktopRuntime) approveAction(c *gin.Context) {
 	id := c.Param("id")
+	// Mode ("once" or "session") is accepted for compatibility with older
+	// clients but deliberately not used: both approve exactly this one action,
+	// and every later action needs its own approval. Approving claims the
+	// session for the agent below, whatever the mode.
 	var body struct {
 		Mode string `json:"mode"`
 	}

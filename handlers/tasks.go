@@ -214,6 +214,10 @@ func CreateTask(c *gin.Context) {
 		}
 	}
 
+	if !requireReferencableModel(c, userID, req.ModelID) {
+		return
+	}
+
 	task := models.Task{
 		UserID:      userID,
 		AgentID:     req.AgentID,
@@ -367,6 +371,9 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	if req.ModelID != nil {
+		if !requireReferencableModel(c, userID, req.ModelID) {
+			return
+		}
 		task.ModelID = req.ModelID
 	}
 

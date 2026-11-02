@@ -79,6 +79,10 @@ func AddTaskMessage(c *gin.Context) {
 		return
 	}
 
+	if !requireReferencableModel(c, task.UserID, req.ModelID) {
+		return
+	}
+
 	message := models.TaskMessage{
 		TaskID:   task.ID,
 		Role:     req.Role,
