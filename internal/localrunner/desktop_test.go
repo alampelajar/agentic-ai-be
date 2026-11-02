@@ -86,6 +86,103 @@ func TestDesktopActionApprovalDenyExpiryAndEmergencyStop(t *testing.T) {
 	}
 }
 
+func TestDesktopActionIDsAreUnique(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 5000; i++ {
+		id := newActionID()
+		if seen[id] {
+			t.Fatalf("duplicate action id %q after %d ids", id, i)
+		}
+		seen[id] = true
+	}
+}
+
+func TestDesktopOwnershipIsClaimedOnlyOnApproval(t *testing.T) {
+	mock := &mockDesktopProvider{}
+	runtime := &desktopRuntime{provider: mock, pending: map[string]pendingDesktopAction{}}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/request", runtime.requestAction)
+	engine.POST("/approve/:id", runtime.approveAction)
+	engine.POST("/deny/:id", runtime.denyAction)
+	engine.POST("/revoke", runtime.revokePermission)
+
+	post := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", path, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		engine.ServeHTTP(res, req)
+		return res
+	}
+	request := func(agent string) (int, string) {
+		res := post("/request", `{"action":"desktop.focus_window","agent":"`+agent+`","reason":"test","window":"1"}`)
+		var payload struct {
+			Action pendingDesktopAction `json:"action"`
+		}
+		_ = json.Unmarshal(res.Body.Bytes(), &payload)
+		return res.Code, payload.Action.ID
+	}
+
+	// A denied request must not lock other agents out.
+	code, id := request("agent-a")
+	if code != 202 {
+		t.Fatalf("request status = %d", code)
+	}
+	if res := post("/deny/"+id, ""); res.Code != 200 {
+		t.Fatalf("deny status = %d", res.Code)
+	}
+	if code, _ := request("agent-b"); code != 202 {
+		t.Fatalf("agent-b blocked by a denied request from agent-a: status %d", code)
+	}
+
+	// An expired approval must not claim ownership either.
+	runtime.mu.Lock()
+	runtime.pending = map[string]pendingDesktopAction{}
+	runtime.mu.Unlock()
+	_, expiredID := request("agent-a")
+	runtime.mu.Lock()
+	item := runtime.pending[expiredID]
+	item.ExpiresAt = time.Now().Add(-time.Second)
+	runtime.pending[expiredID] = item
+	runtime.mu.Unlock()
+	if res := post("/approve/"+expiredID, `{"mode":"once"}`); res.Code != 410 {
+		t.Fatalf("expired approve status = %d", res.Code)
+	}
+	if code, _ := request("agent-b"); code != 202 {
+		t.Fatalf("agent-b blocked by an expired approval from agent-a: status %d", code)
+	}
+
+	// Approving claims the session; the other agent is then rejected, including
+	// a request that was already pending before the claim.
+	runtime.mu.Lock()
+	runtime.pending = map[string]pendingDesktopAction{}
+	runtime.mu.Unlock()
+	_, aID := request("agent-a")
+	_, bID := request("agent-b")
+	if res := post("/approve/"+aID, `{"mode":"once"}`); res.Code != 200 {
+		t.Fatalf("approve agent-a status = %d", res.Code)
+	}
+	callsBefore := len(mock.calls)
+	if res := post("/approve/"+bID, `{"mode":"once"}`); res.Code != 409 {
+		t.Fatalf("approve of an overlapping agent-b request status = %d, want 409", res.Code)
+	}
+	if len(mock.calls) != callsBefore {
+		t.Fatal("agent-b action must not execute while agent-a owns the session")
+	}
+	if code, _ := request("agent-b"); code != 409 {
+		t.Fatalf("new agent-b request status = %d, want 409", code)
+	}
+	if code, _ := request("agent-a"); code != 202 {
+		t.Fatalf("owner agent-a request status = %d, want 202", code)
+	}
+	if res := post("/revoke", ""); res.Code != 200 {
+		t.Fatalf("revoke status = %d", res.Code)
+	}
+	if code, _ := request("agent-b"); code != 202 {
+		t.Fatalf("agent-b after revoke status = %d, want 202", code)
+	}
+}
+
 func (m *mockDesktopProvider) Call(_ context.Context, req desktopRequest) (desktopResponse, error) {
 	m.calls = append(m.calls, req.Operation)
 	return desktopResponse{OK: true, Status: "desktop_ready"}, nil

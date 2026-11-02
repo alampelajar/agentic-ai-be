@@ -3,6 +3,8 @@ package localrunner
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -140,10 +142,12 @@ func (r *desktopRuntime) requestAction(c *gin.Context) {
 		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "another agent owns the desktop session"})
 		return
 	}
-	if r.allowAgent == "" {
-		r.allowAgent = req.Agent
-	}
+	// Ownership is claimed only when an action is approved. A request that is
+	// denied, expired or never answered must not lock other agents out.
 	req.ID = newActionID()
+	for _, taken := r.pending[req.ID]; taken; _, taken = r.pending[req.ID] {
+		req.ID = newActionID()
+	}
 	req.ExpiresAt = time.Now().Add(60 * time.Second)
 	r.pending[req.ID] = req
 	c.JSON(http.StatusAccepted, gin.H{"ok": true, "approval_required": true, "action": req})
@@ -160,19 +164,23 @@ func (r *desktopRuntime) approveAction(c *gin.Context) {
 	if ok {
 		delete(r.pending, id)
 	}
+	expired := ok && time.Now().After(action.ExpiresAt)
+	ownedByOther := ok && !expired && r.allowAgent != "" && r.allowAgent != action.Agent
+	if ok && !expired && !ownedByOther {
+		r.allowAgent = action.Agent
+	}
 	r.mu.Unlock()
 	if !ok {
 		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "action not found or already resolved"})
 		return
 	}
-	if time.Now().After(action.ExpiresAt) {
+	if expired {
 		c.JSON(http.StatusGone, gin.H{"ok": false, "error": "approval expired"})
 		return
 	}
-	if body.Mode == "session" {
-		r.mu.Lock()
-		r.allowAgent = action.Agent
-		r.mu.Unlock()
+	if ownedByOther {
+		c.JSON(http.StatusConflict, gin.H{"ok": false, "error": "another agent owns the desktop session"})
+		return
 	}
 	req := desktopRequest{Operation: "action", Options: map[string]any{"action": action.Action, "agent": action.Agent, "window": action.Window, "target": action.Target, "arguments": action.Arguments}}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), desktopTimeout)
@@ -212,7 +220,16 @@ func (r *desktopRuntime) emergencyStop(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "stopped"})
 }
 
-func newActionID() string { return fmt.Sprintf("desktop-%d", time.Now().UnixNano()) }
+// newActionID returns an unguessable, collision-free identifier. A time-based
+// ID collided under Windows clock granularity, letting one pending action
+// overwrite another so the approved action differed from the executed one.
+func newActionID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		panic(fmt.Sprintf("desktop action id: %v", err))
+	}
+	return "desktop-" + hex.EncodeToString(raw[:])
+}
 
 type sidecarProvider struct {
 	enabled bool
