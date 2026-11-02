@@ -20,6 +20,7 @@ class FakeWindow:
         self._title = title
         self._rect = SimpleNamespace(left=rect[0], top=rect[1], right=rect[2], bottom=rect[3])
         self.calls = []
+        self.controls = {}
 
     def window_text(self):
         return self._title
@@ -44,6 +45,9 @@ class FakeWindow:
 
     def type_keys(self, *args, **kwargs):
         self.calls.append(("type_keys", args, kwargs))
+
+    def descendants(self, **criteria):
+        return list(self.controls.get(tuple(sorted(criteria.items())), []))
 
 
 class FakeDesktop:
@@ -230,6 +234,25 @@ class ExecuteActionTests(unittest.TestCase):
         window = FakeWindow()
         self.run_action(window, "desktop.scroll", arguments={"amount": 3, "direction": "up"})
         self.assertEqual(window.calls, [("scroll", {"direction": "up", "amount": "line", "count": 3})])
+
+    def test_scroll_can_target_a_control_inside_the_window(self):
+        window = FakeWindow()
+        pane = FakeWindow(handle=200, title="")
+        window.controls[(("control_type", "Edit"),)] = [pane]
+        self.run_action(window, "desktop.scroll", arguments={"amount": 5, "direction": "down"}, target={"type": "control_type", "value": "Edit"})
+        self.assertEqual(pane.calls, [("scroll", {"direction": "down", "amount": "line", "count": 5})])
+        self.assertEqual(window.calls, [])  # the window itself is not scrolled
+
+    def test_scroll_target_must_resolve_to_exactly_one_control(self):
+        window = FakeWindow()
+        window.controls[(("control_type", "Edit"),)] = [FakeWindow(handle=1), FakeWindow(handle=2)]
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            self.run_action(window, "desktop.scroll", arguments={"amount": 1}, target={"type": "control_type", "value": "Edit"})
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            self.run_action(window, "desktop.scroll", arguments={"amount": 1}, target={"type": "automation_id", "value": "missing"})
+        # A coordinate is a click target and cannot select what to scroll.
+        with self.assertRaisesRegex(ValueError, "automation_id, name, or control_type"):
+            self.run_action(window, "desktop.scroll", arguments={"amount": 1}, target={"type": "coordinate", "x": 1, "y": 1})
 
     def test_unknown_action_is_rejected_before_anything_else(self):
         desktop = FakeDesktop(FakeWindow())

@@ -174,8 +174,11 @@ def execute_action(desktop, options):
         else:
             (value.double_click_input if double else value.click_input)()
     elif action == "desktop.scroll":
+        # A top-level window rarely exposes scrolling itself; the pane inside it
+        # does. An optional target (automation_id, name or control_type) picks it.
+        scrollable = resolve_control(window, target) if target else window
         # pywinauto's "amount" is the unit ("line" or "page"); "count" is how many.
-        window.scroll(direction=arguments["direction"], amount="line", count=arguments["amount"])
+        scrollable.scroll(direction=arguments["direction"], amount="line", count=arguments["amount"])
     elif action == "desktop.type":
         control = resolve_control(window, target) if target else window
         control.type_keys(arguments["text"], with_spaces=True, set_foreground=True)
