@@ -193,6 +193,13 @@ func main() {
 	// PROTECTED ROUTES
 	// ============================================================
 
+	// ============================================================
+	// USER FEEDBACK
+	// ============================================================
+	protected.GET("/feedback", handlers.GetMyFeedback)
+	protected.POST("/feedback", handlers.CreateFeedback)
+	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
+
 	protected := api.Group("")
 
 	protected.Use(
@@ -417,6 +424,11 @@ func main() {
 			"/logs",
 			handlers.AdminGetAuditLogs,
 		)
+
+		// FEEDBACK MANAGEMENT
+		admin.GET("/feedback", handlers.AdminGetFeedback)
+		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
+		admin.POST("/feedback/:id/replies", handlers.AdminReplyFeedback)
 
 		admin.GET(
 			"/agents",
