@@ -76,7 +76,7 @@ func RateMyFeedback(c *gin.Context) {
 
 func AdminGetFeedback(c *gin.Context) {
 	var items []models.Feedback
-	if err := config.DB.Preload("Replies").Preload("Replies").Joins("JOIN users ON users.id = feedbacks.user_id").
+	if err := config.DB.Preload("Replies").Joins("JOIN users ON users.id = feedbacks.user_id").
 		Select("feedbacks.*").Order("feedbacks.created_at DESC").Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal mengambil feedback"}); return
 	}
