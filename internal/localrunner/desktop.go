@@ -124,7 +124,19 @@ func (s *Server) desktopStop(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "stopped"})
 }
 
-var allowedDesktopActions = map[string]bool{"desktop.click": true, "desktop.double_click": true, "desktop.scroll": true, "desktop.type": true, "desktop.hotkey": true, "desktop.focus_window": true}
+// desktopMaxPending bounds the pending-approval map. Entries expire after 60s
+// and are purged on every request, so this only limits a burst of requests.
+const desktopMaxPending = 32
+
+func (r *desktopRuntime) purgeExpiredLocked(now time.Time) {
+	for id, action := range r.pending {
+		if now.After(action.ExpiresAt) {
+			delete(r.pending, id)
+		}
+	}
+}
+
+var allowedDesktopActions =map[string]bool{"desktop.click": true, "desktop.double_click": true, "desktop.scroll": true, "desktop.type": true, "desktop.hotkey": true, "desktop.focus_window": true}
 
 func (r *desktopRuntime) requestAction(c *gin.Context) {
 	var req pendingDesktopAction
@@ -144,6 +156,11 @@ func (r *desktopRuntime) requestAction(c *gin.Context) {
 	}
 	// Ownership is claimed only when an action is approved. A request that is
 	// denied, expired or never answered must not lock other agents out.
+	r.purgeExpiredLocked(time.Now())
+	if len(r.pending) >= desktopMaxPending {
+		c.JSON(http.StatusTooManyRequests, gin.H{"ok": false, "error": "too many pending desktop actions; resolve or wait for them to expire"})
+		return
+	}
 	req.ID = newActionID()
 	for _, taken := r.pending[req.ID]; taken; _, taken = r.pending[req.ID] {
 		req.ID = newActionID()
@@ -215,6 +232,9 @@ func (r *desktopRuntime) emergencyStop(c *gin.Context) {
 	r.mu.Lock()
 	r.pending = map[string]pendingDesktopAction{}
 	r.allowAgent = ""
+	// Mark the runtime stopped so new requests are refused up front (409)
+	// instead of being queued and failing only when approved.
+	r.stopped = true
 	r.mu.Unlock()
 	r.provider.Stop()
 	c.JSON(http.StatusOK, gin.H{"ok": true, "status": "stopped"})

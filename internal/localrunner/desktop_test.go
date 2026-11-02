@@ -183,6 +183,97 @@ func TestDesktopOwnershipIsClaimedOnlyOnApproval(t *testing.T) {
 	}
 }
 
+func TestDesktopEmergencyStopRefusesNewRequests(t *testing.T) {
+	mock := &mockDesktopProvider{}
+	runtime := &desktopRuntime{provider: mock, pending: map[string]pendingDesktopAction{}}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/request", runtime.requestAction)
+	engine.POST("/approve/:id", runtime.approveAction)
+	engine.POST("/emergency", runtime.emergencyStop)
+	engine.GET("/status", runtime.status)
+
+	post := func(path, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest("POST", path, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		engine.ServeHTTP(res, req)
+		return res
+	}
+	const body = `{"action":"desktop.focus_window","agent":"a","reason":"test","window":"1"}`
+	first := post("/request", body)
+	if first.Code != 202 {
+		t.Fatalf("request before stop = %d", first.Code)
+	}
+	var payload struct {
+		Action pendingDesktopAction `json:"action"`
+	}
+	_ = json.Unmarshal(first.Body.Bytes(), &payload)
+	if res := post("/emergency", ""); res.Code != 200 {
+		t.Fatalf("emergency status = %d", res.Code)
+	}
+	if res := post("/request", body); res.Code != 409 {
+		t.Fatalf("request after emergency stop = %d, want 409", res.Code)
+	}
+	callsBefore := len(mock.calls)
+	if res := post("/approve/"+payload.Action.ID, `{"mode":"once"}`); res.Code != 404 {
+		t.Fatalf("approve of a pre-stop request = %d, want 404", res.Code)
+	}
+	res := httptest.NewRecorder()
+	engine.ServeHTTP(res, httptest.NewRequest("GET", "/status", nil))
+	if res.Code != 409 {
+		t.Fatalf("status after emergency stop = %d, want 409", res.Code)
+	}
+	if len(mock.calls) != callsBefore {
+		t.Fatalf("provider must not be called after emergency stop: %#v", mock.calls)
+	}
+}
+
+func TestDesktopExpiredPendingIsPurgedAndPendingIsBounded(t *testing.T) {
+	runtime := &desktopRuntime{provider: &mockDesktopProvider{}, pending: map[string]pendingDesktopAction{}}
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.POST("/request", runtime.requestAction)
+	request := func() int {
+		req := httptest.NewRequest("POST", "/request", bytes.NewBufferString(`{"action":"desktop.focus_window","agent":"a","reason":"test","window":"1"}`))
+		req.Header.Set("Content-Type", "application/json")
+		res := httptest.NewRecorder()
+		engine.ServeHTTP(res, req)
+		return res.Code
+	}
+
+	runtime.mu.Lock()
+	for _, id := range []string{"old-1", "old-2", "old-3"} {
+		runtime.pending[id] = pendingDesktopAction{ID: id, ExpiresAt: time.Now().Add(-time.Minute)}
+	}
+	runtime.mu.Unlock()
+	if code := request(); code != 202 {
+		t.Fatalf("request = %d", code)
+	}
+	runtime.mu.Lock()
+	remaining := len(runtime.pending)
+	_, stale := runtime.pending["old-1"]
+	runtime.mu.Unlock()
+	if remaining != 1 || stale {
+		t.Fatalf("expired entries not purged: pending=%d stale=%v", remaining, stale)
+	}
+
+	for i := 1; i < desktopMaxPending; i++ {
+		if code := request(); code != 202 {
+			t.Fatalf("request %d = %d", i, code)
+		}
+	}
+	if code := request(); code != 429 {
+		t.Fatalf("request over the pending limit = %d, want 429", code)
+	}
+	runtime.mu.Lock()
+	size := len(runtime.pending)
+	runtime.mu.Unlock()
+	if size != desktopMaxPending {
+		t.Fatalf("pending size = %d, want %d", size, desktopMaxPending)
+	}
+}
+
 func (m *mockDesktopProvider) Call(_ context.Context, req desktopRequest) (desktopResponse, error) {
 	m.calls = append(m.calls, req.Operation)
 	return desktopResponse{OK: true, Status: "desktop_ready"}, nil
