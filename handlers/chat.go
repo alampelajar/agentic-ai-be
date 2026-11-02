@@ -593,8 +593,11 @@ AGENT ROLE: DEBUGGING AGENT
 `
 	}
 	var requestBodyTools []providerToolDefinition
+	// Tools this agent may use in this request. Anything the model emits outside
+	// this set is removed from the reply (see enforceAgentToolMarkers).
+	var activeToolNames []string
 	if agentID != 0 {
-		activeToolNames := []string{"list-files", "read-file"}
+		activeToolNames = []string{"list-files", "read-file"}
 		if activeSkills, skillErr := services.LoadActiveAgentSkills(config.DB, userID, agentID, prompt); skillErr == nil {
 			systemPrompt += "\n\n" + services.RenderSkillContext(activeSkills)
 			if len(activeSkills) > 0 {
@@ -752,6 +755,8 @@ AGENT ROLE: DEBUGGING AGENT
 		})
 		return
 	}
+
+	answer = enforceAgentToolMarkers(answer, activeToolNames)
 
 	// ============================================================
 	// RESPONSE
