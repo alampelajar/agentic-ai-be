@@ -102,6 +102,8 @@ type incomingChatRequest struct {
 	History []chatHistoryItem `json:"history"`
 	AgentID uint              `json:"agent_id"`
 	ModelID uint              `json:"model_id"`
+	// WorkspaceID is the Cloud Workspace the user selected, if any.
+	WorkspaceID uint `json:"workspace_id"`
 }
 
 // ================================================================
@@ -136,6 +138,7 @@ func Chat(c *gin.Context) {
 
 	var agentID uint
 	var modelID uint
+	var workspaceID uint
 
 	// ============================================================
 	// JSON REQUEST
@@ -162,6 +165,7 @@ func Chat(c *gin.Context) {
 		history = body.History
 		agentID = body.AgentID
 		modelID = body.ModelID
+		workspaceID = body.WorkspaceID
 	}
 
 	// ============================================================
@@ -215,6 +219,10 @@ func Chat(c *gin.Context) {
 			c.PostForm("model_id"),
 		)
 
+		workspaceID = parseUintForm(
+			c.PostForm("workspace_id"),
+		)
+
 		// --------------------------------------------------------
 		// FILES
 		// --------------------------------------------------------
@@ -250,6 +258,19 @@ func Chat(c *gin.Context) {
 			"error": "Message wajib diisi.",
 		})
 		return
+	}
+
+	// A selected Cloud Workspace must be the user's own and ready; anything else
+	// is refused instead of silently chatting without it.
+	if workspaceID != 0 {
+		handle, workspaceErr := openWorkspace(userID, workspaceID, false)
+		if workspaceErr != nil || handle.requireReady() != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"ok":    false,
+				"error": "Workspace tidak ditemukan atau belum siap.",
+			})
+			return
+		}
 	}
 
 	log.Printf(
@@ -611,6 +632,18 @@ AGENT ROLE: DEBUGGING AGENT
 			if len(requestTools) > 0 {
 				requestBodyTools = requestTools
 			}
+		}
+	}
+
+	// Cloud Workspace (Phase 6): when the user selected a workspace they own, the
+	// agent's role decides which workspace tools it is offered.
+	if workspaceID != 0 && agentID != 0 {
+		handle, workspaceErr := openWorkspace(userID, workspaceID, false)
+		if workspaceErr == nil && handle.requireReady() == nil {
+			cloudTools := services.CloudToolsForAgent(agentSlug)
+			activeToolNames = append(activeToolNames, cloudTools...)
+			systemPrompt += cloudWorkspacePrompt(handle.Workspace, cloudTools)
+			requestBodyTools = providerToolsForNames(activeToolNames)
 		}
 	}
 

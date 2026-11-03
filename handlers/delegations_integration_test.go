@@ -26,6 +26,8 @@ type scriptedProvider struct {
 	mu       sync.Mutex
 	requests []map[string]any
 	reply    func() (int, string)
+	// rawBody, when set, is sent as the whole response body (for tool calls).
+	rawBody string
 }
 
 func newScriptedProvider(t *testing.T) *scriptedProvider {
@@ -38,7 +40,13 @@ func newScriptedProvider(t *testing.T) *scriptedProvider {
 		p.mu.Lock()
 		p.requests = append(p.requests, parsed)
 		status, text := p.reply()
+		raw := p.rawBody
 		p.mu.Unlock()
+		if raw != "" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(raw))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != 200 {
