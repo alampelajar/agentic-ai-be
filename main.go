@@ -263,6 +263,12 @@ func main() {
 		protected.POST("/agents/:id/skills", handlers.AssignSkillToAgent)
 		protected.PATCH("/agents/:id/skills/:skill_id", handlers.UpdateAgentSkill)
 		protected.DELETE("/agents/:id/skills/:skill_id", handlers.RemoveSkillFromAgent)
+		protected.GET("/memories", handlers.GetMemories)
+		protected.POST("/memories", handlers.CreateMemory)
+		protected.PATCH("/memories/:id", handlers.UpdateMemory)
+		protected.DELETE("/memories/:id", handlers.DeleteMemory)
+		protected.GET("/memory-settings", handlers.GetMemorySettings)
+		protected.PUT("/memory-settings", handlers.UpdateMemorySettings)
 		protected.POST("/tool-activities", handlers.CreateToolActivity)
 		protected.GET("/tool-activities", handlers.GetToolActivities)
 

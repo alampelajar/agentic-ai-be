@@ -74,6 +74,8 @@ func ConnectDatabase() {
 		&models.SkillVersion{},
 		&models.AgentSkill{},
 		&models.ToolActivity{},
+		&models.AgentMemory{},
+		&models.UserMemorySetting{},
 	)
 
 	if err != nil {

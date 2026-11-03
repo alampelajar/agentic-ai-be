@@ -168,6 +168,13 @@ func DeleteMe(c *gin.Context) {
 		if err := tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
 			return err
 		}
+		// Persistent memories are personal data: remove them with the account.
+		if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.AgentMemory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserMemorySetting{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Create(&audit).Error; err != nil {
 			return err
 		}
