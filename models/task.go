@@ -7,6 +7,9 @@ type Task struct {
 	UserID      uint      `json:"user_id" gorm:"not null;index"`
 	AgentID     *uint     `json:"agent_id,omitempty" gorm:"index"`
 	ModelID     *uint     `json:"model_id,omitempty" gorm:"index"`
+	// The Cloud Workspace this task works in. No foreign key: deleting the
+	// workspace clears it and the task history stays.
+	WorkspaceID *uint `json:"workspace_id,omitempty" gorm:"index"`
 	Title       string    `json:"title" gorm:"type:varchar(255);not null"`
 	Description string    `json:"description" gorm:"type:text"`
 	Status      string    `json:"status" gorm:"type:varchar(30);not null;default:todo"`

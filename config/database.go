@@ -77,6 +77,9 @@ func ConnectDatabase() {
 		&models.AgentMemory{},
 		&models.UserMemorySetting{},
 		&models.AgentDelegation{},
+		&models.CloudWorkspace{},
+		&models.ExecutionJob{},
+		&models.WorkspaceToolApproval{},
 	)
 
 	if err != nil {
