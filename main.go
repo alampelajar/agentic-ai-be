@@ -193,18 +193,18 @@ func main() {
 	// PROTECTED ROUTES
 	// ============================================================
 
+	protected := api.Group("")
+
+	protected.Use(
+		middleware.AuthMiddleware(),
+	)
+
 	// ============================================================
 	// USER FEEDBACK
 	// ============================================================
 	protected.GET("/feedback", handlers.GetMyFeedback)
 	protected.POST("/feedback", handlers.CreateFeedback)
 	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
-
-	protected := api.Group("")
-
-	protected.Use(
-		middleware.AuthMiddleware(),
-	)
 
 	{
 		// ========================================================
