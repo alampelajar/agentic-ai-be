@@ -175,6 +175,9 @@ func DeleteMe(c *gin.Context) {
 		if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserMemorySetting{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.AgentDelegation{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Create(&audit).Error; err != nil {
 			return err
 		}

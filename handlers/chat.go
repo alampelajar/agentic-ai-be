@@ -592,6 +592,8 @@ AGENT ROLE: DEBUGGING AGENT
 		systemPrompt += "\n\n" + memoryBlock
 		log.Printf("[CHAT] Persistent memory: %d item(s) added", memoryCount)
 	}
+	// A delegated run (Phase 5B) answers in text only: no tools are offered.
+	delegatedRun := c.GetBool(delegatedRunKey)
 	var requestBodyTools []providerToolDefinition
 	// Tools this agent may use in this request. Anything the model emits outside
 	// this set is removed from the reply (see enforceAgentToolMarkers).
@@ -610,6 +612,12 @@ AGENT ROLE: DEBUGGING AGENT
 				requestBodyTools = requestTools
 			}
 		}
+	}
+
+	if delegatedRun {
+		activeToolNames = nil
+		requestBodyTools = nil
+		systemPrompt += delegatedRunNotice
 	}
 
 	// ============================================================
