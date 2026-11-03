@@ -1,8 +1,14 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"io"
+	"mime"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -11,14 +17,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
-
-type createFeedbackRequest struct {
-	Category    string `json:"category"`
-	Subject     string `json:"subject"`
-	Description string `json:"description"`
-	RelatedPage string `json:"related_page"`
-	Attachment  string `json:"attachment"`
-}
 
 func currentFeedbackUserID(c *gin.Context) (uint, bool) {
 	value, ok := c.Get("user_id")
@@ -29,25 +27,94 @@ func currentFeedbackUserID(c *gin.Context) (uint, bool) {
 
 func CreateFeedback(c *gin.Context) {
 	userID, ok := currentFeedbackUserID(c)
-	if !ok { c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"}); return }
-	var req createFeedbackRequest
-	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Format JSON tidak valid"}); return }
-	req.Category = strings.TrimSpace(req.Category)
-	req.Subject = strings.TrimSpace(req.Subject)
-	req.Description = strings.TrimSpace(req.Description)
-	req.RelatedPage = strings.TrimSpace(req.RelatedPage)
-	req.Attachment = strings.TrimSpace(req.Attachment)
-	if req.Category == "" || req.Description == "" || req.RelatedPage == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Kategori, deskripsi, dan halaman terkait wajib diisi"}); return
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
+		return
 	}
-	allowed := map[string]bool{"feature":true,"bug":true,"service":true,"aiExperience":true,"help":true}
-	if !allowed[req.Category] { c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Kategori feedback tidak valid"}); return }
-	if len([]rune(req.Description)) < 10 || len([]rune(req.Description)) > 5000 || len([]rune(req.Subject)) > 120 {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Panjang subject atau deskripsi tidak valid"}); return
+
+	if err := c.Request.ParseMultipartForm(6 << 20); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Form upload tidak valid atau terlalu besar"})
+		return
 	}
-	item := models.Feedback{UserID:userID, Category:req.Category, Subject:req.Subject, Description:req.Description, RelatedPage:req.RelatedPage, Attachment:req.Attachment, Status:"new"}
-	if err := config.DB.Create(&item).Error; err != nil { c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menyimpan feedback"}); return }
-	c.JSON(http.StatusCreated, gin.H{"ok":true,"feedback":item})
+
+	category := strings.TrimSpace(c.PostForm("category"))
+	subject := strings.TrimSpace(c.PostForm("subject"))
+	description := strings.TrimSpace(c.PostForm("description"))
+	relatedPage := strings.TrimSpace(c.PostForm("related_page"))
+
+	if category == "" || description == "" || relatedPage == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Kategori, deskripsi, dan halaman terkait wajib diisi"})
+		return
+	}
+	allowed := map[string]bool{"feature": true, "bug": true, "service": true, "aiExperience": true, "help": true}
+	if !allowed[category] {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Kategori feedback tidak valid"})
+		return
+	}
+	if len([]rune(description)) < 10 || len([]rune(description)) > 5000 || len([]rune(subject)) > 120 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Panjang subject atau deskripsi tidak valid"})
+		return
+	}
+
+	attachmentPath := ""
+	file, header, fileErr := c.Request.FormFile("attachment")
+	if fileErr == nil {
+		defer file.Close()
+		if header.Size > 5<<20 {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Ukuran foto maksimal 5 MB"})
+			return
+		}
+		data, err := io.ReadAll(io.LimitReader(file, (5<<20)+1))
+		if err != nil || len(data) == 0 || len(data) > 5<<20 {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "File foto tidak valid atau terlalu besar"})
+			return
+		}
+		contentType := http.DetectContentType(data)
+		extensions := map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+		ext, allowedType := extensions[contentType]
+		if !allowedType {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Format foto harus PNG, JPG, atau WebP"})
+			return
+		}
+		if _, err := mime.ExtensionsByType(contentType); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Tipe foto tidak valid"})
+			return
+		}
+		randomName := make([]byte, 16)
+		if _, err := rand.Read(randomName); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal membuat nama file"})
+			return
+		}
+		fileName := hex.EncodeToString(randomName) + ext
+		uploadDir := filepath.Join("uploads", "feedback")
+		if err := os.MkdirAll(uploadDir, 0755); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menyiapkan penyimpanan foto"})
+			return
+		}
+		destination := filepath.Join(uploadDir, fileName)
+		if err := os.WriteFile(destination, data, 0644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menyimpan foto"})
+			return
+		}
+		attachmentPath = "/uploads/feedback/" + fileName
+	} else if fileErr != http.ErrMissingFile {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Gagal membaca foto lampiran"})
+		return
+	}
+
+	item := models.Feedback{
+		UserID: userID, Category: category, Subject: subject,
+		Description: description, RelatedPage: relatedPage,
+		Attachment: attachmentPath, Status: "new",
+	}
+	if err := config.DB.Create(&item).Error; err != nil {
+		if attachmentPath != "" {
+			_ = os.Remove(filepath.Join("uploads", "feedback", filepath.Base(attachmentPath)))
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menyimpan feedback"})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"ok": true, "feedback": item})
 }
 
 func GetMyFeedback(c *gin.Context) {
