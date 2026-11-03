@@ -17,6 +17,13 @@ const (
 	redactedValue           = "[REDACTED]"
 )
 
+// The only outcomes a client can report. Anything else is rejected rather than
+// stored, so the activity list only ever holds values the UI knows how to show.
+var (
+	activityApprovalStatuses  = map[string]bool{"not_required": true, "approved_once": true, "approved_session": true, "denied": true, "expired": true}
+	activityExecutionStatuses = map[string]bool{"completed": true, "failed": true, "cancelled": true}
+)
+
 // Keys whose values are never stored. "text" and "content" cover typed or
 // written free text, which the server cannot tell apart from a secret.
 var activitySecretKeyParts = []string{"token", "password", "passwd", "secret", "api_key", "apikey", "otp", "credential", "clipboard", "authorization", "cookie", "passphrase", "text", "content"}
@@ -120,8 +127,12 @@ func CreateToolActivity(c *gin.Context) {
 			return
 		}
 	}
-	if len(req.ToolName) > 100 || len(req.ApprovalStatus) > 30 || len(req.ExecutionStatus) > 30 {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "tool_name, approval_status atau execution_status terlalu panjang."})
+	if len(req.ToolName) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "tool_name terlalu panjang."})
+		return
+	}
+	if !activityApprovalStatuses[req.ApprovalStatus] || !activityExecutionStatuses[req.ExecutionStatus] {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "approval_status atau execution_status tidak valid."})
 		return
 	}
 	args, _ := json.Marshal(redactActivity(req.Arguments))
