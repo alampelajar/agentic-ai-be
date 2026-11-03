@@ -586,6 +586,12 @@ AGENT ROLE: DEBUGGING AGENT
 - Do not report a hypothesis as a confirmed root cause until supported by logs or test output.
 `
 	}
+	// Persistent Memory: only when the user turned it on. It is added as labelled
+	// data after the role prompt and cannot change tools or permissions.
+	if memoryBlock, memoryCount := services.LoadMemoryContext(config.DB, userID, agentID, prompt); memoryBlock != "" {
+		systemPrompt += "\n\n" + memoryBlock
+		log.Printf("[CHAT] Persistent memory: %d item(s) added", memoryCount)
+	}
 	var requestBodyTools []providerToolDefinition
 	// Tools this agent may use in this request. Anything the model emits outside
 	// this set is removed from the reply (see enforceAgentToolMarkers).
