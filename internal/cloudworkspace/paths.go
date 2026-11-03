@@ -6,10 +6,13 @@ package cloudworkspace
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"agentic-ai-backend/internal/jobspec"
 )
 
 var (
@@ -20,6 +23,8 @@ var (
 	ErrTooLarge    = errors.New("file is too large")
 	ErrBinary      = errors.New("binary files cannot be shown as text")
 	ErrQuota       = errors.New("storage quota exceeded")
+	// ErrGeneratedPath is returned for anything inside a dependency folder.
+	ErrGeneratedPath = errors.New("this folder holds installed dependencies; it is created by the install step and is not available through the workspace")
 )
 
 // CleanRelative turns a client path into a slash-separated path relative to the
@@ -45,6 +50,66 @@ func CleanRelative(raw string) (string, error) {
 		return "", ErrInvalidPath
 	}
 	return clean, nil
+}
+
+// IsGeneratedDir reports whether a folder name is where installed dependencies
+// live (node_modules, and the folder pip installs into). These folders can hold
+// hundreds of megabytes and tens of thousands of files that nobody edits by
+// hand, so they stay out of the file tree, change list, export and storage
+// quota, are not readable or writable through the file API, and are not
+// extracted from an uploaded archive. Test and build jobs still see them.
+func IsGeneratedDir(name string) bool {
+	return name == "node_modules" || name == jobspec.DependencyDir
+}
+
+// IsGeneratedPath is true when any part of a relative path is a generated folder.
+func IsGeneratedPath(rel string) bool {
+	for _, part := range strings.Split(rel, "/") {
+		if IsGeneratedDir(part) {
+			return true
+		}
+	}
+	return false
+}
+
+// GeneratedUsage adds up the files in every generated folder under filesDir.
+func GeneratedUsage(filesDir string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(filesDir, func(current string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() && current != filesDir && IsGeneratedDir(entry.Name()) {
+			bytes, _, err := dirUsage(current, false)
+			total += bytes
+			if err != nil {
+				return err
+			}
+			return fs.SkipDir
+		}
+		return nil
+	})
+	return total, err
+}
+
+// RemoveGenerated deletes every generated folder under filesDir. Symlinks are
+// removed, never followed.
+func RemoveGenerated(filesDir string) error {
+	var found []string
+	err := filepath.WalkDir(filesDir, func(current string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() && current != filesDir && IsGeneratedDir(entry.Name()) {
+			found = append(found, current)
+			return fs.SkipDir
+		}
+		return nil
+	})
+	for _, path := range found {
+		err = errors.Join(err, os.RemoveAll(path))
+	}
+	return err
 }
 
 // IsSecretPath reports whether a file should never be read or written through

@@ -100,7 +100,7 @@ func normalizeToolArgs(tool string, raw map[string]any, workspace models.CloudWo
 	if wait, present := args["wait_seconds"].(int64); present && wait > maxExecutionWaitSecs {
 		args["wait_seconds"] = int64(maxExecutionWaitSecs)
 	}
-	if tool == services.ToolWorkspaceRunTest || tool == services.ToolWorkspaceBuild {
+	if tool == services.ToolWorkspaceRunTest || tool == services.ToolWorkspaceBuild || tool == services.ToolWorkspaceInstall {
 		if _, present := args.str("target"); !present {
 			if workspace.DefaultRuntime == "" {
 				return nil, errors.New("choose a target (go, node or python) or set a default runtime on the workspace")
@@ -121,6 +121,7 @@ func jobTypeFor(tool, target string) (string, error) {
 	table := map[string]map[string]string{
 		services.ToolWorkspaceRunTest: {"go": "go-test", "node": "npm-test", "python": "python-test"},
 		services.ToolWorkspaceBuild:   {"go": "go-build", "node": "npm-build"},
+		services.ToolWorkspaceInstall: {"go": "go-deps", "node": "npm-install", "python": "pip-install"},
 	}
 	if jobType, ok := table[tool][target]; ok {
 		return jobType, nil
@@ -148,6 +149,10 @@ func approvalSummary(tool string, args toolArgs) string {
 		target, _ := args.str("target")
 		jobType, _ := jobTypeFor(tool, target)
 		return fmt.Sprintf("Run %s in the cloud sandbox", jobType)
+	case services.ToolWorkspaceInstall:
+		target, _ := args.str("target")
+		jobType, _ := jobTypeFor(tool, target)
+		return fmt.Sprintf("Install dependencies (%s) in the cloud sandbox; only package registries are reachable", jobType)
 	}
 	return tool
 }
@@ -207,7 +212,7 @@ func executeCloudTool(handle *workspaceHandle, tool string, args toolArgs, agent
 			return failure(err)
 		}
 		return gin.H{"ok": true, "changes": changes}
-	case services.ToolWorkspaceRunTest, services.ToolWorkspaceBuild:
+	case services.ToolWorkspaceRunTest, services.ToolWorkspaceBuild, services.ToolWorkspaceInstall:
 		target, _ := args.str("target")
 		jobType, err := jobTypeFor(tool, target)
 		if err != nil {
@@ -512,7 +517,7 @@ func cloudWorkspacePrompt(workspace models.CloudWorkspace, tools []string) strin
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n\nCLOUD WORKSPACE: the user selected the workspace %q (%d files). It lives on the server, so the Local Agent Runner is NOT needed for it. Use these registered tools: %s.\n", memoryPromptName(workspace.Name), workspace.FileCount, strings.Join(tools, ", "))
 	b.WriteString("Call them natively or emit exactly one JSON object inside <AGENT_TOOL>...</AGENT_TOOL>, for example <AGENT_TOOL>{\"action\":\"workspace.read_file\",\"arguments\":{\"path\":\"README.md\"}}</AGENT_TOOL>. Do not use <LOCAL_AGENT_TOOL> markers for workspace files.\n")
-	b.WriteString("Paths are relative to the workspace root. Secret files such as .env are not available. Writing a file, running tests and building each need the user's approval, so wait for the actual tool result before continuing. Tests and builds run in a sandbox without internet access, and a job may be queued: read its result with workspace.get_execution (job_id, wait_seconds up to 20). Never say work succeeded unless a tool result shows it.")
+	b.WriteString("Paths are relative to the workspace root. Secret files such as .env are not available. Writing a file, running tests and building each need the user's approval, so wait for the actual tool result before continuing. Tests and builds run in a sandbox without internet access, so a project with dependencies needs workspace.install_dependencies first (the user approves it; only package registries are reachable and no project script runs; folders such as node_modules are not listed or readable). A job may be queued: read its result with workspace.get_execution (job_id, wait_seconds up to 20). Never say work succeeded unless a tool result shows it.")
 	return b.String()
 }
 

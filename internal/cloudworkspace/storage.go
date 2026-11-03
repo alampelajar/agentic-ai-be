@@ -132,13 +132,19 @@ func (s *LocalDevelopmentStorage) Usage(userID uint, ref string) (int64, int, er
 	return DirUsage(dir)
 }
 
-// DirUsage adds up the regular files under dir. Symlinks are not followed.
-func DirUsage(dir string) (int64, int, error) {
+// DirUsage adds up the regular files under dir, leaving out generated dependency
+// folders (they have their own limit, see GeneratedUsage). Symlinks are not followed.
+func DirUsage(dir string) (int64, int, error) { return dirUsage(dir, true) }
+
+func dirUsage(dir string, skipGenerated bool) (int64, int, error) {
 	var total int64
 	count := 0
-	err := filepath.WalkDir(dir, func(_ string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(dir, func(current string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
+		}
+		if skipGenerated && entry.IsDir() && current != dir && IsGeneratedDir(entry.Name()) {
+			return fs.SkipDir
 		}
 		if entry.Type().IsRegular() {
 			info, err := entry.Info()

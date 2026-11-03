@@ -26,6 +26,9 @@ func manifest(filesDir string, limits Limits) (map[string]string, error) {
 		if err != nil {
 			return err
 		}
+		if entry.IsDir() && current != filesDir && IsGeneratedDir(entry.Name()) {
+			return fs.SkipDir // installed dependencies are not the user's changes
+		}
 		if current == filesDir || !entry.Type().IsRegular() {
 			return nil
 		}

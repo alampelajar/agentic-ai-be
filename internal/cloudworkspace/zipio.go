@@ -72,6 +72,10 @@ func ExtractZip(data []byte, dest string, limits Limits, budget int64) (ExtractR
 		if cleanErr != nil || rel == "" {
 			return ExtractResult{}, fmt.Errorf("unsafe path in archive: %q", file.Name)
 		}
+		if IsGeneratedPath(rel) {
+			result.Skipped++ // node_modules and the like are not imported; install them again
+			continue
+		}
 		mode := file.FileInfo().Mode()
 		if mode&fs.ModeSymlink != 0 {
 			return ExtractResult{}, fmt.Errorf("symlink in archive is not allowed: %q", file.Name)
@@ -173,6 +177,9 @@ func ExportZip(filesDir string, out io.Writer, limits Limits) error {
 	walkErr := filepath.WalkDir(filesDir, func(current string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
+		}
+		if entry.IsDir() && current != filesDir && IsGeneratedDir(entry.Name()) {
+			return fs.SkipDir // dependencies are installed again, not exported
 		}
 		if current == filesDir || !entry.Type().IsRegular() {
 			return nil

@@ -27,6 +27,14 @@ type DockerConfig struct {
 	// RunAs is the non-root user:group the command runs as. It must be able to
 	// read and write the workspace files directory.
 	RunAs string
+	// InstallNetwork and InstallProxy enable dependency installation, which is the
+	// only kind of job that gets a network. InstallNetwork names a Docker network
+	// created with --internal (no route to the host or the internet) and
+	// InstallProxy is the address, on that network, of the registry proxy
+	// (cmd/registry-proxy), the only peer the job can reach. Both empty means
+	// install jobs are refused. See docs/phase6-cloud-workspace.md.
+	InstallNetwork string
+	InstallProxy   string
 	// ExtraEnv is added to the environment of the docker CLI process (for example
 	// DOCKER_CONTEXT). It is never passed into the container.
 	ExtraEnv []string
@@ -53,7 +61,13 @@ var (
 	sizeValue     = regexp.MustCompile(`^[0-9]{1,6}[kmg]$`)
 	cpuValue      = regexp.MustCompile(`^[0-9](\.[0-9]{1,2})?$`)
 	runAsValue    = regexp.MustCompile(`^[0-9]{1,10}:[0-9]{1,10}$`)
+	networkName   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$`)
+	proxyAddress  = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,62}:[0-9]{2,5}$`)
 )
+
+// ErrInstallNotConfigured is returned for an install job when the server has no
+// registry-only network set up. The worker reports it as a sandbox failure.
+var ErrInstallNotConfigured = errors.New("dependency installation is not set up on this server: the registry network is not configured")
 
 // Args builds the docker command line. Every value is checked again here, so a
 // bad configuration or request cannot add a flag or change a mount.
@@ -78,6 +92,18 @@ func (e *DockerExecutor) Args(request RunRequest) ([]string, error) {
 	case cfg.MaxFile <= 0:
 		return nil, errors.New("invalid file size limit")
 	}
+	network := "none"
+	if spec.Install {
+		switch {
+		case cfg.InstallNetwork == "" || cfg.InstallProxy == "":
+			return nil, ErrInstallNotConfigured
+		case !networkName.MatchString(cfg.InstallNetwork) || cfg.InstallNetwork == "host" || cfg.InstallNetwork == "bridge" || cfg.InstallNetwork == "none":
+			return nil, errors.New("invalid install network")
+		case !proxyAddress.MatchString(cfg.InstallProxy):
+			return nil, errors.New("invalid registry proxy address")
+		}
+		network = cfg.InstallNetwork
+	}
 	source, err := filepath.Abs(request.FilesDir)
 	if err != nil || strings.ContainsAny(source, ",\n\r\x00") {
 		return nil, errors.New("invalid workspace directory")
@@ -89,7 +115,7 @@ func (e *DockerExecutor) Args(request RunRequest) ([]string, error) {
 	args := []string{
 		"run", "--rm",
 		"--name", request.Name,
-		"--network", "none",
+		"--network", network,
 		"--user", cfg.RunAs,
 		"--read-only",
 		"--cap-drop", "ALL",
@@ -99,11 +125,18 @@ func (e *DockerExecutor) Args(request RunRequest) ([]string, error) {
 		"--cpus", cfg.CPUs,
 		"--ulimit", "nofile=1024:1024",
 		"--ulimit", fmt.Sprintf("fsize=%d:%d", cfg.MaxFile, cfg.MaxFile),
-		"--tmpfs", "/tmp:rw,nosuid,nodev,size=" + cfg.TmpSize,
-		"--mount", "type=bind,source=" + source + ",target=/workspace",
-		"--workdir", "/workspace",
+		"--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=" + cfg.TmpSize,
 	}
-	for _, variable := range environmentFor(spec.Runtime, source) {
+	if spec.Runtime == "go" {
+		// Docker mounts a tmpfs noexec, and `go test` runs the binary it just built.
+		// Only Go gets a second scratch area that allows execution; /tmp stays noexec.
+		args = append(args, "--tmpfs", goScratch+":rw,exec,nosuid,nodev,size="+cfg.TmpSize)
+	}
+	args = append(args,
+		"--mount", "type=bind,source="+source+",target=/workspace",
+		"--workdir", "/workspace",
+	)
+	for _, variable := range environmentFor(spec, source, cfg.InstallProxy) {
 		args = append(args, "--env", variable)
 	}
 	args = append(args, spec.Image)
@@ -111,23 +144,41 @@ func (e *DockerExecutor) Args(request RunRequest) ([]string, error) {
 	return args, nil
 }
 
+// goScratch is the writable, executable scratch area of Go jobs.
+const goScratch = "/gotmp"
+
 // environmentFor returns the few variables a toolchain needs to work inside a
 // read-only container with a throwaway /tmp. No variable of the server is passed on.
-func environmentFor(runtime, filesDir string) []string {
-	common := []string{"HOME=/tmp", "CI=true"}
-	switch runtime {
+// A test or build job gets none of the package manager settings that would let it
+// fetch anything; an install job is pointed at the registries, through the proxy.
+func environmentFor(spec jobspec.CommandSpec, filesDir, proxy string) []string {
+	env := []string{"HOME=/tmp", "CI=true"}
+	if spec.Install {
+		address := "http://" + proxy
+		env = append(env, "HTTP_PROXY="+address, "HTTPS_PROXY="+address, "http_proxy="+address, "https_proxy="+address)
+	}
+	switch spec.Runtime {
 	case "go":
 		flags := "-buildvcs=false"
-		if info, err := os.Stat(filepath.Join(filesDir, "vendor")); err == nil && info.IsDir() {
+		proxySetting := "GOPROXY=off"
+		if spec.Install {
+			proxySetting = "GOPROXY=https://proxy.golang.org"
+		} else if info, err := os.Stat(filepath.Join(filesDir, "vendor")); err == nil && info.IsDir() {
 			flags += " -mod=vendor"
 		}
-		return append(common, "GOCACHE=/tmp/go-build", "GOPATH=/tmp/gopath", "GOPROXY=off", "GOFLAGS="+flags, "CGO_ENABLED=0")
+		// GOTOOLCHAIN=local: a go.mod that wants a newer Go fails clearly instead of
+		// downloading a compiler.
+		return append(env, "GOTMPDIR="+goScratch, "GOCACHE="+goScratch+"/go-build", "GOPATH="+goScratch+"/gopath", proxySetting, "GOFLAGS="+flags, "GOTOOLCHAIN=local", "CGO_ENABLED=0")
 	case "node":
-		return append(common, "npm_config_cache=/tmp/npm-cache", "npm_config_update_notifier=false", "npm_config_audit=false", "npm_config_fund=false")
+		return append(env, "npm_config_cache=/tmp/npm-cache", "npm_config_update_notifier=false", "npm_config_audit=false", "npm_config_fund=false")
 	case "python":
-		return append(common, "PYTHONDONTWRITEBYTECODE=1", "PIP_NO_INDEX=1", "PYTHONPYCACHEPREFIX=/tmp/pycache")
+		env = append(env, "PYTHONDONTWRITEBYTECODE=1", "PYTHONPYCACHEPREFIX=/tmp/pycache", "PYTHONPATH=/workspace/"+jobspec.DependencyDir)
+		if !spec.Install {
+			env = append(env, "PIP_NO_INDEX=1")
+		}
+		return env
 	}
-	return common
+	return env
 }
 
 // command builds a docker CLI invocation with a minimal environment: the PATH and
@@ -159,6 +210,35 @@ func (e *DockerExecutor) Available(ctx context.Context) error {
 	return nil
 }
 
+// InstallReady checks the pieces an install job depends on: the network exists and
+// is internal (so the job has no route to the host or the internet) and the
+// registry proxy is running. A network that is not internal would give the job
+// full internet access, so that is refused rather than assumed.
+func (e *DockerExecutor) InstallReady(ctx context.Context) error {
+	cfg := e.Config
+	if cfg.InstallNetwork == "" || cfg.InstallProxy == "" {
+		return ErrInstallNotConfigured
+	}
+	if !networkName.MatchString(cfg.InstallNetwork) || !proxyAddress.MatchString(cfg.InstallProxy) {
+		return errors.New("invalid install network settings")
+	}
+	check, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	output, err := e.command(check, "network", "inspect", "--format", "{{.Internal}}", cfg.InstallNetwork).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("the install network %q does not exist (run deploy/registry-proxy/setup.sh)", cfg.InstallNetwork)
+	}
+	if strings.TrimSpace(string(output)) != "true" {
+		return fmt.Errorf("the install network %q is not an internal network, so it would give jobs internet access", cfg.InstallNetwork)
+	}
+	proxyName, _, _ := strings.Cut(cfg.InstallProxy, ":")
+	output, err = e.command(check, "inspect", "--format", "{{.State.Running}}", proxyName).CombinedOutput()
+	if err != nil || strings.TrimSpace(string(output)) != "true" {
+		return fmt.Errorf("the registry proxy %q is not running (run deploy/registry-proxy/setup.sh)", proxyName)
+	}
+	return nil
+}
+
 func firstLine(text string) string {
 	text = strings.TrimSpace(text)
 	if index := strings.IndexAny(text, "\r\n"); index >= 0 {
@@ -172,10 +252,24 @@ func firstLine(text string) string {
 
 // Run starts the container and waits for it. On timeout or cancellation the
 // container is killed by name; the CLI process alone being killed would leave it running.
+// A spec with Then commands runs them one after another, each in a fresh container,
+// inside the one timeout, and stops at the first failure.
 func (e *DockerExecutor) Run(ctx context.Context, request RunRequest) (RunResult, error) {
-	args, err := e.Args(request)
-	if err != nil {
-		return RunResult{}, err
+	commands := append([][]string{request.Spec.Argv}, request.Spec.Then...)
+	allArgs := make([][]string, len(commands))
+	for index, argv := range commands {
+		step := request
+		step.Spec.Argv = argv
+		args, err := e.Args(step) // every step is checked before the first one starts
+		if err != nil {
+			return RunResult{}, err
+		}
+		allArgs[index] = args
+	}
+	if request.Spec.Install {
+		if err := e.InstallReady(ctx); err != nil {
+			return RunResult{}, err
+		}
 	}
 	timeout := request.Timeout
 	if timeout <= 0 || timeout > jobspec.MaxTimeout {
@@ -185,39 +279,51 @@ func (e *DockerExecutor) Run(ctx context.Context, request RunRequest) (RunResult
 	defer cancel()
 
 	var stdout, stderr limitedBuffer
-	command := e.command(runCtx, args...)
-	command.Stdout, command.Stderr = &stdout, &stderr
-	command.Cancel = func() error {
-		e.kill(request.Name)
-		return command.Process.Kill()
+	result := RunResult{}
+	finish := func() RunResult {
+		result.Stdout, result.Stderr, result.Truncated = stdout.String(), stderr.String(), stdout.Truncated() || stderr.Truncated()
+		return result
 	}
-	command.WaitDelay = 10 * time.Second
-
-	runErr := command.Run()
-	result := RunResult{Stdout: stdout.String(), Stderr: stderr.String(), Truncated: stdout.Truncated() || stderr.Truncated()}
-	switch {
-	case ctx.Err() != nil:
-		result.Cancelled = true
-		e.kill(request.Name)
-		return result, nil
-	case runCtx.Err() != nil:
-		result.TimedOut = true
-		e.kill(request.Name)
-		return result, nil
-	}
-	var exitError *exec.ExitError
-	switch {
-	case runErr == nil:
-		return result, nil
-	case errors.As(runErr, &exitError):
-		result.ExitCode = exitError.ExitCode()
-		if result.ExitCode == 125 { // docker itself failed, not the command
-			return result, fmt.Errorf("the sandbox could not start the container: %s", firstLine(result.Stderr))
+	for index, args := range allArgs {
+		if len(allArgs) > 1 {
+			fmt.Fprintf(&stdout, "$ %s\n", strings.Join(commands[index], " "))
 		}
-		return result, nil
-	default:
-		return result, fmt.Errorf("the sandbox could not be started: %w", runErr)
+		command := e.command(runCtx, args...)
+		command.Stdout, command.Stderr = &stdout, &stderr
+		command.Cancel = func() error {
+			e.kill(request.Name)
+			return command.Process.Kill()
+		}
+		command.WaitDelay = 10 * time.Second
+
+		runErr := command.Run()
+		switch {
+		case ctx.Err() != nil:
+			result.Cancelled = true
+			e.kill(request.Name)
+			return finish(), nil
+		case runCtx.Err() != nil:
+			result.TimedOut = true
+			e.kill(request.Name)
+			return finish(), nil
+		}
+		var exitError *exec.ExitError
+		switch {
+		case runErr == nil:
+			continue
+		case errors.As(runErr, &exitError):
+			result.ExitCode = exitError.ExitCode()
+			if result.ExitCode == 125 { // docker itself failed, not the command
+				finish()
+				return result, fmt.Errorf("the sandbox could not start the container: %s", firstLine(result.Stderr))
+			}
+			return finish(), nil
+		default:
+			finish()
+			return result, fmt.Errorf("the sandbox could not be started: %w", runErr)
+		}
 	}
+	return finish(), nil
 }
 
 // kill stops and removes a container by name; it is safe to call when it is gone.

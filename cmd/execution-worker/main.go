@@ -49,6 +49,16 @@ func main() {
 		}
 	}
 	dockerConfig.PidsLimit = envInt("CLOUD_EXEC_PIDS_LIMIT", dockerConfig.PidsLimit)
+
+	// Dependency installation is opt-in: it needs the registry-only network made by
+	// deploy/registry-proxy/setup.sh. Without it, install jobs are refused.
+	dockerConfig.InstallNetwork = strings.TrimSpace(os.Getenv("CLOUD_EXEC_INSTALL_NETWORK"))
+	if dockerConfig.InstallNetwork != "" {
+		dockerConfig.InstallProxy = strings.TrimSpace(os.Getenv("CLOUD_EXEC_INSTALL_PROXY"))
+		if dockerConfig.InstallProxy == "" {
+			dockerConfig.InstallProxy = "cloudexec-registry-proxy:3128"
+		}
+	}
 	executor := cloudexec.NewDockerExecutor(dockerConfig)
 
 	check, cancelCheck := context.WithTimeout(context.Background(), 30*time.Second)
@@ -56,6 +66,19 @@ func main() {
 	cancelCheck()
 	if err != nil {
 		log.Fatalf("The sandbox is not available, so no job will be run: %v", err)
+	}
+
+	if dockerConfig.InstallNetwork == "" {
+		fmt.Println("Dependency installation: off (CLOUD_EXEC_INSTALL_NETWORK is not set).")
+	} else {
+		installCheck, cancelInstall := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := executor.InstallReady(installCheck); err != nil {
+			// Not fatal: tests and builds work, and install jobs fail with this reason.
+			fmt.Printf("Dependency installation: NOT READY, install jobs will fail: %v\n", err)
+		} else {
+			fmt.Printf("Dependency installation: on, network %s, proxy %s.\n", dockerConfig.InstallNetwork, dockerConfig.InstallProxy)
+		}
+		cancelInstall()
 	}
 
 	config.ConnectDatabase()
@@ -67,6 +90,9 @@ func main() {
 		Images:        dockerConfig.Images,
 		MaxConcurrent: envInt("CLOUD_EXEC_MAX_CONCURRENT", 2),
 		MaxPerUser:    envInt("CLOUD_EXEC_MAX_PER_USER", 1),
+		// Megabytes in the environment, bytes in the worker; 0 keeps the default.
+		MaxDependencyBytes: int64(envInt("CLOUD_EXEC_MAX_DEPENDENCY_MB", 0)) << 20,
+		MaxWorkspaceBytes:  int64(envInt("CLOUD_EXEC_MAX_WORKSPACE_MB", 0)) << 20,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

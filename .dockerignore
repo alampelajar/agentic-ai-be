@@ -1,0 +1,9 @@
+# Keep secrets, local data and build output out of every Docker build context.
+.env
+.env.*
+!.env.example
+data/
+.git/
+*.exe
+*.backup-*
+__pycache__/

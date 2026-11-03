@@ -14,9 +14,10 @@ const (
 	ToolWorkspaceRunTest      = "workspace.run_test"
 	ToolWorkspaceBuild        = "workspace.build"
 	ToolWorkspaceGetExecution = "workspace.get_execution"
+	ToolWorkspaceInstall      = "workspace.install_dependencies"
 )
 
-var cloudToolNames = []string{ToolWorkspaceListFiles, ToolWorkspaceReadFile, ToolWorkspaceWriteFile, ToolWorkspaceGetChanges, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution}
+var cloudToolNames = []string{ToolWorkspaceListFiles, ToolWorkspaceReadFile, ToolWorkspaceWriteFile, ToolWorkspaceGetChanges, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution, ToolWorkspaceInstall}
 
 func init() {
 	pathProperty := map[string]any{"type": "string", "description": "Path relative to the workspace root, for example src/main.go. Absolute paths and .. are refused."}
@@ -40,7 +41,8 @@ func init() {
 	define(ToolWorkspaceGetChanges, "List the files added, modified or deleted in the cloud workspace since it was created or imported.", "workspace.read", 10, map[string]any{})
 	define(ToolWorkspaceRunTest, "Run the project's tests in the cloud sandbox. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node", "python")})
 	define(ToolWorkspaceBuild, "Build the project in the cloud sandbox. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node")})
-	define(ToolWorkspaceGetExecution, "Read the status and output of a test or build job. wait_seconds (at most 20) waits for it to finish.", "workspace.read", 30, map[string]any{"job_id": map[string]any{"type": "integer", "description": "The job id returned by workspace.run_test or workspace.build."}, "wait_seconds": map[string]any{"type": "integer", "description": "Seconds to wait for the job to finish, 0 to 20."}}, "job_id")
+	define(ToolWorkspaceInstall, "Install the project's dependencies in the cloud sandbox (go mod tidy and vendor, npm install without scripts, pip install of pytest and requirements.txt as wheels). Needed before tests or builds of a project that has dependencies, because tests run without a network. Only the package registries are reachable and no project script runs. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node", "python")})
+	define(ToolWorkspaceGetExecution, "Read the status and output of a test, build or install job. wait_seconds (at most 20) waits for it to finish.", "workspace.read", 30, map[string]any{"job_id": map[string]any{"type": "integer", "description": "The job id returned by workspace.run_test, workspace.build or workspace.install_dependencies."}, "wait_seconds": map[string]any{"type": "integer", "description": "Seconds to wait for the job to finish, 0 to 20."}}, "job_id")
 }
 
 // IsCloudTool reports whether name is one of the Cloud Workspace tools.
@@ -56,7 +58,7 @@ func IsCloudTool(name string) bool {
 // CloudToolNeedsApproval is true for tools that change files or run commands.
 func CloudToolNeedsApproval(name string) bool {
 	switch name {
-	case ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild:
+	case ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall:
 		return true
 	}
 	return false
@@ -64,7 +66,8 @@ func CloudToolNeedsApproval(name string) bool {
 
 // CloudToolsForAgent is the set of cloud tools an agent may use, decided by the
 // agent's role (its slug) and nothing the model says. Coding changes files and
-// builds; Testing and Debugging read and run; Review and Planning only read.
+// builds; Testing builds and installs dependencies; Debugging reads and runs
+// tests; Review and Planning only read.
 // An agent whose role is not recognised gets read-only access.
 func CloudToolsForAgent(slug string) []string {
 	slug = strings.ToLower(strings.TrimSpace(slug))
@@ -82,9 +85,9 @@ func CloudToolsForAgent(slug string) []string {
 		if has("review") {
 			return read // "code review" is a reviewer, not an author
 		}
-		return append(read, ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution)
+		return append(read, ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution)
 	case has("testing", "test"):
-		return append(read, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution)
+		return append(read, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution)
 	case has("debug"):
 		return append(read, ToolWorkspaceRunTest, ToolWorkspaceGetExecution)
 	default: // review, planning and anything else

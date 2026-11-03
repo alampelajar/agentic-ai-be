@@ -22,6 +22,9 @@ type TreeEntry struct {
 	Type      string `json:"type"` // "file" or "dir"
 	Size      int64  `json:"size"`
 	Sensitive bool   `json:"sensitive,omitempty"`
+	// Generated marks a dependency folder: listed so it is visible that it exists,
+	// but never expanded (see IsGeneratedDir).
+	Generated bool `json:"generated,omitempty"`
 }
 
 type Tree struct {
@@ -51,7 +54,9 @@ func BuildTree(filesDir, dir string, limits Limits) (Tree, error) {
 		return Tree{}, err
 	}
 	tree := Tree{Entries: []TreeEntry{}}
-	_ = rel
+	if IsGeneratedPath(rel) {
+		return tree, nil // nothing is listed inside a dependency folder
+	}
 	walkErr := filepath.WalkDir(start, func(current string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -74,6 +79,11 @@ func BuildTree(filesDir, dir string, limits Limits) (Tree, error) {
 		item := TreeEntry{Path: slash, Name: entry.Name(), Type: "file", Sensitive: IsSecretPath(slash)}
 		if entry.IsDir() {
 			item.Type = "dir"
+			if IsGeneratedDir(entry.Name()) {
+				item.Generated = true
+				tree.Entries = append(tree.Entries, item)
+				return fs.SkipDir
+			}
 		} else if entry.Type().IsRegular() {
 			if fileInfo, infoErr := entry.Info(); infoErr == nil {
 				item.Size = fileInfo.Size()
@@ -117,6 +127,9 @@ func ReadFile(filesDir, raw string, limits Limits) (content string, size int64, 
 	}
 	if IsSecretPath(rel) {
 		return "", 0, ErrSecretFile
+	}
+	if IsGeneratedPath(rel) {
+		return "", 0, ErrGeneratedPath
 	}
 	info, err := os.Lstat(absolute)
 	if errors.Is(err, os.ErrNotExist) {
@@ -168,6 +181,9 @@ func WriteFile(filesDir, raw, content string, limits Limits, budget int64) (Writ
 	}
 	if IsSecretPath(rel) {
 		return WriteResult{}, ErrSecretFile
+	}
+	if IsGeneratedPath(rel) {
+		return WriteResult{}, ErrGeneratedPath
 	}
 	data := []byte(content)
 	if int64(len(data)) > limits.MaxFileWriteBytes {

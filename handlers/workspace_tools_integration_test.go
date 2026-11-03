@@ -124,7 +124,7 @@ func (f *toolFixture) fileOnDisk(t *testing.T, name string) (string, bool) {
 }
 
 func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
-	names := []string{"workspace.list_files", "workspace.read_file", "workspace.write_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.get_execution"}
+	names := []string{"workspace.list_files", "workspace.read_file", "workspace.write_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.get_execution", "workspace.install_dependencies"}
 	seen := map[string]bool{}
 	for _, name := range names {
 		definition, ok := services.ToolRegistry[name]
@@ -157,7 +157,7 @@ func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
 			t.Errorf("legacy skill tool %s is no longer accepted", legacy)
 		}
 	}
-	for _, mutating := range []string{"workspace.write_file", "workspace.run_test", "workspace.build"} {
+	for _, mutating := range []string{"workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies"} {
 		if !services.CloudToolNeedsApproval(mutating) {
 			t.Errorf("%s must need approval", mutating)
 		}
@@ -174,8 +174,8 @@ func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
 
 func TestEachRoleGetsOnlyItsTools(t *testing.T) {
 	want := map[string][]string{
-		"coding":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.write_file", "workspace.run_test", "workspace.build", "workspace.get_execution"},
-		"testing":        {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.get_execution"},
+		"coding":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution"},
+		"testing":        {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution"},
 		"debugging":      {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.get_execution"},
 		"review":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes"},
 		"planning":       {"workspace.list_files", "workspace.read_file", "workspace.get_changes"},
@@ -190,7 +190,7 @@ func TestEachRoleGetsOnlyItsTools(t *testing.T) {
 		}
 	}
 	for _, slug := range []string{"review", "planning", "code-review", "x"} {
-		for _, writer := range []string{"workspace.write_file", "workspace.run_test", "workspace.build"} {
+		for _, writer := range []string{"workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies"} {
 			if services.CloudToolAllowedForAgent(writer, slug) {
 				t.Errorf("%q may use %s", slug, writer)
 			}
@@ -492,6 +492,62 @@ func TestRunningTestsNeedsApprovalAndTheSandbox(t *testing.T) {
 	// An agent that may not run tests may not read their results through the run tool either.
 	if code, _ := f.run(t, owner, "review", "workspace.get_execution", map[string]any{"job_id": job.ID}); code != http.StatusForbidden {
 		t.Errorf("review reading a job = %d, want 403", code)
+	}
+}
+
+func TestInstallingDependenciesNeedsApprovalAndTheRegistryNetwork(t *testing.T) {
+	f := newToolFixture(t)
+	owner := f.owner.ID
+	t.Setenv("CLOUD_EXECUTION_ENABLED", "true")
+	t.Setenv("CLOUD_EXEC_INSTALL_NETWORK", "")
+
+	// Roles that may not build may not install either.
+	for _, role := range []string{"debugging", "review", "planning"} {
+		if code, _ := f.run(t, owner, role, "workspace.install_dependencies", map[string]any{"target": "go"}); code != http.StatusForbidden {
+			t.Errorf("%s installing = %d, want 403", role, code)
+		}
+	}
+	// The call only creates an approval; nothing is queued before the user agrees.
+	_, pending := f.run(t, owner, "testing", "workspace.install_dependencies", map[string]any{"target": "go"})
+	if !pending.ApprovalRequired || !strings.Contains(pending.Approval.Summary, "go-deps") || !strings.Contains(pending.Approval.Summary, "registries") {
+		t.Fatalf("pending = %+v", pending)
+	}
+	var jobs int64
+	f.db.Model(&models.ExecutionJob{}).Where("user_id = ?", owner).Count(&jobs)
+	if jobs != 0 {
+		t.Fatal("a job was queued before approval")
+	}
+
+	// Approved while the registry network is not configured: told clearly, nothing queued.
+	off := toolRequest(t, http.MethodPost, "/api/workspace-tools/approvals/"+pending.Approval.ID+"/approve", owner, nil)
+	var result toolResponse
+	_ = json.Unmarshal(off.Body.Bytes(), &result)
+	if result.Result["ok"] != false || !strings.Contains(fmt.Sprint(result.Result["error"]), "Instalasi dependensi belum diaktifkan") {
+		t.Fatalf("approved install without a network = %s", off.Body.String())
+	}
+	f.db.Model(&models.ExecutionJob{}).Where("user_id = ?", owner).Count(&jobs)
+	if jobs != 0 {
+		t.Fatal("an install was queued without the registry network")
+	}
+
+	t.Setenv("CLOUD_EXEC_INSTALL_NETWORK", "cloudexec-install")
+	_, again := f.run(t, owner, "coding", "workspace.install_dependencies", map[string]any{})
+	if !again.ApprovalRequired || !strings.Contains(again.Approval.Summary, "go-deps") {
+		t.Fatalf("the default runtime was not used: %+v", again)
+	}
+	queued := toolRequest(t, http.MethodPost, "/api/workspace-tools/approvals/"+again.Approval.ID+"/approve", owner, nil)
+	_ = json.Unmarshal(queued.Body.Bytes(), &result)
+	if result.Result["ok"] != true || result.Result["status"] != "queued" {
+		t.Fatalf("approved install = %s", queued.Body.String())
+	}
+	var job models.ExecutionJob
+	f.db.Where("user_id = ?", owner).Order("id DESC").First(&job)
+	if job.JobType != "go-deps" || job.WorkspaceID != f.ws.ID {
+		t.Fatalf("job = %+v", job)
+	}
+	// An approval cannot be turned into a different command.
+	if _, bad := f.run(t, owner, "coding", "workspace.install_dependencies", map[string]any{"target": "rust"}); bad.ApprovalRequired {
+		t.Error("an unknown target produced an approval")
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -19,9 +20,21 @@ type CommandSpec struct {
 	Runtime string
 	Image   string
 	Argv    []string
+	// Then holds further fixed commands run after Argv, one fresh container each, in
+	// order; the job stops at the first one that fails. Only dependency
+	// installation uses it (go mod tidy resolves go.sum, go mod vendor copies the
+	// sources the network-less test jobs build from).
+	Then  [][]string
 	Label   string // what the console shows, e.g. "go test ./..."
 	Default time.Duration
+	// Install marks a dependency installation. It is the only kind of job that gets
+	// a network, and then only the registry-only one: see DockerConfig.InstallNetwork.
+	// An install command never runs project code (no npm scripts, no source builds).
+	Install bool
 }
+
+// DependencyDir is where a pip install puts packages inside the workspace.
+const DependencyDir = ".pydeps"
 
 const (
 	MinTimeout = 10 * time.Second
@@ -43,7 +56,7 @@ func (i Images) Approved(image string) bool {
 	return image != "" && (image == i.Go || image == i.Node || image == i.Python)
 }
 
-var jobTypes = []string{"go-test", "go-build", "npm-test", "npm-build", "npm-lint", "python-test"}
+var jobTypes = []string{"go-test", "go-build", "npm-test", "npm-build", "npm-lint", "python-test", "go-deps", "npm-install", "pip-install"}
 
 // JobTypes lists what can be requested.
 func JobTypes() []string { return append([]string(nil), jobTypes...) }
@@ -87,8 +100,31 @@ func Resolve(jobType string, images Images, filesDir string) (CommandSpec, error
 		if !has("pyproject.toml", "pytest.ini", "tests") {
 			return CommandSpec{}, errors.New("this workspace has no pytest configuration or tests folder")
 		}
+	case "go-deps":
+		// Vendoring is how Go dependencies reach the network-less test jobs: they
+		// build from vendor/ (see environmentFor in package cloudexec).
+		spec = CommandSpec{JobType: jobType, Runtime: "go", Image: images.Go, Argv: []string{"go", "mod", "tidy"}, Then: [][]string{{"go", "mod", "vendor"}}, Label: "go mod tidy, go mod vendor", Default: 5 * time.Minute, Install: true}
+		if !has("go.mod") {
+			return CommandSpec{}, errors.New("this workspace has no go.mod")
+		}
+	case "npm-install":
+		spec = CommandSpec{JobType: jobType, Runtime: "node", Image: images.Node, Argv: []string{"npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", "--registry=https://registry.npmjs.org/"}, Label: "npm install --ignore-scripts", Default: 5 * time.Minute, Install: true}
+		if !has("package.json") {
+			return CommandSpec{}, errors.New("this workspace has no package.json")
+		}
+	case "pip-install":
+		argv := []string{"python", "-m", "pip", "install", "--disable-pip-version-check", "--no-input", "--only-binary=:all:", "--upgrade", "--index-url", "https://pypi.org/simple", "--target", "/workspace/" + DependencyDir, "pytest"}
+		label := "pip install pytest"
+		if filesDir != "" && has("requirements.txt") {
+			argv = append(argv, "-r", "requirements.txt")
+			label += " -r requirements.txt"
+		}
+		spec = CommandSpec{JobType: jobType, Runtime: "python", Image: images.Python, Argv: argv, Label: label, Default: 5 * time.Minute, Install: true}
+		if !has("requirements.txt", "pyproject.toml", "pytest.ini", "tests") {
+			return CommandSpec{}, errors.New("this workspace has no requirements.txt, pytest configuration or tests folder")
+		}
 	default:
-		return CommandSpec{}, fmt.Errorf("%w: %q (supported: go-test, go-build, npm-test, npm-build, npm-lint, python-test)", ErrUnknownJobType, jobType)
+		return CommandSpec{}, fmt.Errorf("%w: %q (supported: %s)", ErrUnknownJobType, jobType, strings.Join(jobTypes, ", "))
 	}
 	return spec, nil
 }

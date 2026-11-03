@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -424,3 +425,152 @@ func TestAJobResultNeverOverwritesACancellation(t *testing.T) {
 }
 
 var _ = jobspec.DefaultImages
+
+func (f *fixture) filesDir(t *testing.T) string {
+	t.Helper()
+	dir, err := f.storage.FilesDir(f.owner.ID, f.ws.StorageRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func writeFiles(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	for name, content := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func fileExists(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, filepath.FromSlash(name)))
+	return err == nil
+}
+
+func TestInstallKeepsDependenciesWithinTheLimit(t *testing.T) {
+	f := newFixture(t)
+	dir := f.filesDir(t)
+	writeFiles(t, dir, map[string]string{"package.json": "{}"})
+	f.executor.run = func(_ context.Context, request RunRequest) (RunResult, error) {
+		writeFiles(t, request.FilesDir, map[string]string{"node_modules/left-pad/index.js": strings.Repeat("x", 500)})
+		return RunResult{Stdout: "added 1 package"}, nil
+	}
+	f.worker.MaxDependencyBytes = 1000
+	done := f.claimAndRun(t, f.queue(t, f.owner.ID, "npm-install"))
+	if done.Status != models.JobCompleted || !fileExists(dir, "node_modules/left-pad/index.js") {
+		t.Fatalf("job = %+v", done)
+	}
+	if !f.executor.requests[0].Spec.Install {
+		t.Error("the request was not marked as an install")
+	}
+}
+
+func TestInstallThatLeavesTooManyDependenciesFailsAndCleansUp(t *testing.T) {
+	f := newFixture(t)
+	dir := f.filesDir(t)
+	writeFiles(t, dir, map[string]string{"package.json": "{}", "src/app.js": "keep"})
+	f.executor.run = func(_ context.Context, request RunRequest) (RunResult, error) {
+		writeFiles(t, request.FilesDir, map[string]string{
+			"node_modules/big/index.js": strings.Repeat("x", 4000),
+			"web/node_modules/y/y.js":   "y",
+		})
+		return RunResult{ExitCode: 0, Stdout: "added 2 packages"}, nil
+	}
+	f.worker.MaxDependencyBytes = 1000
+	done := f.claimAndRun(t, f.queue(t, f.owner.ID, "npm-install"))
+	if done.Status != models.JobFailed || !strings.Contains(done.Error, "were removed") {
+		t.Fatalf("job = %+v", done)
+	}
+	if fileExists(dir, "node_modules") || fileExists(dir, "web/node_modules") {
+		t.Error("oversize dependencies were left in the workspace")
+	}
+	if !fileExists(dir, "src/app.js") || !fileExists(dir, "package.json") {
+		t.Error("project files were removed too")
+	}
+}
+
+func TestFailedGoDepsDoesNotLeaveAHalfWrittenVendorFolder(t *testing.T) {
+	f := newFixture(t)
+	dir := f.filesDir(t)
+	f.executor.run = func(_ context.Context, request RunRequest) (RunResult, error) {
+		writeFiles(t, request.FilesDir, map[string]string{"vendor/partial/file.go": "package partial"})
+		return RunResult{ExitCode: 1, Stderr: "go: network unreachable"}, nil
+	}
+	done := f.claimAndRun(t, f.queue(t, f.owner.ID, "go-deps"))
+	if done.Status != models.JobFailed || fileExists(dir, "vendor") {
+		t.Fatalf("status %s, vendor present: %v", done.Status, fileExists(dir, "vendor"))
+	}
+
+	// A vendor folder the user already had is theirs: a failed run must not delete it.
+	writeFiles(t, dir, map[string]string{"vendor/own/file.go": "package own"})
+	f.executor.run = func(context.Context, RunRequest) (RunResult, error) {
+		return RunResult{ExitCode: 1, Stderr: "go: failed"}, nil
+	}
+	f.claimAndRun(t, f.queue(t, f.owner.ID, "go-deps"))
+	if !fileExists(dir, "vendor/own/file.go") {
+		t.Error("a pre-existing vendor folder was deleted")
+	}
+}
+
+func TestJobIsStoppedWhenTheWorkspaceGrowsPastItsLimit(t *testing.T) {
+	f := newFixture(t)
+	dir := f.filesDir(t)
+	f.executor.run = func(ctx context.Context, request RunRequest) (RunResult, error) {
+		writeFiles(t, request.FilesDir, map[string]string{"huge.bin": strings.Repeat("x", 20000)})
+		<-ctx.Done() // a runaway command: only being stopped ends it
+		return RunResult{Cancelled: true}, nil
+	}
+	f.worker.MaxWorkspaceBytes = 5000
+	f.worker.SizeCheckInterval = 50 * time.Millisecond
+	job := f.queue(t, f.owner.ID, "go-test")
+	claimed, _ := f.worker.ClaimNext(context.Background())
+	finished := make(chan struct{})
+	go func() {
+		f.worker.RunJob(context.Background(), claimed)
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the runaway job was not stopped")
+	}
+	done := f.reload(job)
+	if done.Status != models.JobFailed || !strings.Contains(done.Error, "workspace passed") {
+		t.Fatalf("job = %+v", done)
+	}
+	_ = dir
+}
+
+func TestInstallJobStoppedForOversizeDependenciesWhileRunning(t *testing.T) {
+	f := newFixture(t)
+	writeFiles(t, f.filesDir(t), map[string]string{"package.json": "{}"})
+	f.executor.run = func(ctx context.Context, request RunRequest) (RunResult, error) {
+		writeFiles(t, request.FilesDir, map[string]string{"node_modules/huge/index.js": strings.Repeat("x", 20000)})
+		<-ctx.Done()
+		return RunResult{Cancelled: true}, nil
+	}
+	f.worker.MaxDependencyBytes = 5000
+	f.worker.SizeCheckInterval = 50 * time.Millisecond
+	job := f.queue(t, f.owner.ID, "npm-install")
+	claimed, _ := f.worker.ClaimNext(context.Background())
+	finished := make(chan struct{})
+	go func() {
+		f.worker.RunJob(context.Background(), claimed)
+		close(finished)
+	}()
+	select {
+	case <-finished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the runaway install was not stopped")
+	}
+	done := f.reload(job)
+	if done.Status != models.JobFailed || !strings.Contains(done.Error, "dependencies passed") || fileExists(f.filesDir(t), "node_modules") {
+		t.Fatalf("job = %+v, node_modules present: %v", done, fileExists(f.filesDir(t), "node_modules"))
+	}
+}

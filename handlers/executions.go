@@ -30,6 +30,12 @@ func executionEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("CLOUD_EXECUTION_ENABLED")), "true")
 }
 
+// installEnabled is true when the registry-only network is configured (see
+// deploy/registry-proxy/setup.sh). The worker checks that it really works.
+func installEnabled() bool {
+	return strings.TrimSpace(os.Getenv("CLOUD_EXEC_INSTALL_NETWORK")) != ""
+}
+
 func executionImages() jobspec.Images {
 	images := jobspec.DefaultImages()
 	for name, target := range map[string]*string{"CLOUD_EXEC_IMAGE_GO": &images.Go, "CLOUD_EXEC_IMAGE_NODE": &images.Node, "CLOUD_EXEC_IMAGE_PYTHON": &images.Python} {
@@ -59,6 +65,9 @@ func queueJob(handle *workspaceHandle, jobType string, timeoutSeconds int, taskI
 	spec, err := jobspec.Resolve(strings.TrimSpace(jobType), executionImages(), handle.FilesDir)
 	if err != nil {
 		return nil, &queueError{http.StatusBadRequest, err.Error()}
+	}
+	if spec.Install && !installEnabled() {
+		return nil, &queueError{http.StatusServiceUnavailable, "Instalasi dependensi belum diaktifkan di server ini. Test dan build tetap berjalan untuk proyek tanpa dependensi eksternal."}
 	}
 	userID := handle.Workspace.UserID
 	if taskID != nil {

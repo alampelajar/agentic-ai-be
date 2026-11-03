@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -38,6 +40,16 @@ type Worker struct {
 	// share one database use it so parallel packages do not take each other's jobs.
 	OnlyUsers []uint
 	Logf      func(format string, args ...any)
+
+	// Docker cannot put a quota on a bind mount, so the worker watches the size of
+	// the workspace while a job runs and stops the job that grows it past these.
+	// MaxDependencyBytes bounds node_modules and .pydeps; MaxWorkspaceBytes bounds
+	// everything (project and dependencies). A deployment should still put
+	// CLOUD_WORKSPACE_ROOT on a filesystem with real quotas.
+	MaxDependencyBytes int64
+	MaxWorkspaceBytes  int64
+	// SizeCheckInterval is how often that size is measured; tests shorten it.
+	SizeCheckInterval time.Duration
 }
 
 func (w *Worker) logf(format string, args ...any) {
@@ -60,6 +72,15 @@ func (w *Worker) defaults() {
 	}
 	if w.StaleAfter <= 0 {
 		w.StaleAfter = 2 * time.Minute
+	}
+	if w.MaxDependencyBytes <= 0 {
+		w.MaxDependencyBytes = 300 << 20
+	}
+	if w.MaxWorkspaceBytes <= 0 {
+		w.MaxWorkspaceBytes = 1 << 30
+	}
+	if w.SizeCheckInterval <= 0 {
+		w.SizeCheckInterval = 3 * time.Second
 	}
 	if w.Images == (jobspec.Images{}) {
 		w.Images = jobspec.DefaultImages()
@@ -204,18 +225,30 @@ func (w *Worker) RunJob(ctx context.Context, job *models.ExecutionJob) {
 		return // cancelled or reaped between being claimed and starting
 	}
 
-	// Watch for a cancel request while the command runs.
+	_, vendorExisted := statDir(filepath.Join(filesDir, "vendor"))
+
+	// Watch for a cancel request, and for the workspace outgrowing its limits,
+	// while the command runs.
 	runCtx, stopRun := context.WithCancel(ctx)
 	defer stopRun()
+	var oversize string
 	watcherDone := make(chan struct{})
 	go func() {
 		defer close(watcherDone)
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
+		sizeTicker := time.NewTicker(w.SizeCheckInterval)
+		defer sizeTicker.Stop()
 		for {
 			select {
 			case <-runCtx.Done():
 				return
+			case <-sizeTicker.C:
+				if reason := w.sizeProblem(filesDir); reason != "" {
+					oversize = reason // read only after the watcher has finished
+					stopRun()
+					return
+				}
 			case <-ticker.C:
 				var requested bool
 				w.DB.Model(&models.ExecutionJob{}).Where("id = ?", job.ID).Select("cancel_requested").Scan(&requested)
@@ -241,6 +274,8 @@ func (w *Worker) RunJob(ctx context.Context, job *models.ExecutionJob) {
 	switch {
 	case runErr != nil:
 		status, message = models.JobFailed, services.RedactSecrets(runErr.Error())
+	case oversize != "":
+		status, message = models.JobFailed, oversize
 	case result.TimedOut:
 		status, message = models.JobTimedOut, fmt.Sprintf("The command did not finish within %s and was stopped.", timeout)
 	case result.Cancelled || ctx.Err() != nil:
@@ -249,6 +284,9 @@ func (w *Worker) RunJob(ctx context.Context, job *models.ExecutionJob) {
 		hasExit = true
 	default:
 		status, hasExit = models.JobFailed, true
+	}
+	if spec.Install {
+		status, message = w.afterInstall(filesDir, spec, vendorExisted, status, message)
 	}
 	if result.Truncated {
 		if message != "" {
@@ -267,6 +305,49 @@ func (w *Worker) RunJob(ctx context.Context, job *models.ExecutionJob) {
 	}
 	w.finish(job, updates)
 	w.refreshUsage(workspace)
+}
+
+func statDir(path string) (os.FileInfo, bool) {
+	info, err := os.Stat(path)
+	return info, err == nil && info.IsDir()
+}
+
+// sizeProblem says why a running job must be stopped, or "" when it may go on.
+func (w *Worker) sizeProblem(filesDir string) string {
+	dependencies, err := cloudworkspace.GeneratedUsage(filesDir)
+	if err != nil {
+		return ""
+	}
+	if dependencies > w.MaxDependencyBytes {
+		return fmt.Sprintf("The job was stopped because the installed dependencies passed %d MiB.", w.MaxDependencyBytes>>20)
+	}
+	project, _, err := cloudworkspace.DirUsage(filesDir)
+	if err == nil && project+dependencies > w.MaxWorkspaceBytes {
+		return fmt.Sprintf("The job was stopped because the workspace passed %d MiB.", w.MaxWorkspaceBytes>>20)
+	}
+	return ""
+}
+
+// afterInstall tidies up once an install job is over. Dependencies over the limit
+// are removed (a half-installed tree is worse than none), and a vendor/ folder that
+// a failed go mod vendor left behind is removed too, because the test jobs would
+// otherwise build from it with -mod=vendor and report confusing errors.
+func (w *Worker) afterInstall(filesDir string, spec jobspec.CommandSpec, vendorExisted bool, status, message string) (string, string) {
+	add := func(text string) {
+		if message != "" {
+			message += " "
+		}
+		message += text
+	}
+	if size, err := cloudworkspace.GeneratedUsage(filesDir); err == nil && size > w.MaxDependencyBytes {
+		_ = cloudworkspace.RemoveGenerated(filesDir)
+		status = models.JobFailed
+		add(fmt.Sprintf("The installed dependencies take %d MiB, more than the %d MiB allowed, so they were removed.", size>>20, w.MaxDependencyBytes>>20))
+	}
+	if spec.JobType == "go-deps" && status != models.JobCompleted && !vendorExisted {
+		_ = os.RemoveAll(filepath.Join(filesDir, "vendor"))
+	}
+	return status, message
 }
 
 func truncateStored(text string) string {

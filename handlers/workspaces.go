@@ -204,6 +204,8 @@ func fileFailure(err error) (int, string) {
 		return http.StatusBadRequest, "Path tidak valid. Gunakan path relatif di dalam workspace."
 	case errors.Is(err, cloudworkspace.ErrSecretFile):
 		return http.StatusForbidden, "File ini mungkin berisi rahasia dan tidak tersedia lewat workspace."
+	case errors.Is(err, cloudworkspace.ErrGeneratedPath):
+		return http.StatusForbidden, "Folder ini berisi dependensi hasil instalasi (node_modules atau .pydeps) dan tidak dapat dibuka atau diubah lewat workspace."
 	case errors.Is(err, cloudworkspace.ErrNotFound):
 		return http.StatusNotFound, "File tidak ditemukan."
 	case errors.Is(err, cloudworkspace.ErrIsDirectory):
