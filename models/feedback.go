@@ -12,6 +12,8 @@ type Feedback struct {
 	Attachment    string           `json:"attachment"`
 	Status        string           `json:"status" gorm:"size:20;not null;default:new;index"`
 	Rating        int              `json:"rating" gorm:"not null;default:0"`
+	RatingReasons []string         `json:"rating_reasons" gorm:"serializer:json;type:jsonb"`
+	RatingComment string           `json:"rating_comment" gorm:"type:text"`
 	Replies       []FeedbackReply  `json:"replies,omitempty" gorm:"foreignKey:FeedbackID;constraint:OnDelete:CASCADE"`
 	CreatedAt     time.Time        `json:"created_at"`
 	UpdatedAt     time.Time        `json:"updated_at"`
