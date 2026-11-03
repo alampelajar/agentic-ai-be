@@ -41,7 +41,7 @@ func newSkillFixture(t *testing.T) *skillFixture {
 		t.Fatal(err)
 	}
 	config.DB = db
-	if err := db.AutoMigrate(&models.User{}, &models.Agent{}, &models.Skill{}, &models.SkillVersion{}, &models.AgentSkill{}); err != nil {
+	if err := migrateAll(db); err != nil {
 		t.Fatal(err)
 	}
 	f := &skillFixture{db: db, suffix: strconv.Itoa(os.Getpid()) + "-" + strconv.Itoa(int(fixtureSeq.Add(1)))}

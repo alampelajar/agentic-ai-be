@@ -31,7 +31,7 @@ func newToolFixture(t *testing.T) *toolFixture {
 	t.Helper()
 	w := newWorkspaceFixture(t)
 	t.Setenv("AI_ENCRYPTION_KEY", strings.Repeat("ef", 32))
-	if err := w.db.AutoMigrate(&models.AIProvider{}, &models.AIModel{}, &models.AgentModel{}, &models.ToolActivity{}); err != nil {
+	if err := migrateAll(w.db); err != nil {
 		t.Fatal(err)
 	}
 	f := &toolFixture{workspaceFixture: w, provider: newScriptedProvider(t), agents: map[string]models.Agent{}}

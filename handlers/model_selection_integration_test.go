@@ -31,7 +31,7 @@ func TestModelSelectionHonoursAgentLinkActiveFlagAndOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.DB = db
-	if err := db.AutoMigrate(&models.User{}, &models.Agent{}, &models.AIProvider{}, &models.AIModel{}, &models.AgentModel{}); err != nil {
+	if err := migrateAll(db); err != nil {
 		t.Fatal(err)
 	}
 

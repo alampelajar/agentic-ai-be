@@ -103,3 +103,71 @@ Every tool call is recorded in Tool Activity with redaction.
   deployment needs the object storage adapter or a shared volume.
 - Private GitHub repositories are not supported (no OAuth or GitHub App yet).
 - No dependency installation inside jobs (see above).
+
+## 6. Reference
+
+### API
+| Method and path | Purpose |
+|---|---|
+| `GET/POST /api/workspaces` | list; create (JSON for empty or `github`, multipart for a ZIP) |
+| `GET/PATCH/DELETE /api/workspaces/:id` | read, rename or set the default runtime, delete |
+| `GET /api/workspaces/:id/tree?path=` | file tree (bounded, symlinks left out, secret files flagged) |
+| `GET/PUT /api/workspaces/:id/file` | read or write one text file |
+| `GET /api/workspaces/:id/changes` | added, modified and deleted files since creation |
+| `POST /api/workspaces/:id/export` | download the project as a ZIP (secret files left out) |
+| `GET/POST /api/workspaces/:id/executions` | list or queue a job (a job type only) |
+| `GET /api/executions/:id`, `POST /api/executions/:id/cancel` | read or cancel a job |
+| `POST /api/workspace-tools/run` | run an agent tool; a mutating tool returns a pending approval |
+| `POST /api/workspace-tools/approvals/:id/approve` or `/deny` | the user's decision |
+
+Chat accepts `workspace_id`; tasks carry a nullable `workspace_id`.
+
+### Tools (Tool Registry)
+`workspace.list_files`, `workspace.read_file`, `workspace.write_file`,
+`workspace.get_changes`, `workspace.run_test`, `workspace.build`,
+`workspace.get_execution`. Roles: Coding gets all; Testing gets read, test, build;
+Debugging gets read and test; Review, Planning and unknown agents only read.
+`list-files`, `read-file` and the `desktop.*` tools are unchanged, and the old
+manifest names `workspace.list/read/write/execute` are still accepted in skills.
+
+### Settings (environment variables, all optional)
+`CLOUD_WORKSPACE_ROOT`, `CLOUD_EXECUTION_ENABLED` (exactly `true`),
+`CLOUD_EXEC_IMAGE_GO/NODE/PYTHON`, `CLOUD_EXEC_MEMORY`, `CLOUD_EXEC_CPUS`,
+`CLOUD_EXEC_PIDS_LIMIT`, `CLOUD_EXEC_RUN_AS`, `CLOUD_EXEC_MAX_CONCURRENT`,
+`CLOUD_EXEC_MAX_PER_USER`. They are listed, commented out, in `.env.example`.
+
+Built-in limits (`cloudworkspace.DefaultLimits`): 1 MiB read and 2 MiB write per
+file, 5,000 tree entries, 50 MiB archive, 200 MiB expanded, 10,000 files per
+archive, 500 MiB per user, 10 workspaces per user; 64 KiB of output per stream;
+3 active jobs per user and 100 queued overall; 60 second approvals, 20 pending.
+
+### Running the pieces
+```
+go run .                      # API server (queues jobs, never runs them)
+go run ./cmd/execution-worker # separate process; needs Docker and the approved images
+go run ./cmd/workspace-janitor [-days 90] [-delete]  # lifecycle: list, or remove, unused workspaces
+```
+The worker refuses to start unless `CLOUD_EXECUTION_ENABLED=true`, the Docker
+daemon answers and the three approved images are already pulled.
+
+### What a deployment must provide
+- A host or cluster where the worker can reach a container runtime, and images
+  pulled in advance (jobs have no network, so they cannot pull).
+- Storage shared by the API and the worker (a volume or, later, the object storage
+  adapter), readable and writable by `CLOUD_EXEC_RUN_AS`.
+- Preferably a stronger boundary than plain containers around the worker (gVisor,
+  Kata, Firecracker or a dedicated VM), and egress firewalling on the worker host.
+
+### Lifecycle
+Workspaces are never deleted automatically. `workspace-janitor` lists workspaces
+not opened for the retention period (default 90 days, never less than 7) that are
+ready and have no active job, and deletes them only with `-delete`.
+
+### Not done in this phase
+- The sandbox was not exercised against a real Docker daemon here. Its arguments
+  and process handling are tested with a stand-in CLI; run the worker against a
+  real daemon before enabling execution anywhere.
+- Dependency installation and an approved network policy for package registries.
+- Object storage adapter, private GitHub repositories (OAuth or a GitHub App), a
+  diff against the original file content (only change status is kept), streaming
+  output (the console polls), and `AgentRun`/`AgentRunStep` (they do not exist yet).

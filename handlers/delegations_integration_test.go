@@ -97,7 +97,7 @@ func newDelegationFixture(t *testing.T) *delegationFixture {
 	t.Helper()
 	m := newMemoryFixture(t)
 	t.Setenv("AI_ENCRYPTION_KEY", strings.Repeat("cd", 32))
-	if err := m.db.AutoMigrate(&models.AIProvider{}, &models.AIModel{}, &models.AgentModel{}, &models.AgentDelegation{}); err != nil {
+	if err := migrateAll(m.db); err != nil {
 		t.Fatal(err)
 	}
 	f := &delegationFixture{memoryFixture: m, provider: newScriptedProvider(t)}
@@ -387,7 +387,7 @@ func TestLongDelegatedAnswerIsTrimmed(t *testing.T) {
 
 func TestDeletingAnAccountDeletesItsDelegations(t *testing.T) {
 	f := newDelegationFixture(t)
-	if err := f.db.AutoMigrate(&models.AuditLog{}, &models.RefreshToken{}); err != nil {
+	if err := migrateAll(f.db); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte("test-password-1"), bcrypt.MinCost)

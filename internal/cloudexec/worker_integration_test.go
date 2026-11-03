@@ -16,6 +16,7 @@ import (
 
 	"agentic-ai-backend/internal/cloudworkspace"
 	"agentic-ai-backend/internal/jobspec"
+	"agentic-ai-backend/internal/testdb"
 	"agentic-ai-backend/models"
 )
 
@@ -62,7 +63,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.CloudWorkspace{}, &models.ExecutionJob{}); err != nil {
+	if err := testdb.Migrate(db, &models.User{}, &models.CloudWorkspace{}, &models.ExecutionJob{}); err != nil {
 		t.Fatal(err)
 	}
 	suffix := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano()%1_000_000)

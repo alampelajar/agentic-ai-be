@@ -30,7 +30,7 @@ func TestSkillsLifecycleAndAgentIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.DB = db
-	if err := db.AutoMigrate(&models.User{}, &models.Agent{}, &models.Skill{}, &models.SkillVersion{}, &models.AgentSkill{}); err != nil {
+	if err := migrateAll(db); err != nil {
 		t.Fatal(err)
 	}
 

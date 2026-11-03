@@ -34,7 +34,7 @@ type workspaceFixture struct {
 func newWorkspaceFixture(t *testing.T) *workspaceFixture {
 	t.Helper()
 	f := newSkillFixture(t)
-	if err := f.db.AutoMigrate(&models.Task{}, &models.TaskMessage{}, &models.CloudWorkspace{}, &models.ExecutionJob{}, &models.WorkspaceToolApproval{}, &models.AuditLog{}, &models.RefreshToken{}, &models.AgentMemory{}, &models.UserMemorySetting{}, &models.AgentDelegation{}); err != nil {
+	if err := migrateAll(f.db); err != nil {
 		t.Fatal(err)
 	}
 	w := &workspaceFixture{skillFixture: f, root: t.TempDir(), limits: cloudworkspace.DefaultLimits()}

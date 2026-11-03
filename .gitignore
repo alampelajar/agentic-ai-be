@@ -1,3 +1,5 @@
 .env
 __pycache__/
 *.pyc
+# Cloud Workspace files (CLOUD_WORKSPACE_ROOT defaults to data/workspaces)
+data/

@@ -81,7 +81,7 @@ func chatAs(t *testing.T, userID uint, body map[string]any) *httptest.ResponseRe
 func TestChatUsesPersistentMemoryOnlyWhenAllowed(t *testing.T) {
 	m := newMemoryFixture(t)
 	t.Setenv("AI_ENCRYPTION_KEY", strings.Repeat("ab", 32))
-	if err := m.db.AutoMigrate(&models.AIProvider{}, &models.AIModel{}, &models.AgentModel{}); err != nil {
+	if err := migrateAll(m.db); err != nil {
 		t.Fatal(err)
 	}
 	provider := newFakeProvider(t)
