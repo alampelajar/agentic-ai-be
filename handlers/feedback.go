@@ -61,17 +61,79 @@ func GetMyFeedback(c *gin.Context) {
 
 func RateMyFeedback(c *gin.Context) {
 	userID, ok := currentFeedbackUserID(c)
-	if !ok { c.JSON(http.StatusUnauthorized, gin.H{"ok":false,"message":"User tidak ditemukan"}); return }
-	id, err := strconv.ParseUint(c.Param("id"),10,64)
-	if err != nil { c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"ID feedback tidak valid"}); return }
-	var req struct { Rating int `json:"rating"` }
-	if err := c.ShouldBindJSON(&req); err != nil || req.Rating < 0 || req.Rating > 5 {
-		c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"Rating harus antara 0 sampai 5"}); return
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
+		return
 	}
-	result := config.DB.Model(&models.Feedback{}).Where("id = ? AND user_id = ?", id, userID).Update("rating", req.Rating)
-	if result.Error != nil { c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal menyimpan rating"}); return }
-	if result.RowsAffected == 0 { c.JSON(http.StatusNotFound, gin.H{"ok":false,"message":"Feedback tidak ditemukan"}); return }
-	c.JSON(http.StatusOK, gin.H{"ok":true})
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "ID feedback tidak valid"})
+		return
+	}
+
+	var req struct {
+		Rating        int      `json:"rating"`
+		RatingReasons []string `json:"rating_reasons"`
+		RatingComment string   `json:"rating_comment"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Format JSON tidak valid"})
+		return
+	}
+	if req.Rating < 1 || req.Rating > 5 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Rating harus antara 1 sampai 5"})
+		return
+	}
+
+	req.RatingComment = strings.TrimSpace(req.RatingComment)
+	if req.RatingComment != "" && (len([]rune(req.RatingComment)) < 10 || len([]rune(req.RatingComment)) > 1000) {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Alasan manual harus 10 sampai 1000 karakter"})
+		return
+	}
+
+	allowedReasons := map[string]bool{
+		"admin_ramah": true,
+		"pengerjaan_cepat": true,
+		"solusi_tepat": true,
+		"komunikasi_jelas": true,
+		"responsif": true,
+		"masalah_terselesaikan": true,
+	}
+	seen := make(map[string]bool)
+	reasons := make([]string, 0, len(req.RatingReasons))
+	for _, reason := range req.RatingReasons {
+		reason = strings.TrimSpace(reason)
+		if !allowedReasons[reason] {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Pilihan alasan rating tidak valid"})
+			return
+		}
+		if !seen[reason] {
+			seen[reason] = true
+			reasons = append(reasons, reason)
+		}
+	}
+
+	var item models.Feedback
+	if err := config.DB.Where("id = ? AND user_id = ?", id, userID).First(&item).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "message": "Feedback tidak ditemukan"})
+		return
+	}
+	if item.Status != "completed" {
+		c.JSON(http.StatusConflict, gin.H{"ok": false, "message": "Feedback hanya dapat diberi rating setelah status selesai"})
+		return
+	}
+
+	if err := config.DB.Model(&item).Updates(map[string]interface{}{
+		"rating": req.Rating,
+		"rating_reasons": reasons,
+		"rating_comment": req.RatingComment,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menyimpan rating"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Rating berhasil disimpan"})
 }
 
 func AdminGetFeedback(c *gin.Context) {
