@@ -70,8 +70,6 @@ func main() {
 
 	router := gin.Default()
 
-	// Serve uploaded feedback images so the Admin ticket page can preview them.
-	router.Static("/uploads", "./uploads")
 
 	// ============================================================
 	// CORS
@@ -124,6 +122,9 @@ func main() {
 
 		c.Next()
 	})
+
+	// Serve uploaded feedback images so the Admin ticket page can preview them.
+	router.Static("/uploads", "./uploads")
 
 	// ============================================================
 	// API
