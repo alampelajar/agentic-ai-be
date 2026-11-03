@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type createFeedbackRequest struct {
@@ -124,9 +126,15 @@ func RateMyFeedback(c *gin.Context) {
 		return
 	}
 
+	reasonsJSON, err := json.Marshal(reasons)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal memproses alasan rating"})
+		return
+	}
+
 	if err := config.DB.Model(&item).Updates(map[string]interface{}{
 		"rating": req.Rating,
-		"rating_reasons": reasons,
+		"rating_reasons": gorm.Expr("?::jsonb", string(reasonsJSON)),
 		"rating_comment": req.RatingComment,
 	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menyimpan rating"})
