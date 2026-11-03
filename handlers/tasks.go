@@ -199,9 +199,10 @@ func CreateTask(c *gin.Context) {
 
 		if err := config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				*req.AgentID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error; err != nil {
@@ -211,6 +212,10 @@ func CreateTask(c *gin.Context) {
 			})
 			return
 		}
+	}
+
+	if !requireReferencableModel(c, userID, req.ModelID) {
+		return
 	}
 
 	task := models.Task{
@@ -348,9 +353,10 @@ func UpdateTask(c *gin.Context) {
 
 		if err := config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				*req.AgentID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error; err != nil {
@@ -365,6 +371,9 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	if req.ModelID != nil {
+		if !requireReferencableModel(c, userID, req.ModelID) {
+			return
+		}
 		task.ModelID = req.ModelID
 	}
 

@@ -51,12 +51,12 @@ func main() {
 	// ============================================================
 
 	if strings.TrimSpace(
-    os.Getenv("AI_ENCRYPTION_KEY"),
-) == "" {
-    fmt.Println(
-        "[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
-    )
-}
+		os.Getenv("AI_ENCRYPTION_KEY"),
+	) == "" {
+		fmt.Println(
+			"[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
+		)
+	}
 
 	// ============================================================
 	// DATABASE
@@ -246,6 +246,25 @@ func main() {
 			"/agents/:id",
 			handlers.GetAgent,
 		)
+
+		// ========================================================
+		// SKILLS
+		// ========================================================
+
+		protected.GET("/skills", handlers.GetSkills)
+		protected.POST("/skills", handlers.CreateSkill)
+		protected.GET("/skills/:id", handlers.GetSkill)
+		protected.PUT("/skills/:id", handlers.UpdateSkill)
+		protected.DELETE("/skills/:id", handlers.DeleteSkill)
+		protected.POST("/skills/import/zip", handlers.ImportSkillZIP)
+		protected.POST("/skills/import/github", handlers.ImportSkillGitHub)
+		protected.POST("/skills/:id/validate", handlers.ValidateSkill)
+		protected.GET("/agents/:id/skills", handlers.GetAgentSkills)
+		protected.POST("/agents/:id/skills", handlers.AssignSkillToAgent)
+		protected.PATCH("/agents/:id/skills/:skill_id", handlers.UpdateAgentSkill)
+		protected.DELETE("/agents/:id/skills/:skill_id", handlers.RemoveSkillFromAgent)
+		protected.POST("/tool-activities", handlers.CreateToolActivity)
+		protected.GET("/tool-activities", handlers.GetToolActivities)
 
 		// ========================================================
 		// TASKS
