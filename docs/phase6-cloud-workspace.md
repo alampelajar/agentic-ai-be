@@ -9,11 +9,15 @@ What exists today:
 | Backend | Go, Gin, GORM, PostgreSQL. `AutoMigrate` in `config/database.go`. |
 | Deployment | No Dockerfile, compose file or hosting manifest in the repository. The only CI is `go-ci.yml` (build and test). Hosting is therefore not defined by the code. |
 | Docker | The CLI is installed on the development machine but the daemon was not running during the audit, so no container could be started. Sandbox behaviour could not be verified end to end here. |
-| File and command access today | Only through the Local Agent Runner (`internal/localrunner`, port 8765 on the user's computer): `list-files`, `read-file`, `write-file`, `git-status`, `go-test`, `go-build`, `npm-*`, `python-test`. Its Docker mode already uses `--network none`, `--read-only`, `--pids-limit`, memory and CPU limits and `no-new-privileges`. |
+| File and command access before Phase 6 | Only through the Local Agent Runner (`internal/localrunner`, port 8765 on the user's computer): `list-files`, `read-file`, `write-file`, `git-status`, `go-test`, `go-build`, `npm-*`, `python-test`. Its Docker mode already uses `--network none`, `--read-only`, `--pids-limit`, memory and CPU limits and `no-new-privileges`. |
 | Tool Registry | `services.ToolRegistry` holds `list-files`, `read-file` and the `desktop.*` tools. Skill manifests may name `workspace.list/read/write/execute`, but those names granted nothing. |
 | Frontend tool loop | `src/features/ai/index.tsx` parses `<LOCAL_AGENT_TOOL>` (runner) and `<AGENT_TOOL>` (desktop) markers, asks the user for approval, then calls the runner. |
 | `AgentRun` / `AgentRunStep` | **Do not exist.** Phase 5B shipped `AgentDelegation`. `ExecutionJob.AgentRunID` is therefore a plain nullable number with no foreign key, ready for a later phase. |
 | `Task` | Has no workspace. Phase 6 adds a nullable `workspace_id`. |
+
+Since Phase 6 the Local Agent Runner is **optional**. Workspaces, file editing, tests and builds
+need only the browser and the server. The runner stays for desktop control and is managed under
+Settings -> Integrations -> Desktop Runtime (see `local-agent-runner.md`).
 
 ## 2. Architecture
 
