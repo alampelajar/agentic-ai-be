@@ -65,7 +65,7 @@ metadata/instruksi; file yang diimpor tidak dieksekusi.
    DB_PASSWORD=your_database_password
    DB_NAME=agentic_ai
 
-   PORT=8080
+   PORT=8081
    GOOGLE_CLIENT_ID=
 
    AI_ENCRYPTION_KEY=your_64_character_encryption_key
@@ -91,7 +91,7 @@ metadata/instruksi; file yang diimpor tidak dieksekusi.
 
 5. Periksa status API:
 
-   Buka `http://localhost:8080/api/health`. Jika layanan aktif, endpoint akan mengembalikan respons JSON dengan status `ok`.
+   Buka `http://localhost:8081/api/health` (atau port yang Anda isi pada `PORT`). Jika layanan aktif, endpoint akan mengembalikan respons JSON dengan status `ok`.
 
 ## Konfigurasi lingkungan
 
@@ -99,7 +99,7 @@ metadata/instruksi; file yang diimpor tidak dieksekusi.
 | --- | --- |
 | `DB_HOST`, `DB_PORT` | Host dan port PostgreSQL |
 | `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Kredensial dan nama database |
-| `PORT` | Port HTTP backend; gunakan `8080` untuk konfigurasi frontend lokal saat ini |
+| `PORT` | Port HTTP backend; default `8081`, sama dengan default frontend. Jika memakai port lain (misalnya `8080`), samakan `VITE_API_BASE_URL` di `.env` frontend |
 | `GOOGLE_CLIENT_ID` | Client ID Google OAuth |
 | `AI_ENCRYPTION_KEY` | Kunci untuk mengenkripsi kredensial provider AI |
 | `NARAROUTER_API_KEY` | API key provider AI NaraRouter |

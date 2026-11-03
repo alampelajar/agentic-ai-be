@@ -45,7 +45,7 @@ func GetAgentSkills(c *gin.Context) {
 		return
 	}
 	var assignments []models.AgentSkill
-	if err := config.DB.Where("user_id = ? AND agent_id = ?", userID, agentID).Preload("Skill.Versions", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at DESC").Limit(1) }).Order("created_at ASC").Find(&assignments).Error; err != nil {
+	if err := config.DB.Where("user_id = ? AND agent_id = ?", userID, agentID).Preload("Skill.Versions", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at DESC, id DESC") }).Order("created_at ASC").Find(&assignments).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal mengambil assignment skill."})
 		return
 	}

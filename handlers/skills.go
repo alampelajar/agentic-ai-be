@@ -101,7 +101,7 @@ func GetSkills(c *gin.Context) {
 		db = db.Where("status = ?", status)
 	}
 	var skills []models.Skill
-	if err := db.Preload("Versions", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at DESC").Limit(1) }).Order("updated_at DESC").Find(&skills).Error; err != nil {
+	if err := db.Preload("Versions", func(tx *gorm.DB) *gorm.DB { return tx.Order("created_at DESC, id DESC") }).Order("updated_at DESC").Find(&skills).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal mengambil skill."})
 		return
 	}
