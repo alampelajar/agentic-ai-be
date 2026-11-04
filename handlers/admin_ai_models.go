@@ -23,7 +23,8 @@ type createSystemAIModelRequest struct {
 	Name         string `json:"name" binding:"required"`
 	ModelID      string `json:"model_id" binding:"required"`
 	Description  string `json:"description"`
-	AgentID      uint   `json:"agent_id" binding:"required"`
+	AgentID      uint   `json:"agent_id"`
+	AllAgents    bool   `json:"all_agents"`
 }
 
 type updateSystemAIModelRequest struct {
@@ -32,6 +33,7 @@ type updateSystemAIModelRequest struct {
 	Description *string `json:"description"`
 	IsActive    *bool   `json:"is_active"`
 	AgentID     *uint   `json:"agent_id"`
+	AllAgents   bool    `json:"all_agents"`
 }
 
 func systemProviderSlug(name string) string {
@@ -44,6 +46,23 @@ func systemProviderSlug(name string) string {
 		return "system-provider"
 	}
 	return value
+}
+
+// findTargetAgents resolves where a model goes: every active agent, or the one
+// that was chosen. The status and message are set only when it cannot.
+func findTargetAgents(db *gorm.DB, agentID uint, all bool) ([]models.Agent, int, string) {
+	query := db.Where("is_active = ?", true)
+	if !all {
+		query = query.Where("id = ?", agentID)
+	}
+	var agents []models.Agent
+	if err := query.Order("id ASC").Find(&agents).Error; err != nil {
+		return nil, http.StatusInternalServerError, "Gagal memeriksa agent tujuan."
+	}
+	if len(agents) == 0 {
+		return nil, http.StatusNotFound, "Agent tujuan tidak ditemukan atau tidak aktif."
+	}
+	return agents, 0, ""
 }
 
 // AdminGetAgents returns active agents available for system-model assignment.
@@ -107,7 +126,7 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		})
 		return
 	}
-	if req.AgentID == 0 {
+	if req.AgentID == 0 && !req.AllAgents {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok": false, "error": "Agent tujuan wajib dipilih.",
 		})
@@ -139,17 +158,9 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 	}
 	defer tx.Rollback()
 
-	var targetAgent models.Agent
-	if err := tx.Where("id = ? AND is_active = ?", req.AgentID, true).First(&targetAgent).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{
-				"ok": false, "error": "Agent tujuan tidak ditemukan atau tidak aktif.",
-			})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"ok": false, "error": "Gagal memeriksa agent tujuan.",
-		})
+	targetAgents, status, message := findTargetAgents(tx, req.AgentID, req.AllAgents)
+	if message != "" {
+		c.JSON(status, gin.H{"ok": false, "error": message})
 		return
 	}
 
@@ -237,12 +248,11 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		return
 	}
 
-	link := models.AgentModel{
-		AgentID:   targetAgent.ID,
-		AIModelID: aiModel.ID,
-		IsDefault: false,
+	links := make([]models.AgentModel, 0, len(targetAgents))
+	for _, agent := range targetAgents {
+		links = append(links, models.AgentModel{AgentID: agent.ID, AIModelID: aiModel.ID, IsDefault: false})
 	}
-	if err := tx.Create(&link).Error; err != nil {
+	if err := tx.Create(&links).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok": false, "error": "Gagal menghubungkan model ke agent yang dipilih.",
 		})
@@ -331,27 +341,27 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 		updates["is_active"] = *req.IsActive
 	}
 
-	if len(updates) == 0 && req.AgentID == nil {
+	if len(updates) == 0 && req.AgentID == nil && !req.AllAgents {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Tidak ada perubahan yang dikirim."})
 		return
 	}
 
-	var targetAgent *models.Agent
-	if req.AgentID != nil {
-		if *req.AgentID == 0 {
+	var targetAgents []models.Agent
+	if req.AllAgents || req.AgentID != nil {
+		var agentID uint
+		if req.AgentID != nil {
+			agentID = *req.AgentID
+		}
+		if !req.AllAgents && agentID == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Agent tujuan wajib dipilih."})
 			return
 		}
-		var agent models.Agent
-		if err := config.DB.Where("id = ? AND is_active = ?", *req.AgentID, true).First(&agent).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent tujuan tidak ditemukan atau tidak aktif."})
-				return
-			}
-			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal memeriksa agent tujuan."})
+		agents, status, message := findTargetAgents(config.DB, agentID, req.AllAgents)
+		if message != "" {
+			c.JSON(status, gin.H{"ok": false, "error": message})
 			return
 		}
-		targetAgent = &agent
+		targetAgents = agents
 	}
 
 	tx := config.DB.Begin()
@@ -368,19 +378,17 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 		}
 	}
 
-	if targetAgent != nil {
-		// Replace every previous assignment so legacy models that were
-		// linked to all agents can be moved back to one selected agent.
+	if targetAgents != nil {
+		// Replace every previous assignment: the model ends up on exactly the agents chosen.
 		if err := tx.Where("ai_model_id = ?", aiModel.ID).Delete(&models.AgentModel{}).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal membersihkan hubungan agent lama."})
 			return
 		}
-		link := models.AgentModel{
-			AgentID:   targetAgent.ID,
-			AIModelID: aiModel.ID,
-			IsDefault: false,
+		links := make([]models.AgentModel, 0, len(targetAgents))
+		for _, agent := range targetAgents {
+			links = append(links, models.AgentModel{AgentID: agent.ID, AIModelID: aiModel.ID, IsDefault: false})
 		}
-		if err := tx.Create(&link).Error; err != nil {
+		if err := tx.Create(&links).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menghubungkan model ke agent yang dipilih."})
 			return
 		}
