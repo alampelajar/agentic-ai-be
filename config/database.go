@@ -36,13 +36,19 @@ func ConnectDatabase() {
 		log.Fatalf("Konfigurasi PostgreSQL belum lengkap. Isi variabel: %s", strings.Join(missing, ", "))
 	}
 
+	sslMode := DatabaseSSLMode()
+	if !validSSLModes[sslMode] {
+		log.Fatalf("DB_SSLMODE tidak valid: gunakan disable, require, verify-ca atau verify-full")
+	}
+
 	dsn := fmt.Sprintf(
-		"host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Jakarta",
+		"host=%s user=%s password=%s dbname=%s port=%s sslmode=%s TimeZone=Asia/Jakarta",
 		host,
 		os.Getenv("DB_USER"),
 		os.Getenv("DB_PASSWORD"),
 		os.Getenv("DB_NAME"),
 		port,
+		sslMode,
 	)
 
 	db, err := gorm.Open(
@@ -70,6 +76,18 @@ func ConnectDatabase() {
 		&models.Task{},
 		&models.TaskMessage{},
 		&models.AuditLog{},
+		&models.Feedback{},
+		&models.FeedbackReply{},
+		&models.Skill{},
+		&models.SkillVersion{},
+		&models.AgentSkill{},
+		&models.ToolActivity{},
+		&models.AgentMemory{},
+		&models.UserMemorySetting{},
+		&models.AgentDelegation{},
+		&models.CloudWorkspace{},
+		&models.ExecutionJob{},
+		&models.WorkspaceToolApproval{},
 	)
 
 	if err != nil {
@@ -181,8 +199,17 @@ func seedAgents() {
 		existing.Description = agent.Description
 		existing.Status = agent.Status
 		existing.IsActive = true
+		existing.UserID = nil
 
-		DB.Save(&existing)
+		if err := DB.Model(&existing).Select("Name", "Description", "Status", "IsActive", "UserID").Updates(map[string]any{
+			"name":        agent.Name,
+			"description": agent.Description,
+			"status":      agent.Status,
+			"is_active":   true,
+			"user_id":     nil,
+		}).Error; err != nil {
+			log.Printf("Gagal memperbarui agent %s: %v", agent.Name, err)
+		}
 	}
 }
 

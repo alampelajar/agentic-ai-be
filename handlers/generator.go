@@ -432,9 +432,7 @@ func callNaraRouter(
 	// HTTP CLIENT
 	// ============================================================
 
-	client := &http.Client{
-		Timeout: 180 * time.Second,
-	}
+	client := providerHTTPClient(180 * time.Second)
 
 	start := time.Now()
 

@@ -1,17 +1,24 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/handlers"
+	"agentic-ai-backend/internal/httpguard"
 	"agentic-ai-backend/middleware"
 )
 
@@ -51,12 +58,26 @@ func main() {
 	// ============================================================
 
 	if strings.TrimSpace(
-    os.Getenv("AI_ENCRYPTION_KEY"),
-) == "" {
-    fmt.Println(
-        "[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
-    )
-}
+		os.Getenv("AI_ENCRYPTION_KEY"),
+	) == "" {
+		fmt.Println(
+			"[WARN] AI_ENCRYPTION_KEY belum diatur. Penambahan custom provider tidak akan bisa mengenkripsi API key.",
+		)
+	}
+
+	// ============================================================
+	// PRODUCTION CONFIGURATION CHECK
+	// ============================================================
+
+	if config.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+		if problems := config.ProductionProblems(); len(problems) > 0 {
+			for _, problem := range problems {
+				log.Printf("[CONFIG] %s", problem)
+			}
+			log.Fatal("APP_ENV=production tetapi konfigurasi belum aman. Perbaiki hal di atas.")
+		}
+	}
 
 	// ============================================================
 	// DATABASE
@@ -64,63 +85,48 @@ func main() {
 
 	config.ConnectDatabase()
 
+
 	// ============================================================
 	// GIN ROUTER
 	// ============================================================
 
-	router := gin.Default()
+	// gin.New, not gin.Default: the default logger prints raw paths and query
+	// strings, which can hold tokens. httpguard.AccessLog logs route patterns only.
+	router := gin.New()
 
-	// ============================================================
-	// CORS
-	// ============================================================
+	// Trust X-Forwarded-For only from the proxies listed in TRUSTED_PROXIES (none
+	// by default), so a client cannot pick its own address and dodge rate limits.
+	if err := router.SetTrustedProxies(config.TrustedProxies()); err != nil {
+		log.Fatalf("TRUSTED_PROXIES tidak valid: %v", err)
+	}
 
-	router.Use(func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	generalLimit := httpguard.NewLimiter(600, 120) // per address, every request
+	router.Use(
+		httpguard.RequestID(),
+		httpguard.AccessLog(logger),
+		gin.Recovery(),
+		httpguard.SecurityHeaders(config.IsProduction()),
+		httpguard.CORS(config.CORSOrigins()),
+		httpguard.BodyLimit(8<<20, 64<<20),
+		httpguard.RateLimit(generalLimit, httpguard.ByIP),
+	)
 
-		allowedOrigins := map[string]bool{
-			"http://localhost:5173": true,
-			"http://localhost:5174": true,
-			"http://localhost:5175": true,
-			"http://localhost:5176": true,
-			"http://127.0.0.1:5173": true,
-			"http://127.0.0.1:5174": true,
-			"http://127.0.0.1:5175": true,
-			"http://127.0.0.1:5176": true,
-		}
+	// Stricter limits where a request is expensive or can be abused. Keyed by
+	// address before sign-in and by user after it. In memory: see
+	// docs/phase7-public-readiness.md for running more than one instance.
+	loginLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 10), httpguard.ByIP)
+	registerLimit := httpguard.RateLimit(httpguard.NewLimiter(3, 5), httpguard.ByIP)
+	adminLoginLimit := httpguard.RateLimit(httpguard.NewLimiter(5, 5), httpguard.ByIP)
+	refreshLimit := httpguard.RateLimit(httpguard.NewLimiter(60, 20), httpguard.ByIP)
+	resetLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 10), httpguard.ByIP)
+	userLimit := httpguard.RateLimit(httpguard.NewLimiter(300, 60), httpguard.ByUserOrIP)
+	chatLimit := httpguard.RateLimit(httpguard.NewLimiter(30, 10), httpguard.ByUserOrIP)
+	importLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 5), httpguard.ByUserOrIP)
+	executionLimit := httpguard.RateLimit(httpguard.NewLimiter(20, 10), httpguard.ByUserOrIP)
 
-		if allowedOrigins[origin] {
-			c.Header(
-				"Access-Control-Allow-Origin",
-				origin,
-			)
-			c.Header("Vary", "Origin")
-		}
-
-		c.Header(
-			"Access-Control-Allow-Credentials",
-			"true",
-		)
-
-		c.Header(
-			"Access-Control-Allow-Headers",
-			"Content-Type, Authorization, Accept",
-		)
-
-		c.Header(
-			"Access-Control-Allow-Methods",
-			"GET, POST, PUT, PATCH, DELETE, OPTIONS",
-		)
-
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(
-				http.StatusNoContent,
-			)
-
-			return
-		}
-
-		c.Next()
-	})
+	// Serve uploaded feedback images so the Admin ticket page can preview them.
+	router.Static("/uploads", "./uploads")
 
 	// ============================================================
 	// API
@@ -128,7 +134,22 @@ func main() {
 
 	api := router.Group("/api")
 
+	// Liveness: the process answers. Readiness: it can also reach its database, so a
+	// load balancer stops sending traffic to an instance that cannot serve it.
 	api.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+	api.GET("/ready", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+		sqlDB, err := config.DB.DB()
+		if err == nil {
+			err = sqlDB.PingContext(ctx)
+		}
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"ok": false})
+			return
+		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
@@ -150,21 +171,25 @@ func main() {
 	{
 		auth.POST(
 			"/register",
+			registerLimit,
 			handlers.Register,
 		)
 
 		auth.POST(
 			"/login",
+			loginLimit,
 			handlers.Login,
 		)
 
 		auth.POST(
 			"/google",
+			loginLimit,
 			handlers.GoogleLogin,
 		)
 
 		auth.POST(
 			"/refresh",
+			refreshLimit,
 			handlers.Refresh,
 		)
 
@@ -175,16 +200,19 @@ func main() {
 
 		auth.POST(
 			"/forgot-password/request",
+			resetLimit,
 			handlers.RequestPasswordReset,
 		)
 
 		auth.POST(
 			"/forgot-password/verify",
+			resetLimit,
 			handlers.VerifyPasswordResetOTP,
 		)
 
 		auth.POST(
 			"/forgot-password/reset",
+			resetLimit,
 			handlers.ResetPasswordWithOTP,
 		)
 	}
@@ -197,7 +225,15 @@ func main() {
 
 	protected.Use(
 		middleware.AuthMiddleware(),
+		userLimit,
 	)
+
+	// ============================================================
+	// USER FEEDBACK
+	// ============================================================
+	protected.GET("/feedback", handlers.GetMyFeedback)
+	protected.POST("/feedback", handlers.CreateFeedback)
+	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
 
 	{
 		// ========================================================
@@ -248,6 +284,51 @@ func main() {
 		)
 
 		// ========================================================
+		// SKILLS
+		// ========================================================
+
+		protected.GET("/skills", handlers.GetSkills)
+		protected.POST("/skills", handlers.CreateSkill)
+		protected.GET("/skills/:id", handlers.GetSkill)
+		protected.PUT("/skills/:id", handlers.UpdateSkill)
+		protected.DELETE("/skills/:id", handlers.DeleteSkill)
+		protected.POST("/skills/import/zip", importLimit, handlers.ImportSkillZIP)
+		protected.POST("/skills/import/github", importLimit, handlers.ImportSkillGitHub)
+		protected.POST("/skills/:id/validate", handlers.ValidateSkill)
+		protected.GET("/agents/:id/skills", handlers.GetAgentSkills)
+		protected.POST("/agents/:id/skills", handlers.AssignSkillToAgent)
+		protected.PATCH("/agents/:id/skills/:skill_id", handlers.UpdateAgentSkill)
+		protected.DELETE("/agents/:id/skills/:skill_id", handlers.RemoveSkillFromAgent)
+		protected.GET("/memories", handlers.GetMemories)
+		protected.POST("/memories", handlers.CreateMemory)
+		protected.PATCH("/memories/:id", handlers.UpdateMemory)
+		protected.DELETE("/memories/:id", handlers.DeleteMemory)
+		protected.GET("/workspaces", handlers.GetWorkspaces)
+		protected.POST("/workspaces", importLimit, handlers.CreateWorkspace)
+		protected.GET("/workspaces/:id", handlers.GetWorkspace)
+		protected.PATCH("/workspaces/:id", handlers.UpdateWorkspace)
+		protected.DELETE("/workspaces/:id", handlers.DeleteWorkspace)
+		protected.GET("/workspaces/:id/tree", handlers.GetWorkspaceTree)
+		protected.GET("/workspaces/:id/file", handlers.GetWorkspaceFile)
+		protected.PUT("/workspaces/:id/file", handlers.PutWorkspaceFile)
+		protected.GET("/workspaces/:id/changes", handlers.GetWorkspaceChanges)
+		protected.POST("/workspaces/:id/export", importLimit, handlers.ExportWorkspace)
+		protected.GET("/workspaces/:id/executions", handlers.GetWorkspaceExecutions)
+		protected.POST("/workspaces/:id/executions", executionLimit, handlers.CreateExecution)
+		protected.GET("/executions/:id", handlers.GetExecution)
+		protected.POST("/workspace-tools/run", executionLimit, handlers.RunWorkspaceTool)
+		protected.POST("/workspace-tools/approvals/:id/approve", handlers.ApproveWorkspaceTool)
+		protected.POST("/workspace-tools/approvals/:id/deny", handlers.DenyWorkspaceTool)
+		protected.POST("/executions/:id/cancel", handlers.CancelExecution)
+		protected.GET("/delegations", handlers.GetDelegations)
+		protected.POST("/delegations", handlers.CreateDelegation)
+		protected.DELETE("/delegations/:id", handlers.DeleteDelegation)
+		protected.GET("/memory-settings", handlers.GetMemorySettings)
+		protected.PUT("/memory-settings", handlers.UpdateMemorySettings)
+		protected.POST("/tool-activities", handlers.CreateToolActivity)
+		protected.GET("/tool-activities", handlers.GetToolActivities)
+
+		// ========================================================
 		// TASKS
 		// ========================================================
 
@@ -283,6 +364,7 @@ func main() {
 
 		protected.POST(
 			"/tasks/:id/messages",
+			chatLimit,
 			handlers.AddTaskMessage,
 		)
 
@@ -292,6 +374,7 @@ func main() {
 
 		protected.POST(
 			"/chat",
+			chatLimit,
 			handlers.Chat,
 		)
 
@@ -301,6 +384,7 @@ func main() {
 
 		protected.POST(
 			"/generator/landing-page",
+			chatLimit,
 			handlers.GenerateLandingPage,
 		)
 
@@ -400,6 +484,7 @@ func main() {
 
 	admin.POST(
 		"/login",
+		adminLoginLimit,
 		handlers.AdminLogin,
 	)
 
@@ -417,6 +502,11 @@ func main() {
 			"/logs",
 			handlers.AdminGetAuditLogs,
 		)
+
+		// FEEDBACK MANAGEMENT
+		admin.GET("/feedback", handlers.AdminGetFeedback)
+		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
+		admin.POST("/feedback/:id/replies", handlers.AdminReplyFeedback)
 
 		admin.GET(
 			"/agents",
@@ -496,7 +586,28 @@ func main() {
 	// RUN SERVER
 	// ============================================================
 
-	if err := router.Run(":" + port); err != nil {
+	// No WriteTimeout: chat responses stream and can legitimately take minutes.
+	// The read-side timeouts stop slow-header and idle-connection attacks.
+	server := &http.Server{
+		Addr:              ":" + port,
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	// A container is stopped with SIGTERM: finish the requests in flight first.
+	go func() {
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+		<-stop
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = server.Shutdown(ctx)
+	}()
+
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(
 			"Gagal menjalankan server:",
 			err,

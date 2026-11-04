@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"agentic-ai-backend/config"
+	"agentic-ai-backend/internal/cloudworkspace"
 	"agentic-ai-backend/models"
 	"agentic-ai-backend/utils"
 )
@@ -168,13 +170,28 @@ func makeSlug(value string) string {
 	return result
 }
 
+// validBaseURL checks the address of an AI provider. The connection itself is
+// guarded again when it is made (see providerHTTPClient); this rejects what can be
+// seen from the text alone: credentials in the URL, a missing host, plain http in
+// production, and an address literal that is internal.
 func validBaseURL(value string) bool {
 	parsed, err := url.ParseRequestURI(value)
-	if err != nil {
+	if err != nil || parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil {
 		return false
 	}
-
-	return parsed.Scheme == "http" || parsed.Scheme == "https"
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	if config.AllowPrivateProviderURLs() {
+		return true
+	}
+	if parsed.Scheme != "https" {
+		return false
+	}
+	if ip := net.ParseIP(parsed.Hostname()); ip != nil && cloudworkspace.BlockedIP(ip) {
+		return false
+	}
+	return !strings.EqualFold(parsed.Hostname(), "localhost")
 }
 
 func normalizeChatEndpoint(baseURL string) string {
@@ -279,9 +296,7 @@ func TestAIProviderConnection(c *gin.Context) {
 		return
 	}
 
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	httpClient := providerHTTPClient(30 * time.Second)
 
 	httpReq, err := http.NewRequest(
 		http.MethodPost,
