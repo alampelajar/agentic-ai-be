@@ -211,6 +211,58 @@ func RateMyFeedback(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Rating berhasil disimpan"})
 }
 
+// feedbackDeletable reports whether a ticket is finished: only completed or
+// rejected tickets can be deleted, so an open report never disappears.
+func feedbackDeletable(status string) bool {
+	return status == "completed" || status == "rejected"
+}
+
+// deleteFeedbackRecord removes the ticket, its replies, and its uploaded image.
+// scope narrows the lookup (the owner for users, nothing for admins).
+func deleteFeedbackRecord(c *gin.Context, scope func(*gorm.DB) *gorm.DB) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "ID feedback tidak valid"})
+		return
+	}
+	var item models.Feedback
+	if err := scope(config.DB.Where("id = ?", id)).First(&item).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "message": "Feedback tidak ditemukan"})
+		return
+	}
+	if !feedbackDeletable(item.Status) {
+		c.JSON(http.StatusConflict, gin.H{"ok": false, "message": "Laporan hanya dapat dihapus setelah selesai atau ditolak"})
+		return
+	}
+	err = config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("feedback_id = ?", item.ID).Delete(&models.FeedbackReply{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&item).Error
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menghapus feedback"})
+		return
+	}
+	if strings.HasPrefix(item.Attachment, "/uploads/feedback/") {
+		_ = os.Remove(filepath.Join("uploads", "feedback", filepath.Base(item.Attachment)))
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Laporan berhasil dihapus"})
+}
+
+func DeleteMyFeedback(c *gin.Context) {
+	userID, ok := currentFeedbackUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
+		return
+	}
+	deleteFeedbackRecord(c, func(q *gorm.DB) *gorm.DB { return q.Where("user_id = ?", userID) })
+}
+
+func AdminDeleteFeedback(c *gin.Context) {
+	deleteFeedbackRecord(c, func(q *gorm.DB) *gorm.DB { return q })
+}
+
 func AdminGetFeedback(c *gin.Context) {
 	var items []models.Feedback
 	if err := config.DB.Preload("Replies").Joins("JOIN users ON users.id = feedbacks.user_id").

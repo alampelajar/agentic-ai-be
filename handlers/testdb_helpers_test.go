@@ -32,5 +32,7 @@ func migrateAll(db *gorm.DB) error {
 		&models.CloudWorkspace{},
 		&models.ExecutionJob{},
 		&models.WorkspaceToolApproval{},
+		&models.Feedback{},
+		&models.FeedbackReply{},
 	)
 }
