@@ -49,7 +49,7 @@ type memoryFixture struct {
 func newMemoryFixture(t *testing.T) *memoryFixture {
 	t.Helper()
 	f := newSkillFixture(t)
-	if err := f.db.AutoMigrate(&models.Task{}, &models.TaskMessage{}, &models.AgentMemory{}, &models.UserMemorySetting{}); err != nil {
+	if err := migrateAll(f.db); err != nil {
 		t.Fatal(err)
 	}
 	m := &memoryFixture{skillFixture: f}
@@ -409,7 +409,7 @@ func TestMemoryTaskReferenceIsKeptOnlyForOwnTask(t *testing.T) {
 
 func TestDeletingAnAccountDeletesItsMemories(t *testing.T) {
 	m := newMemoryFixture(t)
-	if err := m.db.AutoMigrate(&models.AuditLog{}, &models.RefreshToken{}); err != nil {
+	if err := migrateAll(m.db); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte("test-password-1"), bcrypt.MinCost)

@@ -26,6 +26,8 @@ type scriptedProvider struct {
 	mu       sync.Mutex
 	requests []map[string]any
 	reply    func() (int, string)
+	// rawBody, when set, is sent as the whole response body (for tool calls).
+	rawBody string
 }
 
 func newScriptedProvider(t *testing.T) *scriptedProvider {
@@ -38,7 +40,13 @@ func newScriptedProvider(t *testing.T) *scriptedProvider {
 		p.mu.Lock()
 		p.requests = append(p.requests, parsed)
 		status, text := p.reply()
+		raw := p.rawBody
 		p.mu.Unlock()
+		if raw != "" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(raw))
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != 200 {
@@ -89,7 +97,7 @@ func newDelegationFixture(t *testing.T) *delegationFixture {
 	t.Helper()
 	m := newMemoryFixture(t)
 	t.Setenv("AI_ENCRYPTION_KEY", strings.Repeat("cd", 32))
-	if err := m.db.AutoMigrate(&models.AIProvider{}, &models.AIModel{}, &models.AgentModel{}, &models.AgentDelegation{}); err != nil {
+	if err := migrateAll(m.db); err != nil {
 		t.Fatal(err)
 	}
 	f := &delegationFixture{memoryFixture: m, provider: newScriptedProvider(t)}
@@ -379,7 +387,7 @@ func TestLongDelegatedAnswerIsTrimmed(t *testing.T) {
 
 func TestDeletingAnAccountDeletesItsDelegations(t *testing.T) {
 	f := newDelegationFixture(t)
-	if err := f.db.AutoMigrate(&models.AuditLog{}, &models.RefreshToken{}); err != nil {
+	if err := migrateAll(f.db); err != nil {
 		t.Fatal(err)
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte("test-password-1"), bcrypt.MinCost)

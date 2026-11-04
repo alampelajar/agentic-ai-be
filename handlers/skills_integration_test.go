@@ -29,8 +29,14 @@ func TestSkillsLifecycleAndAgentIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Close the pool when the test ends: the package opens one per fixture and PostgreSQL has a connection cap.
+	t.Cleanup(func() {
+		if sqlDB, dbErr := db.DB(); dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
 	config.DB = db
-	if err := db.AutoMigrate(&models.User{}, &models.Agent{}, &models.Skill{}, &models.SkillVersion{}, &models.AgentSkill{}); err != nil {
+	if err := migrateAll(db); err != nil {
 		t.Fatal(err)
 	}
 

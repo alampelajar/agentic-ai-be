@@ -40,6 +40,7 @@ type taskRequest struct {
 	Priority    string `json:"priority"`
 	AgentID     *uint  `json:"agent_id"`
 	ModelID     *uint  `json:"model_id"`
+	WorkspaceID *uint  `json:"workspace_id"`
 }
 
 type taskPatchRequest struct {
@@ -50,6 +51,7 @@ type taskPatchRequest struct {
 	Priority    *string `json:"priority"`
 	AgentID     *uint   `json:"agent_id"`
 	ModelID     *uint   `json:"model_id"`
+	WorkspaceID *uint   `json:"workspace_id"`
 }
 
 func normalizeTaskRequest(req *taskRequest) error {
@@ -218,10 +220,18 @@ func CreateTask(c *gin.Context) {
 		return
 	}
 
+	if req.WorkspaceID != nil && *req.WorkspaceID == 0 {
+		req.WorkspaceID = nil
+	}
+	if !requireOwnedWorkspace(c, userID, req.WorkspaceID) {
+		return
+	}
+
 	task := models.Task{
 		UserID:      userID,
 		AgentID:     req.AgentID,
 		ModelID:     req.ModelID,
+		WorkspaceID: req.WorkspaceID,
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
@@ -375,6 +385,18 @@ func UpdateTask(c *gin.Context) {
 			return
 		}
 		task.ModelID = req.ModelID
+	}
+
+	// workspace_id 0 detaches the task from its workspace.
+	if req.WorkspaceID != nil {
+		if *req.WorkspaceID == 0 {
+			task.WorkspaceID = nil
+		} else {
+			if !requireOwnedWorkspace(c, userID, req.WorkspaceID) {
+				return
+			}
+			task.WorkspaceID = req.WorkspaceID
+		}
 	}
 
 	if err := config.DB.Save(&task).Error; err != nil {

@@ -31,6 +31,8 @@ var AllowedSkillTools = map[string]bool{
 	"desktop.windows": true, "desktop.list_windows": true, "desktop.inspect": true, "desktop.focus_window": true, "desktop.activate_window": true,
 	"desktop.launch_application": true, "desktop.click": true, "desktop.double_click": true, "desktop.type": true,
 	"desktop.hotkey": true, "desktop.scroll": true, "desktop.wait": true, "desktop.stop": true,
+	"workspace.list_files": true, "workspace.read_file": true, "workspace.write_file": true, "workspace.get_changes": true,
+	"workspace.run_test": true, "workspace.build": true, "workspace.get_execution": true, "workspace.install_dependencies": true,
 }
 
 type ValidatedSkillPackage struct {
