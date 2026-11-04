@@ -234,6 +234,7 @@ func main() {
 	protected.GET("/feedback", handlers.GetMyFeedback)
 	protected.POST("/feedback", handlers.CreateFeedback)
 	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
+	protected.DELETE("/feedback/:id", handlers.DeleteMyFeedback)
 
 	{
 		// ========================================================
@@ -507,6 +508,7 @@ func main() {
 		admin.GET("/feedback", handlers.AdminGetFeedback)
 		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
 		admin.POST("/feedback/:id/replies", handlers.AdminReplyFeedback)
+		admin.DELETE("/feedback/:id", handlers.AdminDeleteFeedback)
 
 		admin.GET(
 			"/agents",
