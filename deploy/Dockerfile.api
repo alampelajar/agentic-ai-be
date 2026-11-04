@@ -1,0 +1,22 @@
+# The API server. Build from the repository root:
+#   docker build -f deploy/Dockerfile.api -t agentic-ai-api:staging .
+#
+# The execution worker is deliberately NOT containerised: it needs the Docker
+# daemon, and handing a container the Docker socket is the same as handing it
+# root on the host. Run it on the host as its own service (see
+# docs/phase7-public-readiness.md).
+FROM golang:1.27 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /api .
+
+# distroless/static: CA certificates (the API calls AI providers over HTTPS) and
+# time zone data, but no shell and no package manager. Runs as a non-root user.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /api /api
+ENV PORT=8081
+EXPOSE 8081
+USER 65532:65532
+ENTRYPOINT ["/api"]

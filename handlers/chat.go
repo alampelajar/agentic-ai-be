@@ -768,7 +768,7 @@ AGENT ROLE: DEBUGGING AGENT
 	// ============================================================
 
 	answer, err :=
-		callAIProvider(
+		callAIProviderWithRepair(
 			apiKey,
 			aiModel.Provider.BaseURL,
 			requestBody,
@@ -934,9 +934,7 @@ func callAIProvider(
 	// CLIENT
 	// ------------------------------------------------------------
 
-	client := &http.Client{
-		Timeout: 5 * time.Minute,
-	}
+	client := providerHTTPClient(5 * time.Minute)
 
 	start := time.Now()
 
@@ -1046,7 +1044,12 @@ func callAIProvider(
 	}
 	choice := aiResponse.Choices[0]
 	if len(choice.Message.ToolCalls) > 0 {
-		return normalizeNativeToolCall(choice.Message.ToolCalls[0])
+		marker, err := normalizeNativeToolCall(choice.Message.ToolCalls[0])
+		var invalid *invalidToolCallError
+		if errors.As(err, &invalid) {
+			invalid.Truncated = choice.FinishReason == "length"
+		}
+		return marker, err
 	}
 
 	// ------------------------------------------------------------
@@ -1075,16 +1078,16 @@ func normalizeNativeToolCall(call providerToolCall) (string, error) {
 	}
 	var args map[string]any
 	if len(call.Function.Arguments) == 0 {
-		return "", fmt.Errorf("native tool call %q memiliki arguments invalid", name)
+		return "", &invalidToolCallError{Tool: name, Arguments: true}
 	}
 	if json.Unmarshal(call.Function.Arguments, &args) != nil {
 		var encoded string
 		if json.Unmarshal(call.Function.Arguments, &encoded) != nil || json.Unmarshal([]byte(encoded), &args) != nil {
-			return "", fmt.Errorf("native tool call %q memiliki arguments invalid", name)
+			return "", &invalidToolCallError{Tool: name, Arguments: true}
 		}
 	}
 	if err := services.ValidateToolRequest(name, args); err != nil {
-		return "", fmt.Errorf("native tool call ditolak: %w", err)
+		return "", &invalidToolCallError{Tool: name, Err: err}
 	}
 	payload, _ := json.Marshal(map[string]any{"action": name, "arguments": args})
 	if name == "list-files" || name == "read-file" {

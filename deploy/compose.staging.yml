@@ -1,0 +1,100 @@
+# A staging stack: PostgreSQL, the API, the web app and a TLS-terminating proxy.
+#
+#   cp deploy/staging.env.example deploy/.env.staging   # then fill it in
+#   docker compose -f deploy/compose.staging.yml --env-file deploy/.env.staging up -d --build
+#
+# Only the proxy publishes ports. The database and the API are reachable from the
+# other containers only. The execution worker is not part of this file (it needs the
+# host's Docker daemon); see docs/phase7-public-readiness.md.
+name: agentic-ai-staging
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      PORT: "8081"
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME}
+      # The bundled database container speaks no TLS and is reachable only on the
+      # private network, so plaintext is allowed here on purpose. With a managed
+      # database, set DB_SSLMODE=require (or stricter) and remove ALLOW_PLAINTEXT_DB.
+      DB_SSLMODE: ${DB_SSLMODE:-disable}
+      ALLOW_PLAINTEXT_DB: ${ALLOW_PLAINTEXT_DB:-true}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      PASSWORD_RESET_PEPPER: ${PASSWORD_RESET_PEPPER}
+      AI_ENCRYPTION_KEY: ${AI_ENCRYPTION_KEY}
+      CORS_ALLOWED_ORIGINS: https://${APP_DOMAIN}
+      TRUSTED_PROXIES: 172.28.0.0/24
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+
+  web:
+    build:
+      context: ../../agentic-ai-fe
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: https://${APP_DOMAIN}
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    networks: [internal]
+
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+    depends_on: [api, web]
+    networks:
+      internal:
+        ipv4_address: 172.28.0.10
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  dbdata:
+  caddydata:

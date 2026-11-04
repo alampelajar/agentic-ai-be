@@ -49,9 +49,31 @@ func ParseGitHubURL(raw string) (owner, repo string, err error) {
 // loopback, private ranges, link-local (which includes cloud metadata at
 // 169.254.169.254), unspecified and multicast.
 func BlockedIP(ip net.IP) bool {
-	return ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsMulticast() || ip.IsUnspecified() || ip.Equal(net.ParseIP("100.100.100.200"))
+	if ip == nil || ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsUnspecified() || ip.Equal(net.ParseIP("100.100.100.200")) {
+		return true
+	}
+	for _, network := range reservedNetworks {
+		if network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
+
+// reservedNetworks are ranges that are not ordinary public internet: carrier-grade
+// NAT (used by some clouds internally), protocol and benchmarking ranges, the
+// reserved block, and the IPv6 forms that embed an IPv4 address (NAT64, 6to4,
+// Teredo), which could otherwise be used to reach an internal IPv4 host.
+var reservedNetworks = func() []*net.IPNet {
+	var networks []*net.IPNet
+	for _, cidr := range []string{"100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4", "64:ff9b::/96", "64:ff9b:1::/48", "2002::/16", "2001::/32", "100::/64"} {
+		if _, network, err := net.ParseCIDR(cidr); err == nil {
+			networks = append(networks, network)
+		}
+	}
+	return networks
+}()
 
 // guardedDial refuses to connect to a blocked address. It runs after DNS
 // resolution, so a name that resolves to an internal address is stopped too.
