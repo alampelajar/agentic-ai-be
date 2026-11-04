@@ -76,6 +76,8 @@ func ConnectDatabase() {
 		&models.Task{},
 		&models.TaskMessage{},
 		&models.AuditLog{},
+		&models.Feedback{},
+		&models.FeedbackReply{},
 		&models.Skill{},
 		&models.SkillVersion{},
 		&models.AgentSkill{},

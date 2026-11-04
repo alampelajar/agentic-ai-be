@@ -85,6 +85,7 @@ func main() {
 
 	config.ConnectDatabase()
 
+
 	// ============================================================
 	// GIN ROUTER
 	// ============================================================
@@ -123,6 +124,9 @@ func main() {
 	chatLimit := httpguard.RateLimit(httpguard.NewLimiter(30, 10), httpguard.ByUserOrIP)
 	importLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 5), httpguard.ByUserOrIP)
 	executionLimit := httpguard.RateLimit(httpguard.NewLimiter(20, 10), httpguard.ByUserOrIP)
+
+	// Serve uploaded feedback images so the Admin ticket page can preview them.
+	router.Static("/uploads", "./uploads")
 
 	// ============================================================
 	// API
@@ -223,6 +227,13 @@ func main() {
 		middleware.AuthMiddleware(),
 		userLimit,
 	)
+
+	// ============================================================
+	// USER FEEDBACK
+	// ============================================================
+	protected.GET("/feedback", handlers.GetMyFeedback)
+	protected.POST("/feedback", handlers.CreateFeedback)
+	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
 
 	{
 		// ========================================================
@@ -491,6 +502,11 @@ func main() {
 			"/logs",
 			handlers.AdminGetAuditLogs,
 		)
+
+		// FEEDBACK MANAGEMENT
+		admin.GET("/feedback", handlers.AdminGetFeedback)
+		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
+		admin.POST("/feedback/:id/replies", handlers.AdminReplyFeedback)
 
 		admin.GET(
 			"/agents",
