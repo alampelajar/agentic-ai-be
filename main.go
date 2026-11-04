@@ -489,6 +489,17 @@ func main() {
 		handlers.AdminLogin,
 	)
 
+	admin.POST(
+		"/refresh",
+		refreshLimit,
+		handlers.AdminRefresh,
+	)
+
+	admin.POST(
+		"/logout",
+		handlers.AdminLogout,
+	)
+
 	// ============================================================
 	// ADMIN PROTECTED ROUTES
 	// ============================================================

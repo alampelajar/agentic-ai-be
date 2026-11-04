@@ -380,10 +380,10 @@ func AdminLogin(c *gin.Context) {
 	}
 
 	c.SetCookie(
-		"refresh_token",
+		adminRefreshCookie,
 		refreshToken,
 		7*24*60*60,
-		"/",
+		adminCookiePath,
 		"",
 		false,
 		true,
@@ -403,8 +403,36 @@ func AdminLogin(c *gin.Context) {
 	})
 }
 
-func Refresh(c *gin.Context) {
-	refreshToken, err := c.Cookie("refresh_token")
+// The admin console and the user app are two apps on one host, and a cookie is
+// shared across ports. Each keeps its own refresh cookie, so signing in to one
+// never replaces the session of the other (and an admin session can never be
+// refreshed into an ordinary user's).
+const (
+	adminRefreshCookie = "admin_refresh_token"
+	adminCookiePath    = "/api/admin"
+)
+
+type refreshCookie struct {
+	name      string
+	path      string
+	adminOnly bool
+}
+
+var (
+	userRefresh  = refreshCookie{name: "refresh_token", path: "/"}
+	adminRefresh = refreshCookie{name: adminRefreshCookie, path: adminCookiePath, adminOnly: true}
+)
+
+func Refresh(c *gin.Context) { refreshSession(c, userRefresh) }
+
+func Logout(c *gin.Context) { logoutSession(c, userRefresh) }
+
+func AdminRefresh(c *gin.Context) { refreshSession(c, adminRefresh) }
+
+func AdminLogout(c *gin.Context) { logoutSession(c, adminRefresh) }
+
+func refreshSession(c *gin.Context, cookie refreshCookie) {
+	refreshToken, err := c.Cookie(cookie.name)
 
 	if err != nil || refreshToken == "" {
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -464,6 +492,14 @@ func Refresh(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"ok":      false,
 			"message": "Pengguna tidak ditemukan",
+		})
+		return
+	}
+
+	if cookie.adminOnly && user.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{
+			"ok":      false,
+			"message": "Akun ini bukan akun admin",
 		})
 		return
 	}
@@ -538,10 +574,10 @@ func Refresh(c *gin.Context) {
 	}
 
 	c.SetCookie(
-		"refresh_token",
+		cookie.name,
 		newRefreshToken,
 		7*24*60*60,
-		"/",
+		cookie.path,
 		"",
 		false,
 		true,
@@ -554,8 +590,8 @@ func Refresh(c *gin.Context) {
 	})
 }
 
-func Logout(c *gin.Context) {
-	refreshToken, err := c.Cookie("refresh_token")
+func logoutSession(c *gin.Context, cookie refreshCookie) {
+	refreshToken, err := c.Cookie(cookie.name)
 
 	if err == nil && refreshToken != "" {
 		var storedToken models.RefreshToken
@@ -578,10 +614,10 @@ func Logout(c *gin.Context) {
 	}
 
 	c.SetCookie(
-		"refresh_token",
+		cookie.name,
 		"",
 		-1,
-		"/",
+		cookie.path,
 		"",
 		false,
 		true,

@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"os"
 	"time"
 
@@ -49,6 +51,9 @@ func GenerateRefreshToken(userID uint, email string, role string) (string, error
 				time.Now().Add(7 * 24 * time.Hour),
 			),
 			IssuedAt: jwt.NewNumericDate(time.Now()),
+			// Without it, two tokens issued for the same user in the same second are
+			// byte-identical, and the second one cannot be stored (its hash is unique).
+			ID: newTokenID(),
 		},
 	}
 
@@ -86,4 +91,12 @@ func ParseRefreshToken(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
+}
+
+func newTokenID() string {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(b)
 }
