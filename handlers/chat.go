@@ -284,9 +284,9 @@ func Chat(c *gin.Context) {
 	// FIND AGENT
 	// ============================================================
 
-	if agentID != 0 {
-		var agent models.Agent
+	var selectedAgent models.Agent
 
+	if agentID != 0 {
 		if err := config.DB.
 			Where(
 				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
@@ -294,7 +294,7 @@ func Chat(c *gin.Context) {
 				true,
 				userID,
 			).
-			First(&agent).
+			First(&selectedAgent).
 			Error; err != nil {
 
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -529,6 +529,7 @@ func Chat(c *gin.Context) {
 	// SYSTEM PROMPT
 	// ============================================================
 
+	systemPrompt := buildAgentSystemPrompt(&selectedAgent)
 	agentSlug := ""
 	if agentID != 0 {
 		var selectedAgent models.Agent
