@@ -934,9 +934,7 @@ func callAIProvider(
 	// CLIENT
 	// ------------------------------------------------------------
 
-	client := &http.Client{
-		Timeout: 5 * time.Minute,
-	}
+	client := providerHTTPClient(5 * time.Minute)
 
 	start := time.Now()
 
