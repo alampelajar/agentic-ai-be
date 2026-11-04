@@ -11,9 +11,24 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"agentic-ai-backend/config"
+	"agentic-ai-backend/internal/httpguard"
 	"agentic-ai-backend/models"
 	"agentic-ai-backend/utils"
 )
+
+// loginGuard slows password guessing for both Login and AdminLogin: see
+// httpguard.LoginGuard for what it counts and its limits.
+var loginGuard = httpguard.NewLoginGuard()
+
+// wrongCredentials records a failed attempt and sends the one answer used for
+// every kind of failure, so the response never says which part was wrong.
+func wrongCredentials(c *gin.Context, email string) {
+	loginGuard.Fail(email, c.ClientIP())
+	c.JSON(http.StatusUnauthorized, gin.H{
+		"ok":      false,
+		"message": "Email atau password salah",
+	})
+}
 
 type RegisterRequest struct {
 	Name     string `json:"name"`
@@ -145,6 +160,13 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// Refused before the password is looked at, so a correct guess made during a
+	// lock does not reveal itself.
+	if locked, wait := loginGuard.Check(req.Email, c.ClientIP()); locked {
+		httpguard.TooManyRequests(c, wait)
+		return
+	}
+
 	var user models.User
 
 	result := config.DB.
@@ -152,10 +174,7 @@ func Login(c *gin.Context) {
 		First(&user)
 
 	if result.Error != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"ok":      false,
-			"message": "Email atau password salah",
-		})
+		wrongCredentials(c, req.Email)
 		return
 	}
 
@@ -165,12 +184,11 @@ func Login(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"ok":      false,
-			"message": "Email atau password salah",
-		})
+		wrongCredentials(c, req.Email)
 		return
 	}
+
+	loginGuard.Success(req.Email, c.ClientIP())
 
 	if user.Role == "" {
 		user.Role = "user"
@@ -279,6 +297,13 @@ func AdminLogin(c *gin.Context) {
 		return
 	}
 
+	// Refused before the password is looked at, so a correct guess made during a
+	// lock does not reveal itself.
+	if locked, wait := loginGuard.Check(req.Email, c.ClientIP()); locked {
+		httpguard.TooManyRequests(c, wait)
+		return
+	}
+
 	var user models.User
 
 	result := config.DB.
@@ -286,18 +311,7 @@ func AdminLogin(c *gin.Context) {
 		First(&user)
 
 	if result.Error != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"ok":      false,
-			"message": "Email atau password salah",
-		})
-		return
-	}
-
-	if user.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{
-			"ok":      false,
-			"message": "Akun ini bukan akun admin",
-		})
+		wrongCredentials(c, req.Email)
 		return
 	}
 
@@ -307,9 +321,18 @@ func AdminLogin(c *gin.Context) {
 	)
 
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
+		wrongCredentials(c, req.Email)
+		return
+	}
+
+	loginGuard.Success(req.Email, c.ClientIP())
+
+	// Only after the password is right: answering earlier would tell anyone which
+	// addresses belong to ordinary accounts.
+	if user.Role != "admin" {
+		c.JSON(http.StatusForbidden, gin.H{
 			"ok":      false,
-			"message": "Email atau password salah",
+			"message": "Akun ini bukan akun admin",
 		})
 		return
 	}

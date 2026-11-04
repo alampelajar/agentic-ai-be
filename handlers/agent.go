@@ -232,8 +232,9 @@ func GetAgents(c *gin.Context) {
 
 	err := config.DB.
 		Where(
-			"is_active = ?",
+			"is_active = ? AND (user_id IS NULL OR user_id = ?)",
 			true,
+			userID,
 		).
 		Order(
 			"id ASC",
@@ -359,9 +360,10 @@ func GetAgent(c *gin.Context) {
 
 		err = config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				numericID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error
@@ -383,9 +385,10 @@ func GetAgent(c *gin.Context) {
 
 		err := config.DB.
 			Where(
-				"slug = ? AND is_active = ?",
+				"slug = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				agentIDParam,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error

@@ -21,7 +21,12 @@ REST API untuk platform Agentic AI. Backend dibuat menggunakan Go, Gin, GORM, da
 - Daftar Agent dan pengelolaan task beserta pesan task
 - Endpoint chat dan generator landing page
 - Pengelolaan AI provider dan model, termasuk model sistem/admin
+- Skills System foundation: CRUD skill, validasi manifest, import ZIP, dan import GitHub publik
 - Endpoint kesehatan layanan di `GET /api/health`
+
+Skills API yang terlindungi autentikasi tersedia pada `/api/skills`, termasuk `POST /import/zip`,
+`POST /import/github`, dan `POST /:id/validate`. Paket skill hanya divalidasi dan disimpan sebagai
+metadata/instruksi; file yang diimpor tidak dieksekusi.
 
 ## Persyaratan
 
@@ -60,7 +65,7 @@ REST API untuk platform Agentic AI. Backend dibuat menggunakan Go, Gin, GORM, da
    DB_PASSWORD=your_database_password
    DB_NAME=agentic_ai
 
-   PORT=8080
+   PORT=8081
    GOOGLE_CLIENT_ID=
 
    AI_ENCRYPTION_KEY=your_64_character_encryption_key
@@ -86,7 +91,7 @@ REST API untuk platform Agentic AI. Backend dibuat menggunakan Go, Gin, GORM, da
 
 5. Periksa status API:
 
-   Buka `http://localhost:8080/api/health`. Jika layanan aktif, endpoint akan mengembalikan respons JSON dengan status `ok`.
+   Buka `http://localhost:8081/api/health` (atau port yang Anda isi pada `PORT`). Jika layanan aktif, endpoint akan mengembalikan respons JSON dengan status `ok`.
 
 ## Konfigurasi lingkungan
 
@@ -94,7 +99,7 @@ REST API untuk platform Agentic AI. Backend dibuat menggunakan Go, Gin, GORM, da
 | --- | --- |
 | `DB_HOST`, `DB_PORT` | Host dan port PostgreSQL |
 | `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Kredensial dan nama database |
-| `PORT` | Port HTTP backend; gunakan `8080` untuk konfigurasi frontend lokal saat ini |
+| `PORT` | Port HTTP backend; default `8081`, sama dengan default frontend. Jika memakai port lain (misalnya `8080`), samakan `VITE_API_BASE_URL` di `.env` frontend |
 | `GOOGLE_CLIENT_ID` | Client ID Google OAuth |
 | `AI_ENCRYPTION_KEY` | Kunci untuk mengenkripsi kredensial provider AI |
 | `NARAROUTER_API_KEY` | API key provider AI NaraRouter |

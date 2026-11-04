@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"errors"
 	"net/http"
 	"strconv"
@@ -92,6 +93,11 @@ func DeleteMe(c *gin.Context) {
 		"Pengguna menghapus akun miliknya sendiri (email: "+user.Email+").",
 	)
 
+	// Cloud workspaces: remember where the files are; they are removed after the
+	// database part has committed.
+	var workspaceRefs []string
+	config.DB.Model(&models.CloudWorkspace{}).Where("user_id = ?", user.ID).Pluck("storage_ref", &workspaceRefs)
+
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
 		// Do not allow deletion of the final administrator account.
 		if user.Role == "admin" {
@@ -168,6 +174,25 @@ func DeleteMe(c *gin.Context) {
 		if err := tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
 			return err
 		}
+		// Persistent memories are personal data: remove them with the account.
+		if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.AgentMemory{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserMemorySetting{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.AgentDelegation{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.ExecutionJob{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.WorkspaceToolApproval{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.CloudWorkspace{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Create(&audit).Error; err != nil {
 			return err
 		}
@@ -182,6 +207,14 @@ func DeleteMe(c *gin.Context) {
 		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal menghapus akun. Tidak ada perubahan yang disimpan."})
 		return
+	}
+
+	if storage, _, storageErr := workspaceStorage(); storageErr == nil {
+		for _, ref := range workspaceRefs {
+			if removeErr := storage.Delete(user.ID, ref); removeErr != nil {
+				log.Printf("[WORKSPACE] could not remove files of a deleted account: %v", removeErr)
+			}
+		}
 	}
 
 	c.SetCookie("refresh_token", "", -1, "/", "", false, true)

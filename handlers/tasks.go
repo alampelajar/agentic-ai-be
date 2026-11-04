@@ -40,6 +40,7 @@ type taskRequest struct {
 	Priority    string `json:"priority"`
 	AgentID     *uint  `json:"agent_id"`
 	ModelID     *uint  `json:"model_id"`
+	WorkspaceID *uint  `json:"workspace_id"`
 }
 
 type taskPatchRequest struct {
@@ -50,6 +51,7 @@ type taskPatchRequest struct {
 	Priority    *string `json:"priority"`
 	AgentID     *uint   `json:"agent_id"`
 	ModelID     *uint   `json:"model_id"`
+	WorkspaceID *uint   `json:"workspace_id"`
 }
 
 func normalizeTaskRequest(req *taskRequest) error {
@@ -199,9 +201,10 @@ func CreateTask(c *gin.Context) {
 
 		if err := config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				*req.AgentID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error; err != nil {
@@ -213,10 +216,22 @@ func CreateTask(c *gin.Context) {
 		}
 	}
 
+	if !requireReferencableModel(c, userID, req.ModelID) {
+		return
+	}
+
+	if req.WorkspaceID != nil && *req.WorkspaceID == 0 {
+		req.WorkspaceID = nil
+	}
+	if !requireOwnedWorkspace(c, userID, req.WorkspaceID) {
+		return
+	}
+
 	task := models.Task{
 		UserID:      userID,
 		AgentID:     req.AgentID,
 		ModelID:     req.ModelID,
+		WorkspaceID: req.WorkspaceID,
 		Title:       req.Title,
 		Description: req.Description,
 		Status:      req.Status,
@@ -348,9 +363,10 @@ func UpdateTask(c *gin.Context) {
 
 		if err := config.DB.
 			Where(
-				"id = ? AND is_active = ?",
+				"id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)",
 				*req.AgentID,
 				true,
+				userID,
 			).
 			First(&agent).
 			Error; err != nil {
@@ -365,7 +381,22 @@ func UpdateTask(c *gin.Context) {
 	}
 
 	if req.ModelID != nil {
+		if !requireReferencableModel(c, userID, req.ModelID) {
+			return
+		}
 		task.ModelID = req.ModelID
+	}
+
+	// workspace_id 0 detaches the task from its workspace.
+	if req.WorkspaceID != nil {
+		if *req.WorkspaceID == 0 {
+			task.WorkspaceID = nil
+		} else {
+			if !requireOwnedWorkspace(c, userID, req.WorkspaceID) {
+				return
+			}
+			task.WorkspaceID = req.WorkspaceID
+		}
 	}
 
 	if err := config.DB.Save(&task).Error; err != nil {

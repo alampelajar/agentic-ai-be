@@ -4,6 +4,7 @@ import "time"
 
 type Agent struct {
 	ID uint `json:"id" gorm:"primaryKey"`
+	UserID *uint `json:"user_id,omitempty" gorm:"index"`
 
 	Slug string `json:"slug" gorm:"type:varchar(50);uniqueIndex;not null"`
 
