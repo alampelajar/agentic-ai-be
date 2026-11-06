@@ -325,7 +325,7 @@ func TestComboFallsBackToTheNextModelAndLogsEveryAttempt(t *testing.T) {
 	virtual := f.virtualModel(t, resp)
 	comboHealth.Success(f.mine[0].ID)
 
-	answer, used, trace, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("ignored"))
+	answer, used, trace, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("ignored"))
 	if runErr != nil {
 		t.Fatalf("runErr = %+v", runErr)
 	}
@@ -354,7 +354,7 @@ func TestComboRoundRobinSpreadsRequests(t *testing.T) {
 	comboHealth.Success(f.mine[1].ID)
 
 	for i := 0; i < 4; i++ {
-		if _, _, _, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("x")); runErr != nil {
+		if _, _, _, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("x")); runErr != nil {
 			t.Fatalf("run %d: %+v", i, runErr)
 		}
 	}
@@ -371,7 +371,7 @@ func TestComboReportsWhenEveryModelFails(t *testing.T) {
 	comboHealth.Success(f.mine[0].ID)
 	comboHealth.Success(f.mine[1].ID)
 
-	_, _, trace, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("x"))
+	_, _, trace, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("x"))
 	if runErr == nil || runErr.Status != http.StatusBadGateway || len(trace) != 2 {
 		t.Fatalf("runErr = %+v trace = %+v", runErr, trace)
 	}
@@ -389,10 +389,10 @@ func TestComboSkipsSystemModelsOnceTheDailyAllowanceIsUsed(t *testing.T) {
 	comboHealth.Success(f.system.ID)
 	comboHealth.Success(f.mine[0].ID)
 
-	if _, used, _, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("x")); runErr != nil || used.ID != f.system.ID {
+	if _, used, _, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("x")); runErr != nil || used.ID != f.system.ID {
 		t.Fatalf("the first request may use the system model: %+v %v", runErr, used.ID)
 	}
-	if _, used, _, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("x")); runErr != nil || used.ID != f.mine[0].ID {
+	if _, used, _, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("x")); runErr != nil || used.ID != f.mine[0].ID {
 		t.Fatalf("after the allowance the user's own model must answer: %+v %v", runErr, used.ID)
 	}
 }
@@ -406,7 +406,7 @@ func TestComboRefusesAModelThatBecameForeignAndWhenSwitchedOff(t *testing.T) {
 
 	// Ownership is checked again when the combo runs, not only when it is saved.
 	f.db.Model(&models.AIModel{}).Where("id = ?", f.mine[0].ID).Update("user_id", f.other.ID)
-	if _, _, _, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("x")); runErr == nil || runErr.Status != http.StatusConflict {
+	if _, _, _, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("x")); runErr == nil || runErr.Status != http.StatusConflict {
 		t.Fatalf("a model that is no longer the user's must not be called: %+v", runErr)
 	}
 	if f.provider.models() != "" {
@@ -415,7 +415,62 @@ func TestComboRefusesAModelThatBecameForeignAndWhenSwitchedOff(t *testing.T) {
 
 	f.db.Model(&models.AIModel{}).Where("id = ?", f.mine[0].ID).Update("user_id", f.user.ID)
 	t.Setenv("COMBO_USER_ENABLED", "false")
-	if _, _, _, runErr := runComboRequest(f.user.ID, virtual, chatRequestFor("x")); runErr == nil || runErr.Status != http.StatusForbidden {
+	if _, _, _, runErr := runComboRequest(f.user.ID, 0, virtual, chatRequestFor("x")); runErr == nil || runErr.Status != http.StatusForbidden {
 		t.Fatalf("the admin switch must stop combos: %+v", runErr)
+	}
+}
+
+func TestComboRoundRobinKeepsTheSameModelWithinATask(t *testing.T) {
+	f := newComboFixture(t, nil)
+	_, resp := f.createCombo(t, f.user.ID, map[string]any{"name": "Menempel", "strategy": "round_robin", "agent_ids": []uint{f.agent.ID},
+		"members": []map[string]any{{"ai_model_id": f.mine[0].ID}, {"ai_model_id": f.mine[1].ID}}})
+	virtual := f.virtualModel(t, resp)
+	comboHealth.Success(f.mine[0].ID)
+	comboHealth.Success(f.mine[1].ID)
+
+	// Task 1: the first message takes the first turn, the later ones stay on that model.
+	for i := 0; i < 3; i++ {
+		if _, _, _, runErr := runComboRequest(f.user.ID, 1001, virtual, chatRequestFor("x")); runErr != nil {
+			t.Fatalf("task 1, message %d: %+v", i, runErr)
+		}
+	}
+	// Task 2 takes the next turn, then stays on it.
+	for i := 0; i < 2; i++ {
+		if _, _, _, runErr := runComboRequest(f.user.ID, 1002, virtual, chatRequestFor("x")); runErr != nil {
+			t.Fatalf("task 2, message %d: %+v", i, runErr)
+		}
+	}
+	if f.provider.models() != "mine-a,mine-a,mine-a,mine-b,mine-b" {
+		t.Fatalf("provider saw %q", f.provider.models())
+	}
+}
+
+func TestComboRoundRobinMovesATaskWhenItsModelFails(t *testing.T) {
+	f := newComboFixture(t, nil)
+	_, resp := f.createCombo(t, f.user.ID, map[string]any{"name": "Pindah", "strategy": "round_robin", "agent_ids": []uint{f.agent.ID},
+		"members": []map[string]any{{"ai_model_id": f.mine[0].ID}, {"ai_model_id": f.mine[1].ID}}})
+	virtual := f.virtualModel(t, resp)
+	comboHealth.Success(f.mine[0].ID)
+	comboHealth.Success(f.mine[1].ID)
+
+	if _, _, _, runErr := runComboRequest(f.user.ID, 2001, virtual, chatRequestFor("x")); runErr != nil {
+		t.Fatalf("first: %+v", runErr)
+	}
+	f.provider.mu.Lock()
+	f.provider.failFor = map[string]int{"mine-a": http.StatusBadGateway}
+	f.provider.mu.Unlock()
+	_, used, trace, runErr := runComboRequest(f.user.ID, 2001, virtual, chatRequestFor("x"))
+	if runErr != nil || used.ID != f.mine[1].ID || len(trace) != 2 {
+		t.Fatalf("the task must fall back to the other model: %+v used=%d trace=%+v", runErr, used.ID, trace)
+	}
+	// From then on the task stays on the model that answered.
+	f.provider.mu.Lock()
+	f.provider.asked = nil
+	f.provider.mu.Unlock()
+	if _, _, _, runErr := runComboRequest(f.user.ID, 2001, virtual, chatRequestFor("x")); runErr != nil {
+		t.Fatalf("third: %+v", runErr)
+	}
+	if f.provider.models() != "mine-b" {
+		t.Fatalf("provider saw %q", f.provider.models())
 	}
 }

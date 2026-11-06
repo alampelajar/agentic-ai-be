@@ -102,6 +102,8 @@ type incomingChatRequest struct {
 	ModelID uint              `json:"model_id"`
 	// WorkspaceID is the Cloud Workspace the user selected, if any.
 	WorkspaceID uint `json:"workspace_id"`
+	// TaskID is the conversation this message belongs to; a round-robin combo keeps one model for it.
+	TaskID uint `json:"task_id"`
 }
 
 // ================================================================
@@ -137,6 +139,7 @@ func Chat(c *gin.Context) {
 	var agentID uint
 	var modelID uint
 	var workspaceID uint
+	var taskID uint
 
 	// ============================================================
 	// JSON REQUEST
@@ -164,6 +167,7 @@ func Chat(c *gin.Context) {
 		agentID = body.AgentID
 		modelID = body.ModelID
 		workspaceID = body.WorkspaceID
+		taskID = body.TaskID
 	}
 
 	// ============================================================
@@ -220,6 +224,8 @@ func Chat(c *gin.Context) {
 		workspaceID = parseUintForm(
 			c.PostForm("workspace_id"),
 		)
+
+		taskID = parseUintForm(c.PostForm("task_id"))
 
 		// --------------------------------------------------------
 		// FILES
@@ -731,7 +737,7 @@ AGENT ROLE: DEBUGGING AGENT
 	usedModel := aiModel
 	if isCombo {
 		var comboErr *comboRunError
-		answer, usedModel, comboTrace, comboErr = runComboRequest(userID, aiModel, requestBody)
+		answer, usedModel, comboTrace, comboErr = runComboRequest(userID, taskID, aiModel, requestBody)
 		if comboErr != nil {
 			c.JSON(comboErr.Status, gin.H{"ok": false, "error": comboErr.Message, "detail": comboErr.Detail, "combo_trace": comboTrace})
 			return
