@@ -260,6 +260,28 @@ func Chat(c *gin.Context) {
 		return
 	}
 
+	// A message may start with skill commands such as "/desktop-control". They
+	// name the user's own skills to apply to this message and are not sent on as text.
+	var invokedSkills []services.ActiveSkillContext
+	if commands, commandErr := services.ResolveSkillCommands(config.DB, userID, prompt); commandErr == nil {
+		if len(commands.Unusable) > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"ok":    false,
+				"error": "Skill /" + strings.Join(commands.Unusable, ", /") + " tidak aktif atau tidak valid. Aktifkan dan validasi skill itu di halaman Skills.",
+			})
+			return
+		}
+		invokedSkills = commands.Skills
+		prompt = commands.Message
+		if prompt == "" && len(invokedSkills) > 0 {
+			names := make([]string, 0, len(invokedSkills))
+			for _, skill := range invokedSkills {
+				names = append(names, skill.Name)
+			}
+			prompt = "Gunakan skill " + strings.Join(names, ", ") + " untuk membantu saya."
+		}
+	}
+
 	// A selected Cloud Workspace must be the user's own and ready; anything else
 	// is refused instead of silently chatting without it.
 	if workspaceID != 0 {
@@ -622,7 +644,11 @@ AGENT ROLE: DEBUGGING AGENT
 	if agentID != 0 {
 		activeToolNames = []string{"list-files", "read-file"}
 		if activeSkills, skillErr := services.LoadActiveAgentSkills(config.DB, userID, agentID); skillErr == nil {
+			activeSkills = services.MergeInvokedSkills(activeSkills, invokedSkills)
 			systemPrompt += "\n\n" + services.RenderSkillContext(activeSkills)
+			if notice := services.RenderInvokedSkillNotice(invokedSkills); notice != "" {
+				systemPrompt += "\n" + notice
+			}
 			if len(activeSkills) > 0 {
 				names := services.UnionSkillTools(activeSkills)
 				activeToolNames = append(activeToolNames, names...)
