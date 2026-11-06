@@ -10,7 +10,6 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
 	"agentic-ai-backend/services"
-	"agentic-ai-backend/utils"
 )
 
 // ================================================================
@@ -470,81 +468,16 @@ func Chat(c *gin.Context) {
 	// API KEY
 	// ============================================================
 
+	// A combo has no key of its own: each of its models is resolved when it is called.
+	isCombo := isComboModel(aiModel)
 	var apiKey string
-
-	// ------------------------------------------------------------
-	// SYSTEM PROVIDER
-	// ------------------------------------------------------------
-
-	if aiModel.Provider.IsSystem {
-		// Admin-provisioned system providers store the shared key encrypted
-		// in PostgreSQL. Keep environment-variable fallback for legacy seeds.
-		if strings.TrimSpace(aiModel.Provider.APIKeyEncrypted) != "" {
-			decryptedKey, err := utils.DecryptString(aiModel.Provider.APIKeyEncrypted)
-			if err != nil {
-				log.Printf("[CHAT] ERROR decrypt system provider API key: %v", err)
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"ok": false, "error": "Gagal membaca API key provider sistem.",
-				})
-				return
-			}
-			apiKey = strings.TrimSpace(decryptedKey)
-		} else {
-			switch strings.ToLower(strings.TrimSpace(aiModel.Provider.Type)) {
-			case "nararouter":
-				apiKey = strings.TrimSpace(os.Getenv("NARAROUTER_API_KEY"))
-			case "openrouter":
-				apiKey = strings.TrimSpace(os.Getenv("OPENROUTER_API_KEY"))
-			case "openai":
-				apiKey = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-			case "google":
-				apiKey = strings.TrimSpace(os.Getenv("GOOGLE_API_KEY"))
-				if apiKey == "" {
-					apiKey = strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-				}
-			case "deepseek":
-				apiKey = strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY"))
-			}
-		}
-	} else {
-		// --------------------------------------------------------
-		// USER-OWNED PROVIDER: never use another user's provider.
-		// --------------------------------------------------------
-		if aiModel.Provider.UserID == nil || *aiModel.Provider.UserID != userID {
-			c.JSON(http.StatusForbidden, gin.H{
-				"ok": false, "error": "Provider bukan milik user.",
-			})
+	if !isCombo {
+		resolvedKey, keyErr := resolveProviderAPIKey(aiModel.Provider, userID)
+		if keyErr != nil {
+			c.JSON(keyErr.Status, gin.H{"ok": false, "error": keyErr.Message})
 			return
 		}
-
-		if strings.TrimSpace(aiModel.Provider.APIKeyEncrypted) == "" {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"ok": false, "error": "API key provider belum dikonfigurasi.",
-			})
-			return
-		}
-
-		decryptedKey, err := utils.DecryptString(aiModel.Provider.APIKeyEncrypted)
-		if err != nil {
-			log.Printf("[CHAT] ERROR decrypt user provider API key: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"ok": false, "error": "Gagal membaca API key provider.",
-			})
-			return
-		}
-		apiKey = strings.TrimSpace(decryptedKey)
-	}
-
-	// ============================================================
-	// API KEY VALIDATION
-	// ============================================================
-
-	if apiKey == "" {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"ok":    false,
-			"error": "API key provider belum dikonfigurasi.",
-		})
-		return
+		apiKey = resolvedKey
 	}
 
 	// ============================================================
@@ -793,12 +726,23 @@ AGENT ROLE: DEBUGGING AGENT
 	// CALL PROVIDER
 	// ============================================================
 
-	answer, err :=
-		callAIProviderWithRepair(
+	var answer string
+	var comboTrace []services.ComboAttempt
+	usedModel := aiModel
+	if isCombo {
+		var comboErr *comboRunError
+		answer, usedModel, comboTrace, comboErr = runComboRequest(userID, aiModel, requestBody)
+		if comboErr != nil {
+			c.JSON(comboErr.Status, gin.H{"ok": false, "error": comboErr.Message, "detail": comboErr.Detail, "combo_trace": comboTrace})
+			return
+		}
+	} else {
+		answer, err = callAIProviderWithRepair(
 			apiKey,
 			aiModel.Provider.BaseURL,
 			requestBody,
 		)
+	}
 
 	if err != nil {
 		log.Printf(
@@ -820,19 +764,24 @@ AGENT ROLE: DEBUGGING AGENT
 	// RESPONSE
 	// ============================================================
 
-	c.JSON(http.StatusOK, gin.H{
+	response := gin.H{
 		"ok": true,
 
 		"message": answer,
 
-		"model": aiModel.ModelID,
+		"model": usedModel.ModelID,
 
-		"model_id": aiModel.ID,
+		"model_id": usedModel.ID,
 
-		"provider": aiModel.Provider.Name,
+		"provider": usedModel.Provider.Name,
 
 		"agent_id": agentID,
-	})
+	}
+	if isCombo {
+		response["combo"] = aiModel.Name
+		response["combo_trace"] = comboTrace
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 // ================================================================
@@ -1252,7 +1201,7 @@ func formatProviderHTTPErrorWithDiagnostic(status int, body []byte, diagnostic s
 		if diagnostic != "" {
 			message += "; " + diagnostic
 		}
-		return errors.New(message)
+		return &services.ProviderHTTPError{Status: status, Message: message}
 	}
 	var message string
 	switch status {
@@ -1268,7 +1217,7 @@ func formatProviderHTTPErrorWithDiagnostic(status int, body []byte, diagnostic s
 	if diagnostic != "" {
 		message += "; " + diagnostic
 	}
-	return errors.New(message)
+	return &services.ProviderHTTPError{Status: status, Message: message}
 }
 
 func providerRateLimitDiagnostic(resp *http.Response, body []byte) string {

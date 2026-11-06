@@ -393,6 +393,7 @@ func GetAIProviders(c *gin.Context) {
 			true,
 			userID,
 		).
+		Where("type <> ?", comboProviderType).
 		Order("is_system DESC, name ASC").
 		Find(&providers).
 		Error

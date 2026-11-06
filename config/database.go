@@ -88,6 +88,9 @@ func ConnectDatabase() {
 		&models.CloudWorkspace{},
 		&models.ExecutionJob{},
 		&models.WorkspaceToolApproval{},
+		&models.AIModelCombo{},
+		&models.AIModelComboMember{},
+		&models.AIModelCallLog{},
 	)
 
 	if err != nil {
@@ -99,6 +102,7 @@ func ConnectDatabase() {
 
 	seedAgents()
 	seedSystemProviderAndModels()
+	seedComboProvider()
 
 	fmt.Println("PostgreSQL berhasil terhubung")
 	fmt.Println("Database migration berhasil")
@@ -352,5 +356,25 @@ func assignModelToAllAgents(aiModelID uint) {
 				err,
 			)
 		}
+	}
+}
+
+// seedComboProvider creates the internal provider that every combo's virtual model
+// belongs to. It has no endpoint and no key: a combo only forwards to its members.
+func seedComboProvider() {
+	var provider models.AIProvider
+	err := DB.Where("type = ? AND is_system = ?", "combo", true).First(&provider).Error
+	if err == gorm.ErrRecordNotFound {
+		provider = models.AIProvider{
+			Name: "Combo", Slug: "combo", BaseURL: "internal://combo",
+			Type: "combo", IsSystem: true, IsActive: true,
+		}
+		if err := DB.Create(&provider).Error; err != nil {
+			log.Printf("Gagal membuat provider Combo: %v", err)
+		}
+		return
+	}
+	if err != nil {
+		log.Printf("Gagal membaca provider Combo: %v", err)
 	}
 }

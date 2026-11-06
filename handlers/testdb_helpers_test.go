@@ -34,5 +34,8 @@ func migrateAll(db *gorm.DB) error {
 		&models.WorkspaceToolApproval{},
 		&models.Feedback{},
 		&models.FeedbackReply{},
+		&models.AIModelCombo{},
+		&models.AIModelComboMember{},
+		&models.AIModelCallLog{},
 	)
 }

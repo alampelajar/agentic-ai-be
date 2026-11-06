@@ -437,6 +437,8 @@ func AdminDeleteSystemAIModel(c *gin.Context) {
 		return
 	}
 
+	removeModelFromCombos(tx, aiModel.ID)
+
 	if err := tx.Delete(&aiModel).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menghapus model global."})
 		return
