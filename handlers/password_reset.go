@@ -1,21 +1,13 @@
 package handlers
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
-	"math/big"
 	"net/http"
-	"net/mail"
-	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,14 +17,16 @@ import (
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
+	"agentic-ai-backend/services"
 )
 
+// Forgot password runs on the shared e-mail OTP service (services/email_otp.go)
+// with the "password_reset" purpose. After the code is verified a one-time reset
+// token is issued, and only that token can set the new password.
+
 const (
-	passwordResetCodeTTL   = 5 * time.Minute
-	passwordResetTokenTTL  = 10 * time.Minute
-	passwordResetResendGap = time.Minute
-	passwordResetMaxTries  = 5
-	passwordResetMessage   = "Jika email terdaftar, instruksi reset password akan dikirim."
+	passwordResetTokenTTL = 10 * time.Minute
+	passwordResetMessage  = "Jika email terdaftar, instruksi reset password akan dikirim."
 )
 
 type requestPasswordResetPayload struct {
@@ -51,30 +45,6 @@ type resetPasswordWithOTPPayload struct {
 	ConfirmPassword string `json:"confirm_password" binding:"required"`
 }
 
-func normalizeResetEmail(value string) (string, bool) {
-	email := strings.ToLower(strings.TrimSpace(value))
-	parsed, err := mail.ParseAddress(email)
-	if err != nil || !strings.EqualFold(parsed.Address, email) || email == "" {
-		return "", false
-	}
-	return email, true
-}
-
-func passwordResetPepper() string {
-	pepper := strings.TrimSpace(os.Getenv("PASSWORD_RESET_PEPPER"))
-	if len(pepper) < 32 {
-		return ""
-	}
-	return pepper
-}
-
-func resetEmailConfiguration() (apiKey, sender, pepper string, ok bool) {
-	apiKey = strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
-	sender = strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL"))
-	pepper = passwordResetPepper()
-	return apiKey, sender, pepper, apiKey != "" && sender != "" && pepper != ""
-}
-
 func writeResetUnavailable(c *gin.Context) {
 	c.JSON(http.StatusServiceUnavailable, gin.H{
 		"ok":      false,
@@ -90,14 +60,6 @@ func writeGenericResetResponse(c *gin.Context) {
 	})
 }
 
-func generatePasswordResetOTP() (string, error) {
-	value, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%06d", value.Int64()), nil
-}
-
 func generatePasswordResetToken() (string, error) {
 	value := make([]byte, 32)
 	if _, err := rand.Read(value); err != nil {
@@ -106,82 +68,14 @@ func generatePasswordResetToken() (string, error) {
 	return hex.EncodeToString(value), nil
 }
 
-func hashPasswordResetOTP(email, otp, pepper string) string {
-	mac := hmac.New(sha256.New, []byte(pepper))
-	_, _ = mac.Write([]byte(email + ":" + otp))
-	return hex.EncodeToString(mac.Sum(nil))
-}
-
-func sendPasswordResetEmail(ctx context.Context, apiKey, sender, recipient, otp string) error {
-	message := struct {
-		From    string   `json:"from"`
-		To      []string `json:"to"`
-		Subject string   `json:"subject"`
-		HTML    string   `json:"html"`
-		Text    string   `json:"text"`
-	}{
-		From:    sender,
-		To:      []string{recipient},
-		Subject: "Your Agentic AI password reset code",
-		HTML: fmt.Sprintf(
-			`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#171717">
-<h2 style="margin-bottom:12px">Reset your Agentic AI password</h2>
-<p>Use this verification code to continue resetting your password.</p>
-<p style="font-size:32px;font-weight:700;letter-spacing:8px;padding:16px 0">%s</p>
-<p>This code expires in 5 minutes and can be used only once.</p>
-<p style="color:#737373;font-size:13px">If you did not request this, you can safely ignore this email.</p>
-</div>`,
-			otp,
-		),
-		Text: fmt.Sprintf(
-			"Your Agentic AI password reset code is %s. It expires in 5 minutes and can be used only once. If you did not request this, ignore this email.",
-			otp,
-		),
-	}
-
-	payload, err := json.Marshal(message)
-	if err != nil {
-		return fmt.Errorf("marshal Resend payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(
-		ctx,
-		http.MethodPost,
-		"https://api.resend.com/emails",
-		strings.NewReader(string(payload)),
-	)
-	if err != nil {
-		return fmt.Errorf("create Resend request: %w", err)
-	}
-	req.Header.Set("Authorization", "Bearer "+apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	response, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("send Resend request: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("Resend returned HTTP status %d", response.StatusCode)
-	}
-
-	return nil
-}
-
 // RequestPasswordReset sends a short-lived OTP when the supplied email belongs
 // to an account. The response is deliberately generic to prevent account discovery.
 func RequestPasswordReset(c *gin.Context) {
 	var req requestPasswordResetPayload
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"ok": false, "code": "invalid_email", "message": "Masukkan alamat email yang valid.",
-		})
-		return
+	email, valid := "", false
+	if err := c.ShouldBindJSON(&req); err == nil {
+		email, valid = services.NormalizeEmail(req.Email)
 	}
-
-	email, valid := normalizeResetEmail(req.Email)
 	if !valid {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok": false, "code": "invalid_email", "message": "Masukkan alamat email yang valid.",
@@ -189,9 +83,9 @@ func RequestPasswordReset(c *gin.Context) {
 		return
 	}
 
-	apiKey, sender, pepper, configured := resetEmailConfiguration()
+	apiKey, sender, pepper, configured := services.EmailOTPConfig()
 	if !configured {
-		log.Printf("[password-reset] configuration incomplete: set RESEND_API_KEY, RESEND_FROM_EMAIL, and PASSWORD_RESET_PEPPER")
+		log.Printf("[password-reset] configuration incomplete: set RESEND_API_KEY, RESEND_FROM_EMAIL, and PASSWORD_RESET_PEPPER (or OTP_PEPPER)")
 		writeResetUnavailable(c)
 		return
 	}
@@ -209,73 +103,26 @@ func RequestPasswordReset(c *gin.Context) {
 		return
 	}
 
-	otp, err := generatePasswordResetOTP()
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"ok": false, "code": "request_failed", "message": "Permintaan reset password tidak dapat diproses.",
-		})
-		return
-	}
-
-	now := time.Now()
-	rateLimited := false
-	err = config.DB.Transaction(func(tx *gorm.DB) error {
-		// Serialize requests for the same address in PostgreSQL, including the
-		// first request where a challenge row does not exist yet.
-		if err := tx.Exec(
-			"SELECT pg_advisory_xact_lock(hashtext(?))",
-			"agentic-ai:password-reset:"+email,
-		).Error; err != nil {
-			return err
-		}
-
-		var challenge models.PasswordResetChallenge
-		result := tx.Where("email = ?", email).First(&challenge)
-		found := result.Error == nil
-		if result.Error != nil && !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			return result.Error
-		}
-
-		if found && now.Sub(challenge.LastSentAt) < passwordResetResendGap {
-			rateLimited = true
-			return nil
-		}
-
-		challenge.Email = email
-		challenge.OTPHash = hashPasswordResetOTP(email, otp, pepper)
-		challenge.OTPExpiresAt = now.Add(passwordResetCodeTTL)
-		challenge.Attempts = 0
-		challenge.LastSentAt = now
-		challenge.ResetTokenHash = ""
-		challenge.ResetTokenExpiresAt = nil
-
-		if found {
-			return tx.Save(&challenge).Error
-		}
-		return tx.Create(&challenge).Error
-	})
-	if err != nil {
-		c.Error(err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"ok": false, "code": "request_failed", "message": "Permintaan reset password tidak dapat diproses.",
-		})
-		return
-	}
-	if rateLimited {
+	empty := ""
+	userID := user.ID
+	otp, err := services.IssueOTP(config.DB, models.OTPPurposePasswordReset, email, &userID, &empty, pepper)
+	if errors.Is(err, services.ErrOTPThrottled) {
 		writeGenericResetResponse(c)
 		return
 	}
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"ok": false, "code": "request_failed", "message": "Permintaan reset password tidak dapat diproses.",
+		})
+		return
+	}
 
-	if err := sendPasswordResetEmail(c.Request.Context(), apiKey, sender, email, otp); err != nil {
+	subject, htmlBody, textBody := services.OTPEmail(models.OTPPurposePasswordReset, otp)
+	if err := services.SendEmail(c.Request.Context(), apiKey, sender, email, subject, htmlBody, textBody); err != nil {
 		// Never log email addresses, OTP values, API keys, or provider response bodies.
-		log.Printf("[password-reset] Resend email delivery failed: %v", err)
-		_ = config.DB.Model(&models.PasswordResetChallenge{}).
-			Where("email = ?", email).
-			Updates(map[string]interface{}{
-				"otp_hash":       "",
-				"otp_expires_at": time.Now(),
-			}).Error
+		log.Printf("[password-reset] email delivery failed: %v", err)
+		services.ClearOTP(config.DB, models.OTPPurposePasswordReset, email)
 	}
 
 	writeGenericResetResponse(c)
@@ -285,14 +132,10 @@ func RequestPasswordReset(c *gin.Context) {
 // short-lived token required by the final password-reset request.
 func VerifyPasswordResetOTP(c *gin.Context) {
 	var req verifyPasswordResetPayload
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"ok": false, "code": "invalid_otp", "message": "Kode OTP tidak valid atau kedaluwarsa.",
-		})
-		return
+	email, valid := "", false
+	if err := c.ShouldBindJSON(&req); err == nil {
+		email, valid = services.NormalizeEmail(req.Email)
 	}
-
-	email, valid := normalizeResetEmail(req.Email)
 	if !valid {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok": false, "code": "invalid_otp", "message": "Kode OTP tidak valid atau kedaluwarsa.",
@@ -300,67 +143,34 @@ func VerifyPasswordResetOTP(c *gin.Context) {
 		return
 	}
 
-	pepper := passwordResetPepper()
+	pepper := services.OTPPepper()
 	if pepper == "" {
 		writeResetUnavailable(c)
 		return
 	}
 
-	state := "invalid"
+	state := services.OTPInvalid
 	resetToken := ""
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
-		var challenge models.PasswordResetChallenge
-		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("email = ?", email).
-			First(&challenge)
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			state = "invalid"
-			return nil
+		_, result, err := services.VerifyOTP(tx, models.OTPPurposePasswordReset, email, req.OTP, pepper)
+		if err != nil {
+			return err
 		}
-		if result.Error != nil {
-			return result.Error
+		state = result
+		if result != services.OTPVerified {
+			return nil // commit so the attempt counter is kept
 		}
 
-		now := time.Now()
-		if challenge.Attempts >= passwordResetMaxTries {
-			state = "too_many_attempts"
-			return nil
-		}
-		if challenge.OTPHash == "" || !now.Before(challenge.OTPExpiresAt) {
-			state = "invalid"
-			return nil
-		}
-
-		expected := hashPasswordResetOTP(email, req.OTP, pepper)
-		if !hmac.Equal([]byte(challenge.OTPHash), []byte(expected)) {
-			challenge.Attempts++
-			if err := tx.Save(&challenge).Error; err != nil {
-				return err
-			}
-			if challenge.Attempts >= passwordResetMaxTries {
-				state = "too_many_attempts"
-			} else {
-				state = "invalid"
-			}
-			return nil
-		}
-
-		var err error
 		resetToken, err = generatePasswordResetToken()
 		if err != nil {
 			return err
 		}
-		tokenExpiry := now.Add(passwordResetTokenTTL)
-		challenge.OTPHash = ""
-		challenge.OTPExpiresAt = now
-		challenge.Attempts = 0
-		challenge.ResetTokenHash = hashToken(resetToken)
-		challenge.ResetTokenExpiresAt = &tokenExpiry
-		if err := tx.Save(&challenge).Error; err != nil {
-			return err
-		}
-		state = "verified"
-		return nil
+		return tx.Model(&models.OTPChallenge{}).
+			Where("purpose = ? AND email = ?", models.OTPPurposePasswordReset, email).
+			Updates(map[string]any{
+				"verified_token_hash":       hashToken(resetToken),
+				"verified_token_expires_at": time.Now().Add(passwordResetTokenTTL),
+			}).Error
 	})
 	if err != nil {
 		c.Error(err)
@@ -370,13 +180,13 @@ func VerifyPasswordResetOTP(c *gin.Context) {
 		return
 	}
 
-	if state == "too_many_attempts" {
+	if state == services.OTPTooMany {
 		c.JSON(http.StatusTooManyRequests, gin.H{
 			"ok": false, "code": "too_many_attempts", "message": "Batas percobaan tercapai. Minta kode OTP baru.",
 		})
 		return
 	}
-	if state != "verified" {
+	if state != services.OTPVerified {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok": false, "code": "invalid_otp", "message": "Kode OTP tidak valid atau kedaluwarsa.",
 		})
@@ -390,7 +200,7 @@ func VerifyPasswordResetOTP(c *gin.Context) {
 
 // ResetPasswordWithOTP accepts the one-time reset token issued after OTP
 // verification, updates the password hash, revokes all refresh sessions, and
-// records the completed security event in the audit log.
+// records an audit event.
 func ResetPasswordWithOTP(c *gin.Context) {
 	var req resetPasswordWithOTPPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -400,7 +210,7 @@ func ResetPasswordWithOTP(c *gin.Context) {
 		return
 	}
 
-	email, valid := normalizeResetEmail(req.Email)
+	email, valid := services.NormalizeEmail(req.Email)
 	if !valid || len(req.ResetToken) != 64 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok": false, "code": "invalid_reset_token", "message": "Sesi reset password tidak valid atau kedaluwarsa.",
@@ -443,12 +253,11 @@ func ResetPasswordWithOTP(c *gin.Context) {
 
 	state := "invalid"
 	err = config.DB.Transaction(func(tx *gorm.DB) error {
-		var challenge models.PasswordResetChallenge
+		var challenge models.OTPChallenge
 		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("email = ?", email).
+			Where("purpose = ? AND email = ?", models.OTPPurposePasswordReset, email).
 			First(&challenge)
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-			state = "invalid"
 			return nil
 		}
 		if result.Error != nil {
@@ -456,19 +265,16 @@ func ResetPasswordWithOTP(c *gin.Context) {
 		}
 
 		now := time.Now()
-		expectedTokenHash := hashToken(req.ResetToken)
-		if challenge.ResetTokenHash == "" ||
-			!hmac.Equal([]byte(challenge.ResetTokenHash), []byte(expectedTokenHash)) ||
-			challenge.ResetTokenExpiresAt == nil ||
-			!now.Before(*challenge.ResetTokenExpiresAt) {
-			state = "invalid"
+		if challenge.VerifiedTokenHash == "" ||
+			!hmac.Equal([]byte(challenge.VerifiedTokenHash), []byte(hashToken(req.ResetToken))) ||
+			challenge.VerifiedTokenExpiresAt == nil ||
+			!now.Before(*challenge.VerifiedTokenExpiresAt) {
 			return nil
 		}
 
 		var user models.User
 		if err := tx.Where("email = ?", email).First(&user).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				state = "invalid"
 				return nil
 			}
 			return err
@@ -500,12 +306,11 @@ func ResetPasswordWithOTP(c *gin.Context) {
 			return err
 		}
 
-		challenge.ResetTokenHash = ""
-		challenge.ResetTokenExpiresAt = nil
-		challenge.OTPHash = ""
-		challenge.OTPExpiresAt = now
-		challenge.Attempts = 0
-		if err := tx.Save(&challenge).Error; err != nil {
+		// The token works exactly once.
+		if err := tx.Model(&challenge).Updates(map[string]any{
+			"verified_token_hash":       "",
+			"verified_token_expires_at": nil,
+		}).Error; err != nil {
 			return err
 		}
 
