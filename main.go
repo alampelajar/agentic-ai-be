@@ -471,6 +471,15 @@ func main() {
 			"/ai/models/:id",
 			handlers.DeleteAIModel,
 		)
+
+		// ========================================================
+		// COMBOS (a model made of several models, owned by the user)
+		// ========================================================
+
+		protected.GET("/ai/combos", handlers.GetCombos)
+		protected.POST("/ai/combos", handlers.CreateCombo)
+		protected.PUT("/ai/combos/:id", handlers.UpdateCombo)
+		protected.DELETE("/ai/combos/:id", handlers.DeleteCombo)
 	}
 
 	// ============================================================

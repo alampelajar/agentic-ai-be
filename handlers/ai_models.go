@@ -200,6 +200,10 @@ func CreateAIModel(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"ok": false, "error": "Provider tidak ditemukan atau tidak dapat digunakan."})
 			return
 		}
+		if strings.EqualFold(provider.Type, comboProviderType) {
+			c.JSON(http.StatusForbidden, gin.H{"ok": false, "error": "Provider ini khusus combo dan tidak dapat dipakai untuk model."})
+			return
+		}
 
 		encryptedAPIKey, encryptErr := utils.EncryptString(req.APIKey)
 		if encryptErr != nil {
@@ -317,6 +321,7 @@ func UpdateAIModel(c *gin.Context) {
 			userID,
 			false,
 		).
+		Scopes(excludeComboModels).
 		First(&aiModel).
 		Error
 
@@ -565,6 +570,7 @@ func RemoveModelFromAgent(c *gin.Context) {
 			userID,
 			false,
 		).
+		Scopes(excludeComboModels).
 		First(&aiModel).
 		Error
 
@@ -658,6 +664,7 @@ func DeleteAIModel(c *gin.Context) {
 			userID,
 			false,
 		).
+		Scopes(excludeComboModels).
 		First(&aiModel).
 		Error
 
@@ -708,6 +715,8 @@ func DeleteAIModel(c *gin.Context) {
 	// DELETE MODEL
 	// ============================================================
 
+	removeModelFromCombos(tx, aiModel.ID)
+
 	if err := tx.Delete(&aiModel).Error; err != nil {
 		tx.Rollback()
 
@@ -744,4 +753,10 @@ func DeleteAIModel(c *gin.Context) {
 		"ok":      true,
 		"message": "Model berhasil dihapus.",
 	})
+}
+
+// excludeComboModels keeps the generic model endpoints away from the virtual model
+// of a combo: a combo is changed and deleted through its own endpoints.
+func excludeComboModels(db *gorm.DB) *gorm.DB {
+	return db.Where("provider_id NOT IN (?)", config.DB.Model(&models.AIProvider{}).Select("id").Where("type = ?", comboProviderType))
 }
