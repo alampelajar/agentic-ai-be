@@ -13,6 +13,7 @@ import (
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/internal/httpguard"
 	"agentic-ai-backend/models"
+	"agentic-ai-backend/services"
 	"agentic-ai-backend/utils"
 )
 
@@ -47,6 +48,17 @@ func hashToken(token string) string {
 }
 
 func Register(c *gin.Context) {
+	// When e-mail verification is configured, accounts must go through
+	// /register/request and /register/verify; this route would skip it.
+	if _, _, _, ok := services.EmailOTPConfig(); ok {
+		c.JSON(http.StatusGone, gin.H{
+			"ok":      false,
+			"code":    "register_requires_otp",
+			"message": "Pendaftaran memerlukan verifikasi email.",
+		})
+		return
+	}
+
 	var req RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -198,6 +198,11 @@ func main() {
 			handlers.Logout,
 		)
 
+		// Sign-up confirmed by an e-mailed code. Nothing is created until verify.
+		auth.POST("/register/request", registerLimit, handlers.RequestRegisterOTP)
+		auth.POST("/register/resend", resetLimit, handlers.ResendRegisterOTP)
+		auth.POST("/register/verify", resetLimit, handlers.VerifyRegisterOTP)
+
 		auth.POST(
 			"/forgot-password/request",
 			resetLimit,
@@ -231,6 +236,10 @@ func main() {
 	// ============================================================
 	// USER FEEDBACK
 	// ============================================================
+	protected.POST("/me/email/change/request", resetLimit, handlers.RequestChangeEmailOTP)
+	protected.POST("/me/email/change/resend", resetLimit, handlers.ResendChangeEmailOTP)
+	protected.POST("/me/email/change/verify", resetLimit, handlers.VerifyChangeEmailOTP)
+
 	protected.GET("/feedback", handlers.GetMyFeedback)
 	protected.POST("/feedback", handlers.CreateFeedback)
 	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
