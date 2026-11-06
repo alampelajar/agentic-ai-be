@@ -37,30 +37,39 @@ func LoadActiveAgentSkills(db *gorm.DB, userID, agentID uint) ([]ActiveSkillCont
 	}
 	result := make([]ActiveSkillContext, 0, len(rows))
 	for _, row := range rows {
-		s := row.Skill
-		if s.UserID != userID || !s.IsEnabled || (s.Status != "installed" && s.Status != "enabled") || len(s.Versions) == 0 {
-			continue
+		if ctx, ok := skillContextFor(userID, row.Skill); ok {
+			result = append(result, ctx)
 		}
-		v := s.Versions[0]
-		if v.ValidationStatus != "valid" {
-			continue
-		}
-		var requested []string
-		if json.Unmarshal([]byte(v.RequestedTools), &requested) != nil {
-			continue
-		}
-		allowed := make([]string, 0, len(requested))
-		for _, tool := range requested {
-			canonical := CanonicalToolName(tool)
-			if AllowedSkillTools[strings.TrimSpace(tool)] || AllowedSkillTools[canonical] {
-				if _, exists := ToolRegistry[canonical]; exists {
-					allowed = append(allowed, canonical)
-				}
-			}
-		}
-		result = append(result, ActiveSkillContext{SkillID: s.ID, Name: s.Name, VersionID: v.ID, Version: v.Version, Instructions: v.Instructions, Tools: allowed})
 	}
 	return result, nil
+}
+
+// skillContextFor turns a loaded skill (with its versions, newest first) into
+// the context the chat may use. It is the single place that decides whether a
+// skill is usable: it must belong to the user, be enabled and installed, and its
+// latest version must be valid. Only tools both requested and allowed are kept.
+func skillContextFor(userID uint, s models.Skill) (ActiveSkillContext, bool) {
+	if s.UserID != userID || !s.IsEnabled || (s.Status != "installed" && s.Status != "enabled") || len(s.Versions) == 0 {
+		return ActiveSkillContext{}, false
+	}
+	v := s.Versions[0]
+	if v.ValidationStatus != "valid" {
+		return ActiveSkillContext{}, false
+	}
+	var requested []string
+	if json.Unmarshal([]byte(v.RequestedTools), &requested) != nil {
+		return ActiveSkillContext{}, false
+	}
+	allowed := make([]string, 0, len(requested))
+	for _, tool := range requested {
+		canonical := CanonicalToolName(tool)
+		if AllowedSkillTools[strings.TrimSpace(tool)] || AllowedSkillTools[canonical] {
+			if _, exists := ToolRegistry[canonical]; exists {
+				allowed = append(allowed, canonical)
+			}
+		}
+	}
+	return ActiveSkillContext{SkillID: s.ID, Name: s.Name, VersionID: v.ID, Version: v.Version, Instructions: v.Instructions, Tools: allowed}, true
 }
 
 // UnionSkillTools is the tool allowlist an agent gets from its active skills:
