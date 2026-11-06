@@ -192,3 +192,92 @@ func TestRunComboStopsStartingAttemptsAfterTheBudget(t *testing.T) {
 		t.Fatalf("calls = %d err = %v", calls, err)
 	}
 }
+
+func TestStickyChoicesRememberOneModelPerTaskAndForgetAfterTheTTL(t *testing.T) {
+	sticky := NewStickyChoices()
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	sticky.now = func() time.Time { return clock }
+
+	if _, ok := sticky.Get(1, 1, 0); ok {
+		t.Fatal("a request without a task has nothing to remember")
+	}
+	sticky.Set(1, 1, 0, 9) // no task: ignored
+	sticky.Set(1, 1, 5, 9)
+	if id, ok := sticky.Get(1, 1, 5); !ok || id != 9 {
+		t.Fatalf("got %d %v", id, ok)
+	}
+	if _, ok := sticky.Get(2, 1, 5); ok {
+		t.Fatal("another user must not share the choice")
+	}
+	if _, ok := sticky.Get(1, 2, 5); ok {
+		t.Fatal("another combo must not share the choice")
+	}
+	clock = clock.Add(7 * time.Hour)
+	if _, ok := sticky.Get(1, 1, 5); ok {
+		t.Fatal("the choice must expire")
+	}
+}
+
+func TestStickyChoicesStayWithinTheirLimit(t *testing.T) {
+	sticky := NewStickyChoices()
+	sticky.max = 8
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	sticky.now = func() time.Time { clock = clock.Add(time.Second); return clock }
+	for task := uint(1); task <= 40; task++ {
+		sticky.Set(1, 1, task, 3)
+	}
+	if len(sticky.entries) > 8 {
+		t.Fatalf("kept %d entries, the limit is 8", len(sticky.entries))
+	}
+	if _, ok := sticky.Get(1, 1, 40); !ok {
+		t.Fatal("the newest task must still be remembered")
+	}
+}
+
+func TestOrderTargetsForTaskKeepsTheModelOfTheTaskWithoutUsingATurn(t *testing.T) {
+	members := targets("a", "b", "c")
+	rr := NewRoundRobin()
+	sticky := NewStickyChoices()
+	sticky.Set(1, 7, 100, 2) // model b answered task 100
+
+	got := OrderTargetsForTask(models.ComboStrategyRoundRobin, 7, members, rr, nil, sticky, 1, 100)
+	if names(got) != "b,a,c" {
+		t.Fatalf("the task's model must come first, then the rest in member order, got %s", names(got))
+	}
+	// No turn was used, so the next task still starts at the beginning of the rotation.
+	if first := OrderTargetsForTask(models.ComboStrategyRoundRobin, 7, members, rr, nil, sticky, 1, 200)[0].Name; first != "a" {
+		t.Fatalf("a new task starts the rotation, got %s", first)
+	}
+	if first := OrderTargetsForTask(models.ComboStrategyRoundRobin, 7, members, rr, nil, sticky, 1, 201)[0].Name; first != "b" {
+		t.Fatalf("and the next new task takes the next turn, got %s", first)
+	}
+}
+
+func TestOrderTargetsForTaskLetsGoOfAModelThatIsRestingOrGone(t *testing.T) {
+	members := targets("a", "b", "c")
+	sticky := NewStickyChoices()
+	sticky.Set(1, 7, 100, 2)
+
+	health := NewComboHealth()
+	for i := 0; i < 3; i++ {
+		health.Failure(2)
+	}
+	got := OrderTargetsForTask(models.ComboStrategyRoundRobin, 7, members, NewRoundRobin(), health, sticky, 1, 100)
+	if names(got) != "a,c,b" {
+		t.Fatalf("a resting model must not be kept first, got %s", names(got))
+	}
+
+	sticky.Set(1, 7, 101, 99) // a model that is no longer a member
+	if first := OrderTargetsForTask(models.ComboStrategyRoundRobin, 7, members, NewRoundRobin(), nil, sticky, 1, 101)[0].Name; first != "a" {
+		t.Fatalf("a removed model falls back to the rotation, got %s", first)
+	}
+}
+
+func TestOrderTargetsForTaskDoesNothingSpecialForFallback(t *testing.T) {
+	sticky := NewStickyChoices()
+	sticky.Set(1, 7, 100, 3)
+	got := OrderTargetsForTask(models.ComboStrategyFallback, 7, targets("a", "b", "c"), NewRoundRobin(), nil, sticky, 1, 100)
+	if names(got) != "a,b,c" {
+		t.Fatalf("fallback is already deterministic, got %s", names(got))
+	}
+}

@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -155,6 +156,11 @@ func OrderTargets(strategy string, comboID uint, members []ComboTarget, rr *Roun
 		}
 		ordered = rotated
 	}
+	return restingLast(ordered, health)
+}
+
+// restingLast moves models that are resting to the back, keeping the order otherwise.
+func restingLast(ordered []ComboTarget, health *ComboHealth) []ComboTarget {
 	if health == nil {
 		return ordered
 	}
@@ -168,6 +174,100 @@ func OrderTargets(strategy string, comboID uint, members []ComboTarget, rr *Roun
 		}
 	}
 	return append(ready, resting...)
+}
+
+// ---------------------------------------------------------------------------
+// Sticky: one task keeps the model that answered it.
+// ---------------------------------------------------------------------------
+
+type stickyKey struct{ user, combo, task uint }
+
+type stickyEntry struct {
+	model uint
+	at    time.Time
+}
+
+// StickyChoices remembers, per user, combo and task, which model answered last, so a
+// round-robin combo does not change model in the middle of one conversation.
+type StickyChoices struct {
+	mu      sync.Mutex
+	entries map[stickyKey]stickyEntry
+	ttl     time.Duration
+	max     int
+	now     func() time.Time
+}
+
+func NewStickyChoices() *StickyChoices {
+	return &StickyChoices{entries: map[stickyKey]stickyEntry{}, ttl: 6 * time.Hour, max: 2000, now: time.Now}
+}
+
+// Get returns the model chosen for the task, if one was chosen recently.
+func (c *StickyChoices) Get(userID, comboID, taskID uint) (uint, bool) {
+	if taskID == 0 {
+		return 0, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.entries[stickyKey{userID, comboID, taskID}]
+	if !ok || c.now().Sub(entry.at) > c.ttl {
+		return 0, false
+	}
+	return entry.model, true
+}
+
+// Set records the model that answered the task.
+func (c *StickyChoices) Set(userID, comboID, taskID, modelID uint) {
+	if taskID == 0 {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	now := c.now()
+	if len(c.entries) >= c.max {
+		for key, entry := range c.entries {
+			if now.Sub(entry.at) > c.ttl {
+				delete(c.entries, key)
+			}
+		}
+		// Still full of recent tasks: forget the oldest quarter.
+		if len(c.entries) >= c.max {
+			type aged struct {
+				key stickyKey
+				at  time.Time
+			}
+			all := make([]aged, 0, len(c.entries))
+			for key, entry := range c.entries {
+				all = append(all, aged{key, entry.at})
+			}
+			sort.Slice(all, func(i, j int) bool { return all[i].at.Before(all[j].at) })
+			for _, item := range all[:len(all)/4+1] {
+				delete(c.entries, item.key)
+			}
+		}
+	}
+	c.entries[stickyKey{userID, comboID, taskID}] = stickyEntry{model: modelID, at: now}
+}
+
+// OrderTargetsForTask is OrderTargets for a request that belongs to a task. A round-robin
+// combo keeps using the model that answered the task before, as long as it is still a member
+// and not resting, and then does not use up a turn of the rotation. The rest follow as usual,
+// so a failure still falls back.
+func OrderTargetsForTask(strategy string, comboID uint, members []ComboTarget, rr *RoundRobin, health *ComboHealth, sticky *StickyChoices, userID, taskID uint) []ComboTarget {
+	if strategy == models.ComboStrategyRoundRobin && sticky != nil {
+		if modelID, ok := sticky.Get(userID, comboID, taskID); ok && (health == nil || !health.Resting(modelID)) {
+			for index, member := range members {
+				if member.ModelDBID != modelID {
+					continue
+				}
+				ordered := make([]ComboTarget, 0, len(members))
+				ordered = append(ordered, member)
+				ordered = append(ordered, members[:index]...)
+				ordered = append(ordered, members[index+1:]...)
+				return restingLast(ordered, health)
+			}
+		}
+	}
+	return OrderTargets(strategy, comboID, members, rr, health)
 }
 
 // ---------------------------------------------------------------------------

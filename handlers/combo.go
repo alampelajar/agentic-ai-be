@@ -45,6 +45,7 @@ func comboSystemDaily() int { return envInt("COMBO_SYSTEM_DAILY_LIMIT", 300) }
 var (
 	comboHealth     = services.NewComboHealth()
 	comboRoundRobin = services.NewRoundRobin()
+	comboSticky     = services.NewStickyChoices()
 )
 
 func isComboModel(model models.AIModel) bool {
@@ -92,7 +93,7 @@ func systemCallsToday(userID uint) int64 {
 	return count
 }
 
-func runComboRequest(userID uint, comboModel models.AIModel, request chatRequest) (string, models.AIModel, []services.ComboAttempt, *comboRunError) {
+func runComboRequest(userID uint, taskID uint, comboModel models.AIModel, request chatRequest) (string, models.AIModel, []services.ComboAttempt, *comboRunError) {
 	if !comboFeatureEnabled() {
 		return "", models.AIModel{}, nil, &comboRunError{Status: http.StatusForbidden, Message: "Fitur combo sedang dinonaktifkan oleh admin."}
 	}
@@ -128,7 +129,7 @@ func runComboRequest(userID uint, comboModel models.AIModel, request chatRequest
 		return "", models.AIModel{}, nil, &comboRunError{Status: http.StatusConflict, Message: message}
 	}
 
-	ordered := services.OrderTargets(combo.Strategy, combo.ID, targets, comboRoundRobin, comboHealth)
+	ordered := services.OrderTargetsForTask(combo.Strategy, combo.ID, targets, comboRoundRobin, comboHealth, comboSticky, userID, taskID)
 	limits := services.ComboLimits{MaxAttempts: combo.MaxAttempts, Budget: 120 * time.Second}
 
 	outcome, runErr := services.RunCombo(ordered, limits, comboHealth, func(target services.ComboTarget) (string, error) {
@@ -158,6 +159,9 @@ func runComboRequest(userID uint, comboModel models.AIModel, request chatRequest
 	if runErr != nil {
 		log.Printf("[COMBO] %s gagal: %v", combo.Name, runErr)
 		return "", models.AIModel{}, outcome.Attempts, &comboRunError{Status: http.StatusBadGateway, Message: "Semua model dalam combo gagal menjawab.", Detail: runErr.Error()}
+	}
+	if combo.Strategy == models.ComboStrategyRoundRobin {
+		comboSticky.Set(userID, combo.ID, taskID, outcome.Used.ModelDBID)
 	}
 	return outcome.Answer, byID[outcome.Used.ModelDBID], outcome.Attempts, nil
 }
