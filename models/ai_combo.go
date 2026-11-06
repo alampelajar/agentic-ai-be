@@ -6,6 +6,8 @@ import "time"
 const (
 	ComboStrategyFallback   = "fallback"
 	ComboStrategyRoundRobin = "round_robin"
+	// ComboStrategyPipeline runs every model in order: each one drafts, the last one answers.
+	ComboStrategyPipeline = "pipeline"
 )
 
 // AIModelCombo is always owned by a user: only users build combos. Each combo has a

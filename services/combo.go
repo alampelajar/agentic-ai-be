@@ -23,6 +23,8 @@ type ComboTarget struct {
 type ComboAttempt struct {
 	ModelDBID  uint               `json:"model_id"`
 	Name       string             `json:"name"`
+	// Stage is "draft" or "final" in a pipeline and empty otherwise.
+	Stage      string             `json:"stage,omitempty"`
 	Status     string             `json:"status"` // ok, failed or skipped
 	ErrorClass ProviderErrorClass `json:"error_class,omitempty"`
 	Reason     string             `json:"reason,omitempty"`
@@ -349,4 +351,82 @@ func summarizeAttempts(attempts []ComboAttempt) string {
 		}
 	}
 	return strings.Join(parts, "; ")
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline: every model works on the request one after the other.
+// ---------------------------------------------------------------------------
+
+// Pipeline stages. The last model of a pipeline is the one that answers the person (and the
+// only one that may call tools); the ones before it only write drafts.
+const (
+	PipelineStageDraft = "draft"
+	PipelineStageFinal = "final"
+)
+
+// RunPipeline calls the stages in order. Each call gets the draft the previous successful stage
+// wrote (empty for the first). A draft stage that fails or is resting is skipped, so the pipeline
+// gets shorter instead of failing; the final stage failing fails the request. Unlike RunCombo it
+// does not stop at the first answer: every stage runs, so the budget only stops draft stages.
+func RunPipeline(stages []ComboTarget, limits ComboLimits, health *ComboHealth, call func(target ComboTarget, final bool, draft string) (string, error)) (ComboOutcome, error) {
+	outcome := ComboOutcome{}
+	if len(stages) == 0 {
+		return outcome, fmt.Errorf("%w (tidak ada model)", ErrComboExhausted)
+	}
+	start := time.Now()
+	draft := ""
+	for index, target := range stages {
+		final := index == len(stages)-1
+		stage := PipelineStageDraft
+		if final {
+			stage = PipelineStageFinal
+		}
+		if !final {
+			if health != nil && health.Resting(target.ModelDBID) {
+				outcome.Attempts = append(outcome.Attempts, ComboAttempt{ModelDBID: target.ModelDBID, Name: target.Name, Stage: stage, Status: "skipped", Reason: "model sedang istirahat"})
+				continue
+			}
+			if limits.Budget > 0 && time.Since(start) > limits.Budget {
+				outcome.Attempts = append(outcome.Attempts, ComboAttempt{ModelDBID: target.ModelDBID, Name: target.Name, Stage: stage, Status: "skipped", Reason: "waktu combo habis"})
+				continue
+			}
+		}
+		began := time.Now()
+		answer, err := call(target, final, draft)
+		attempt := ComboAttempt{ModelDBID: target.ModelDBID, Name: target.Name, Stage: stage, LatencyMS: time.Since(began).Milliseconds()}
+		if err == nil && final && strings.TrimSpace(answer) == "" {
+			err = errors.New("jawaban kosong")
+		}
+		if err != nil {
+			attempt.Status = "failed"
+			attempt.ErrorClass = ClassifyProviderError(err)
+			attempt.Reason = shortReason(err)
+			outcome.Attempts = append(outcome.Attempts, attempt)
+			if health != nil && attempt.ErrorClass == ErrorRetryable {
+				health.Failure(target.ModelDBID)
+			}
+			if final {
+				return outcome, fmt.Errorf("%w (%s)", ErrComboExhausted, summarizeAttempts(outcome.Attempts))
+			}
+			continue
+		}
+		if !final && strings.TrimSpace(answer) == "" {
+			attempt.Status = "failed"
+			attempt.Reason = "draf kosong"
+			outcome.Attempts = append(outcome.Attempts, attempt)
+			continue
+		}
+		attempt.Status = "ok"
+		outcome.Attempts = append(outcome.Attempts, attempt)
+		if health != nil {
+			health.Success(target.ModelDBID)
+		}
+		if final {
+			outcome.Answer = answer
+			outcome.Used = target
+			return outcome, nil
+		}
+		draft = answer
+	}
+	return outcome, fmt.Errorf("%w (%s)", ErrComboExhausted, summarizeAttempts(outcome.Attempts))
 }

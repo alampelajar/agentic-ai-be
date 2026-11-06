@@ -26,20 +26,29 @@ type comboFakeProvider struct {
 	server *httptest.Server
 	mu     sync.Mutex
 	asked  []string
+	// withTools lists the models whose request carried tool definitions; last holds each model's last messages.
+	withTools []string
+	last      map[string][]chatMessage
 	// failFor lists model ids that answer with this status instead of a completion.
 	failFor map[string]int
 }
 
 func newComboFakeProvider(t *testing.T, failFor map[string]int) *comboFakeProvider {
 	t.Helper()
-	fp := &comboFakeProvider{failFor: failFor}
+	fp := &comboFakeProvider{failFor: failFor, last: map[string][]chatMessage{}}
 	fp.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			Model string `json:"model"`
+			Model    string            `json:"model"`
+			Tools    []json.RawMessage `json:"tools"`
+			Messages []chatMessage     `json:"messages"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		fp.mu.Lock()
 		fp.asked = append(fp.asked, body.Model)
+		if len(body.Tools) > 0 {
+			fp.withTools = append(fp.withTools, body.Model)
+		}
+		fp.last[body.Model] = body.Messages
 		status := fp.failFor[body.Model]
 		fp.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
