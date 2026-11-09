@@ -165,6 +165,10 @@ func purgeUserAccount(tx *gorm.DB, user *models.User, audit *models.AuditLog) er
 	if err := tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
 		return err
 	}
+	// Design projects are personal data: remove them with the account.
+	if err := tx.Where("user_id = ?", user.ID).Delete(&models.DesignProject{}).Error; err != nil {
+		return err
+	}
 	// Persistent memories are personal data: remove them with the account.
 	if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.AgentMemory{}).Error; err != nil {
 		return err

@@ -318,6 +318,13 @@ func main() {
 		protected.POST("/memories", handlers.CreateMemory)
 		protected.PATCH("/memories/:id", handlers.UpdateMemory)
 		protected.DELETE("/memories/:id", handlers.DeleteMemory)
+
+		// Design Studio
+		protected.GET("/design-projects", handlers.GetDesignProjects)
+		protected.POST("/design-projects", handlers.CreateDesignProject)
+		protected.GET("/design-projects/:id", handlers.GetDesignProject)
+		protected.PUT("/design-projects/:id", handlers.UpdateDesignProject)
+		protected.DELETE("/design-projects/:id", handlers.DeleteDesignProject)
 		protected.GET("/workspaces", handlers.GetWorkspaces)
 		protected.POST("/workspaces", importLimit, handlers.CreateWorkspace)
 		protected.GET("/workspaces/:id", handlers.GetWorkspace)
