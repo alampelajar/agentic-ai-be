@@ -226,6 +226,9 @@ func main() {
 		)
 	}
 
+	// GitHub sends the browser back here; the one-time state says whose connection it is.
+	api.GET("/integrations/github/callback", otpLimit(httpguard.ByIP), handlers.GitHubCallback)
+
 	// ============================================================
 	// PROTECTED ROUTES
 	// ============================================================
@@ -240,6 +243,9 @@ func main() {
 	// ============================================================
 	// USER FEEDBACK
 	// ============================================================
+	protected.GET("/integrations/github", handlers.GetGitHubConnection)
+	protected.POST("/integrations/github/connect", otpLimit(httpguard.ByUserOrIP), handlers.StartGitHubConnect)
+	protected.DELETE("/integrations/github", otpLimit(httpguard.ByUserOrIP), handlers.DeleteGitHubConnection)
 	protected.POST("/me/delete/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestDeleteAccountOTP)
 	protected.POST("/me/email/change/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestChangeEmailOTP)
 	protected.POST("/me/email/change/resend", otpLimit(httpguard.ByUserOrIP), handlers.ResendChangeEmailOTP)
