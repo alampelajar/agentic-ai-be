@@ -119,7 +119,11 @@ func main() {
 	registerLimit := httpguard.RateLimit(httpguard.NewLimiter(3, 5), httpguard.ByIP)
 	adminLoginLimit := httpguard.RateLimit(httpguard.NewLimiter(5, 5), httpguard.ByIP)
 	refreshLimit := httpguard.RateLimit(httpguard.NewLimiter(60, 20), httpguard.ByIP)
-	resetLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 10), httpguard.ByIP)
+	// Each e-mail code endpoint gets a bucket of its own (10 a minute). Before sign-in the
+	// key is the address; after it, the user, so people behind one address do not share it.
+	otpLimit := func(key func(*gin.Context) string) gin.HandlerFunc {
+		return httpguard.RateLimit(httpguard.NewLimiter(10, 10), key)
+	}
 	userLimit := httpguard.RateLimit(httpguard.NewLimiter(300, 60), httpguard.ByUserOrIP)
 	chatLimit := httpguard.RateLimit(httpguard.NewLimiter(30, 10), httpguard.ByUserOrIP)
 	importLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 5), httpguard.ByUserOrIP)
@@ -200,24 +204,24 @@ func main() {
 
 		// Sign-up confirmed by an e-mailed code. Nothing is created until verify.
 		auth.POST("/register/request", registerLimit, handlers.RequestRegisterOTP)
-		auth.POST("/register/resend", resetLimit, handlers.ResendRegisterOTP)
-		auth.POST("/register/verify", resetLimit, handlers.VerifyRegisterOTP)
+		auth.POST("/register/resend", otpLimit(httpguard.ByIP), handlers.ResendRegisterOTP)
+		auth.POST("/register/verify", otpLimit(httpguard.ByIP), handlers.VerifyRegisterOTP)
 
 		auth.POST(
 			"/forgot-password/request",
-			resetLimit,
+			otpLimit(httpguard.ByIP),
 			handlers.RequestPasswordReset,
 		)
 
 		auth.POST(
 			"/forgot-password/verify",
-			resetLimit,
+			otpLimit(httpguard.ByIP),
 			handlers.VerifyPasswordResetOTP,
 		)
 
 		auth.POST(
 			"/forgot-password/reset",
-			resetLimit,
+			otpLimit(httpguard.ByIP),
 			handlers.ResetPasswordWithOTP,
 		)
 	}
@@ -236,9 +240,10 @@ func main() {
 	// ============================================================
 	// USER FEEDBACK
 	// ============================================================
-	protected.POST("/me/email/change/request", resetLimit, handlers.RequestChangeEmailOTP)
-	protected.POST("/me/email/change/resend", resetLimit, handlers.ResendChangeEmailOTP)
-	protected.POST("/me/email/change/verify", resetLimit, handlers.VerifyChangeEmailOTP)
+	protected.POST("/me/delete/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestDeleteAccountOTP)
+	protected.POST("/me/email/change/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestChangeEmailOTP)
+	protected.POST("/me/email/change/resend", otpLimit(httpguard.ByUserOrIP), handlers.ResendChangeEmailOTP)
+	protected.POST("/me/email/change/verify", otpLimit(httpguard.ByUserOrIP), handlers.VerifyChangeEmailOTP)
 
 	protected.GET("/feedback", handlers.GetMyFeedback)
 	protected.POST("/feedback", handlers.CreateFeedback)

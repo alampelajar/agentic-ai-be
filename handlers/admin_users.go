@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -539,20 +540,26 @@ func AdminDeleteUser(c *gin.Context) {
 		user.Name,
 		"Akun pengguna \""+user.Email+"\" dihapus oleh administrator.",
 	)
+	workspaceRefs := userWorkspaceRefs(user.ID)
 	err = config.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&audit).Error; err != nil {
-			return err
-		}
-		return tx.Unscoped().Delete(&user).Error
+		return purgeUserAccount(tx, &user, &audit)
 	})
+	if errors.Is(err, errCannotDeleteLastAdmin) {
+		c.JSON(http.StatusConflict, gin.H{
+			"ok":      false,
+			"message": "Akun admin terakhir tidak dapat dihapus",
+		})
+		return
+	}
 	if err != nil {
-
+		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal menghapus user",
 		})
 		return
 	}
+	removeWorkspaceFiles(user.ID, workspaceRefs)
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok":      true,

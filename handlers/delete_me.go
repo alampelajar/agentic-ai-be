@@ -1,10 +1,11 @@
 package handlers
 
 import (
-	"log"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -12,12 +13,15 @@ import (
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
+	"agentic-ai-backend/services"
 )
 
-var errCannotDeleteLastAdmin = errors.New("cannot delete the last admin account")
-
+// DeleteAccountRequest confirms account deletion with either the account password or,
+// for accounts that signed in with Google and never had a password, a code e-mailed
+// to the account address (see RequestDeleteAccountOTP).
 type DeleteAccountRequest struct {
 	Password string `json:"password"`
+	OTP      string `json:"otp"`
 }
 
 // VerifyDeleteAccountPassword checks the authenticated user's password before the
@@ -53,6 +57,27 @@ func VerifyDeleteAccountPassword(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Kata sandi berhasil diverifikasi"})
 }
 
+// RequestDeleteAccountOTP e-mails a code to the signed-in user's own address. It is the
+// way to confirm deleting an account that has no known password (Google sign-in).
+func RequestDeleteAccountOTP(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	var user models.User
+	if err := config.DB.First(&user, userID).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "Sesi pengguna tidak valid"})
+		return
+	}
+
+	empty := ""
+	if !deliverOTP(c, models.OTPPurposeDeleteAccount, strings.ToLower(user.Email), &userID, &empty) {
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok":           true,
+		"message":      "Kode verifikasi dikirim ke email akun Anda.",
+		"resend_after": int(services.OTPResendGap.Seconds()),
+	})
+}
+
 // DeleteMe permanently deletes only the authenticated user's account and private
 // resources. Shared system providers, models, and agents are preserved.
 func DeleteMe(c *gin.Context) {
@@ -63,8 +88,8 @@ func DeleteMe(c *gin.Context) {
 	}
 
 	var req DeleteAccountRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.Password == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Kata sandi wajib diisi"})
+	if err := c.ShouldBindJSON(&req); err != nil || (req.Password == "" && strings.TrimSpace(req.OTP) == "") {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Kata sandi atau kode verifikasi wajib diisi"})
 		return
 	}
 
@@ -78,9 +103,13 @@ func DeleteMe(c *gin.Context) {
 		return
 	}
 
-	// Re-check the password when the destructive request is executed.
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		c.JSON(http.StatusForbidden, gin.H{"ok": false, "message": "Kata sandi tidak sesuai"})
+	// Re-check the confirmation when the destructive request is executed.
+	if req.Password != "" {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"ok": false, "message": "Kata sandi tidak sesuai"})
+			return
+		}
+	} else if !confirmDeleteWithOTP(c, &user, req.OTP) {
 		return
 	}
 
@@ -93,114 +122,10 @@ func DeleteMe(c *gin.Context) {
 		"Pengguna menghapus akun miliknya sendiri (email: "+user.Email+").",
 	)
 
-	// Cloud workspaces: remember where the files are; they are removed after the
-	// database part has committed.
-	var workspaceRefs []string
-	config.DB.Model(&models.CloudWorkspace{}).Where("user_id = ?", user.ID).Pluck("storage_ref", &workspaceRefs)
+	workspaceRefs := userWorkspaceRefs(user.ID)
 
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
-		// Do not allow deletion of the final administrator account.
-		if user.Role == "admin" {
-			var adminCount int64
-			if err := tx.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
-				return err
-			}
-			if adminCount <= 1 {
-				return errCannotDeleteLastAdmin
-			}
-		}
-
-		// Resolve private providers, including soft-deleted rows.
-		var providerIDs []uint
-		if err := tx.Unscoped().Model(&models.AIProvider{}).
-			Where("user_id = ? AND is_system = ?", user.ID, false).
-			Pluck("id", &providerIDs).Error; err != nil {
-			return err
-		}
-
-		// Delete non-system models created by the user or attached to their private providers.
-		modelQuery := tx.Unscoped().Model(&models.AIModel{}).Where("is_system = ?", false)
-		if len(providerIDs) > 0 {
-			modelQuery = modelQuery.Where("(user_id = ? OR provider_id IN ?)", user.ID, providerIDs)
-		} else {
-			modelQuery = modelQuery.Where("user_id = ?", user.ID)
-		}
-		var modelIDs []uint
-		if err := modelQuery.Pluck("id", &modelIDs).Error; err != nil {
-			return err
-		}
-
-		// Remove references before deleting custom models to avoid dangling IDs.
-		if len(modelIDs) > 0 {
-			if err := tx.Model(&models.Task{}).Where("model_id IN ?", modelIDs).
-				Updates(map[string]interface{}{"model_id": nil}).Error; err != nil {
-				return err
-			}
-			if err := tx.Model(&models.TaskMessage{}).Where("model_id IN ?", modelIDs).
-				Updates(map[string]interface{}{"model_id": nil}).Error; err != nil {
-				return err
-			}
-		}
-
-		// Remove the user's tasks and associated conversation messages.
-		var taskIDs []uint
-		if err := tx.Model(&models.Task{}).Where("user_id = ?", user.ID).Pluck("id", &taskIDs).Error; err != nil {
-			return err
-		}
-		if len(taskIDs) > 0 {
-			if err := tx.Where("task_id IN ?", taskIDs).Delete(&models.TaskMessage{}).Error; err != nil {
-				return err
-			}
-			if err := tx.Where("id IN ?", taskIDs).Delete(&models.Task{}).Error; err != nil {
-				return err
-			}
-		}
-
-		// Remove agent-model links first, then private models and providers.
-		if len(modelIDs) > 0 {
-			if err := tx.Where("ai_model_id IN ?", modelIDs).Delete(&models.AgentModel{}).Error; err != nil {
-				return err
-			}
-			if err := tx.Unscoped().Where("id IN ?", modelIDs).Delete(&models.AIModel{}).Error; err != nil {
-				return err
-			}
-		}
-		if len(providerIDs) > 0 {
-			if err := tx.Unscoped().Where("id IN ?", providerIDs).Delete(&models.AIProvider{}).Error; err != nil {
-				return err
-			}
-		}
-
-		if err := tx.Where("user_id = ?", user.ID).Delete(&models.RefreshToken{}).Error; err != nil {
-			return err
-		}
-		// Design projects are personal data: remove them with the account.
-		if err := tx.Where("user_id = ?", user.ID).Delete(&models.DesignProject{}).Error; err != nil {
-			return err
-		}
-		// Persistent memories are personal data: remove them with the account.
-		if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.AgentMemory{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", user.ID).Delete(&models.UserMemorySetting{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", user.ID).Delete(&models.AgentDelegation{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", user.ID).Delete(&models.ExecutionJob{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", user.ID).Delete(&models.WorkspaceToolApproval{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.CloudWorkspace{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Create(&audit).Error; err != nil {
-			return err
-		}
-		return tx.Unscoped().Delete(&user).Error
+		return purgeUserAccount(tx, &user, &audit)
 	})
 
 	if errors.Is(err, errCannotDeleteLastAdmin) {
@@ -213,14 +138,66 @@ func DeleteMe(c *gin.Context) {
 		return
 	}
 
-	if storage, _, storageErr := workspaceStorage(); storageErr == nil {
-		for _, ref := range workspaceRefs {
-			if removeErr := storage.Delete(user.ID, ref); removeErr != nil {
-				log.Printf("[WORKSPACE] could not remove files of a deleted account: %v", removeErr)
-			}
-		}
-	}
+	removeWorkspaceFiles(user.ID, workspaceRefs)
 
 	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Akun dan data pribadi terkait berhasil dihapus permanen"})
+}
+
+// confirmDeleteWithOTP checks the e-mailed code. It writes the error response itself and
+// reports whether deletion may go ahead.
+func confirmDeleteWithOTP(c *gin.Context, user *models.User, code string) bool {
+	pepper := services.OTPPepper()
+	if pepper == "" {
+		otpUnavailable(c)
+		return false
+	}
+
+	outcome := services.OTPInvalid
+	err := config.DB.Transaction(func(tx *gorm.DB) error {
+		challenge, result, err := services.VerifyOTP(tx, models.OTPPurposeDeleteAccount, strings.ToLower(user.Email), code, pepper)
+		if err != nil {
+			return err
+		}
+		outcome = result
+		// The code must belong to this user. Commit either way so a wrong guess is counted.
+		if result == services.OTPVerified && (challenge.UserID == nil || *challenge.UserID != user.ID) {
+			outcome = services.OTPInvalid
+		}
+		return nil
+	})
+	if err != nil {
+		c.Error(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Verifikasi tidak dapat diproses."})
+		return false
+	}
+	switch outcome {
+	case services.OTPVerified:
+		return true
+	case services.OTPTooMany:
+		c.JSON(http.StatusTooManyRequests, gin.H{"ok": false, "code": "too_many_attempts", "message": "Batas percobaan tercapai. Minta kode baru."})
+	default:
+		c.JSON(http.StatusForbidden, gin.H{"ok": false, "code": "invalid_otp", "message": "Kode verifikasi tidak valid atau kedaluwarsa."})
+	}
+	return false
+}
+
+// userWorkspaceRefs remembers where a user's cloud workspace files are; they are removed
+// after the database part has committed.
+func userWorkspaceRefs(userID uint) []string {
+	var refs []string
+	config.DB.Model(&models.CloudWorkspace{}).Where("user_id = ?", userID).Pluck("storage_ref", &refs)
+	return refs
+}
+
+func removeWorkspaceFiles(userID uint, refs []string) {
+	storage, _, err := workspaceStorage()
+	if err != nil {
+		return
+	}
+	for _, ref := range refs {
+		if removeErr := storage.Delete(userID, ref); removeErr != nil {
+			log.Printf("[WORKSPACE] could not remove files of a deleted account: %v", removeErr)
+		}
+	}
 }

@@ -67,10 +67,21 @@ func OTPPepper() string {
 
 // EmailOTPConfig returns the settings needed to send codes, and whether all of
 // them are present.
+//
+// With SMTP_HOST set, mail goes through SMTP (see smtp_mail.go) and only the
+// sender (MAIL_FROM, or RESEND_FROM_EMAIL) and the pepper are required. Otherwise
+// Resend is used and RESEND_API_KEY is required too.
 func EmailOTPConfig() (apiKey, sender, pepper string, ok bool) {
+	pepper = OTPPepper()
+	if SMTPConfigured() {
+		sender = strings.TrimSpace(os.Getenv("MAIL_FROM"))
+		if sender == "" {
+			sender = strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL"))
+		}
+		return "", sender, pepper, sender != "" && pepper != ""
+	}
 	apiKey = strings.TrimSpace(os.Getenv("RESEND_API_KEY"))
 	sender = strings.TrimSpace(os.Getenv("RESEND_FROM_EMAIL"))
-	pepper = OTPPepper()
 	return apiKey, sender, pepper, apiKey != "" && sender != "" && pepper != ""
 }
 
@@ -205,6 +216,9 @@ func VerifyOTP(tx *gorm.DB, purpose, email, code, pepper string) (*models.OTPCha
 // SendEmail delivers a message through Resend. The key, recipient and provider
 // response body are never included in the returned error.
 func SendEmail(ctx context.Context, apiKey, sender, recipient, subject, htmlBody, textBody string) error {
+	if SMTPConfigured() {
+		return sendSMTP(ctx, sender, recipient, subject, htmlBody, textBody)
+	}
 	message := struct {
 		From    string   `json:"from"`
 		To      []string `json:"to"`
@@ -242,6 +256,10 @@ func OTPEmail(purpose, code string) (subject, htmlBody, textBody string) {
 	if purpose == models.OTPPurposePasswordReset {
 		heading, intro = "Reset your Agentic AI password", "Use this verification code to continue resetting your password."
 		subject = "Your Agentic AI password reset code"
+	}
+	if purpose == models.OTPPurposeDeleteAccount {
+		heading, intro = "Confirm account deletion", "Use this code to confirm that you want to permanently delete your Agentic AI account. If you did not ask for this, do not share the code."
+		subject = "Confirm deleting your Agentic AI account"
 	}
 	if purpose == models.OTPPurposeChangeEmail {
 		heading, intro = "Confirm your new email", "Use this code to confirm this address as the new email for your Agentic AI account."
