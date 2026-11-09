@@ -166,8 +166,14 @@ func (d *GitHubDownloader) notFoundError(ctx context.Context, owner, repo string
 	}
 	defer response.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<16))
-	if response.StatusCode == http.StatusConflict {
+	switch response.StatusCode {
+	case http.StatusConflict:
 		return errors.New("the repository is empty: add at least one commit (for example a README) and try again")
+	case http.StatusOK:
+		// It exists and has commits, yet the archive answered 404: GitHub needs a few seconds to
+		// prepare the archive after a push, so a repository that was just created or pushed to
+		// is not downloadable yet.
+		return errors.New("the repository exists but GitHub has not prepared its download yet (this happens right after a push): wait a few seconds and try again")
 	}
 	return general
 }
