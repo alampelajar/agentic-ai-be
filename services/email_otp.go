@@ -257,6 +257,10 @@ func OTPEmail(purpose, code string) (subject, htmlBody, textBody string) {
 		heading, intro = "Reset your Agentic AI password", "Use this verification code to continue resetting your password."
 		subject = "Your Agentic AI password reset code"
 	}
+	if purpose == models.OTPPurposeDeleteAccount {
+		heading, intro = "Confirm account deletion", "Use this code to confirm that you want to permanently delete your Agentic AI account. If you did not ask for this, do not share the code."
+		subject = "Confirm deleting your Agentic AI account"
+	}
 	if purpose == models.OTPPurposeChangeEmail {
 		heading, intro = "Confirm your new email", "Use this code to confirm this address as the new email for your Agentic AI account."
 		subject = "Confirm your new Agentic AI email"
