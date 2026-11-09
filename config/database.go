@@ -69,6 +69,7 @@ func ConnectDatabase() {
 		&models.User{},
 		&models.RefreshToken{},
 		&models.PasswordResetChallenge{},
+		&models.OTPChallenge{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},
