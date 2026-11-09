@@ -38,5 +38,6 @@ func migrateAll(db *gorm.DB) error {
 		&models.AIModelCombo{},
 		&models.AIModelComboMember{},
 		&models.AIModelCallLog{},
+		&models.DesignProject{},
 	)
 }
