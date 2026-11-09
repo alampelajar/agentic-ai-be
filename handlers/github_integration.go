@@ -26,6 +26,11 @@ import (
 
 const githubStateTTL = 10 * time.Minute
 
+// githubConnectionUpsertColumns are the columns a reconnect overwrites. They are database column
+// names, not field names: GORM turns GitHubID into git_hub_id, so a guessed "github_id" fails on a
+// real database (see TestGitHubUpsertColumnsExist).
+var githubConnectionUpsertColumns = []string{"git_hub_id", "git_hub_login", "token_enc", "scope", "updated_at"}
+
 // githubOAuth is rebuilt from the environment on each use: this package is initialised before
 // main loads the .env file, so a package-level value would see empty settings.
 var githubOAuth = services.NewGitHubOAuth
@@ -155,7 +160,7 @@ func GitHubCallback(c *gin.Context) {
 	err = config.DB.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "user_id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"github_id", "github_login", "token_enc", "scope", "updated_at"}),
+			DoUpdates: clause.AssignmentColumns(githubConnectionUpsertColumns),
 		}).Create(&connection).Error; err != nil {
 			return err
 		}
