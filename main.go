@@ -240,6 +240,7 @@ func main() {
 	// ============================================================
 	// USER FEEDBACK
 	// ============================================================
+	protected.POST("/me/delete/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestDeleteAccountOTP)
 	protected.POST("/me/email/change/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestChangeEmailOTP)
 	protected.POST("/me/email/change/resend", otpLimit(httpguard.ByUserOrIP), handlers.ResendChangeEmailOTP)
 	protected.POST("/me/email/change/verify", otpLimit(httpguard.ByUserOrIP), handlers.VerifyChangeEmailOTP)

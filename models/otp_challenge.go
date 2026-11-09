@@ -7,6 +7,7 @@ const (
 	OTPPurposeRegister      = "register"
 	OTPPurposeChangeEmail   = "change_email"
 	OTPPurposePasswordReset = "password_reset"
+	OTPPurposeDeleteAccount = "delete_account"
 )
 
 // OTPChallenge stores a short-lived email verification code. The code is kept
