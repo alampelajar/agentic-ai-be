@@ -83,7 +83,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Reject still-unexpired JWTs for accounts that have been deleted.
 		var activeUser models.User
-		if err := config.DB.Select("id").First(&activeUser, claims.UserID).Error; err != nil {
+		if err := config.DB.Select("id", "email").First(&activeUser, claims.UserID).Error; err != nil {
 			status := http.StatusUnauthorized
 			message := "Akun pengguna sudah tidak tersedia"
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -93,6 +93,16 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.JSON(status, gin.H{
 				"ok":      false,
 				"message": message,
+			})
+			c.Abort()
+			return
+		}
+		// The address is part of the token. Changing the e-mail revokes refresh tokens;
+		// this also ends access tokens issued before the change, without waiting for them to expire.
+		if !strings.EqualFold(activeUser.Email, claims.Email) {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"ok":      false,
+				"message": "Sesi sudah tidak berlaku. Silakan masuk kembali.",
 			})
 			c.Abort()
 			return
