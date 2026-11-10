@@ -341,6 +341,7 @@ func main() {
 		protected.PUT("/workspaces/:id/file", handlers.PutWorkspaceFile)
 		protected.GET("/workspaces/:id/changes", handlers.GetWorkspaceChanges)
 		protected.POST("/workspaces/:id/export", importLimit, handlers.ExportWorkspace)
+		protected.POST("/workspaces/:id/github/publish", importLimit, handlers.PublishWorkspaceToGitHub)
 		protected.GET("/workspaces/:id/executions", handlers.GetWorkspaceExecutions)
 		protected.POST("/workspaces/:id/executions", executionLimit, handlers.CreateExecution)
 		protected.GET("/executions/:id", handlers.GetExecution)
