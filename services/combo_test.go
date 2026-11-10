@@ -140,7 +140,7 @@ func TestRunComboFallsBackAndReportsWhoAnswered(t *testing.T) {
 	health := NewComboHealth()
 	ordered := targets("a", "b", "c")
 	calls := []string{}
-	outcome, err := RunCombo(ordered, ComboLimits{MaxAttempts: 3}, health, func(target ComboTarget) (string, error) {
+	outcome, err := RunCombo(ordered, ComboLimits{MaxAttempts: 3}, health, func(target ComboTarget, _ time.Duration) (string, error) {
 		calls = append(calls, target.Name)
 		if target.Name == "c" {
 			return "jawaban", nil
@@ -157,7 +157,7 @@ func TestRunComboFallsBackAndReportsWhoAnswered(t *testing.T) {
 
 func TestRunComboStopsAtMaxAttemptsAndReturnsTheTrace(t *testing.T) {
 	calls := 0
-	outcome, err := RunCombo(targets("a", "b", "c"), ComboLimits{MaxAttempts: 2}, nil, func(ComboTarget) (string, error) {
+	outcome, err := RunCombo(targets("a", "b", "c"), ComboLimits{MaxAttempts: 2}, nil, func(ComboTarget, time.Duration) (string, error) {
 		calls++
 		return "", errors.New("boom")
 	})
@@ -172,7 +172,7 @@ func TestRunComboStopsAtMaxAttemptsAndReturnsTheTrace(t *testing.T) {
 func TestRunComboFatalFailuresDoNotRestTheModel(t *testing.T) {
 	health := NewComboHealth()
 	for i := 0; i < 5; i++ {
-		_, _ = RunCombo(targets("a"), ComboLimits{MaxAttempts: 1}, health, func(ComboTarget) (string, error) {
+		_, _ = RunCombo(targets("a"), ComboLimits{MaxAttempts: 1}, health, func(ComboTarget, time.Duration) (string, error) {
 			return "", &ProviderHTTPError{Status: http.StatusBadRequest, Message: "bad"}
 		})
 	}
@@ -183,7 +183,7 @@ func TestRunComboFatalFailuresDoNotRestTheModel(t *testing.T) {
 
 func TestRunComboStopsStartingAttemptsAfterTheBudget(t *testing.T) {
 	calls := 0
-	_, err := RunCombo(targets("a", "b"), ComboLimits{MaxAttempts: 3, Budget: time.Millisecond}, nil, func(ComboTarget) (string, error) {
+	_, err := RunCombo(targets("a", "b"), ComboLimits{MaxAttempts: 3, Budget: time.Millisecond}, nil, func(ComboTarget, time.Duration) (string, error) {
 		calls++
 		time.Sleep(5 * time.Millisecond)
 		return "", errors.New("slow failure")
@@ -279,5 +279,52 @@ func TestOrderTargetsForTaskDoesNothingSpecialForFallback(t *testing.T) {
 	got := OrderTargetsForTask(models.ComboStrategyFallback, 7, targets("a", "b", "c"), NewRoundRobin(), nil, sticky, 1, 100)
 	if names(got) != "a,b,c" {
 		t.Fatalf("fallback is already deterministic, got %s", names(got))
+	}
+}
+
+func TestAttemptTimeoutSharesTheBudget(t *testing.T) {
+	cases := []struct {
+		name         string
+		budget       time.Duration
+		elapsed      time.Duration
+		attemptsLeft int
+		want         time.Duration
+	}{
+		{"no budget means no combo limit", 0, 0, 2, 0},
+		{"two attempts split the budget", 120 * time.Second, 0, 2, 60 * time.Second},
+		{"the last attempt gets everything left", 120 * time.Second, 70 * time.Second, 1, 50 * time.Second},
+		{"never less than the minimum while time is left", 120 * time.Second, 0, 10, ComboMinAttemptTime},
+		{"never more than what is left", 120 * time.Second, 100 * time.Second, 3, 20 * time.Second},
+		{"nothing left", 120 * time.Second, 130 * time.Second, 2, 0},
+	}
+	for _, c := range cases {
+		if got := AttemptTimeout(c.budget, c.elapsed, c.attemptsLeft); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// A model that hangs must not use up the whole combo: it gets only its share, and the next
+// model is still tried. Before, one call could run for the provider's full timeout (5 minutes)
+// while the combo's budget was 120 seconds, so the backup was skipped as "out of time".
+func TestASlowFirstModelDoesNotStarveTheBackup(t *testing.T) {
+	var given []time.Duration
+	outcome, err := RunCombo(targets("slow", "backup"), ComboLimits{MaxAttempts: 2, Budget: 120 * time.Second}, nil, func(target ComboTarget, timeout time.Duration) (string, error) {
+		given = append(given, timeout)
+		if target.Name == "slow" {
+			return "", errors.New("context deadline exceeded (Client.Timeout exceeded while awaiting headers)")
+		}
+		return "answer from backup", nil
+	})
+	if err != nil || outcome.Answer != "answer from backup" || outcome.Used.Name != "backup" {
+		t.Fatalf("outcome = %+v, err = %v", outcome, err)
+	}
+	if len(given) != 2 || given[0] <= 59*time.Second || given[0] > 60*time.Second || given[1] <= 0 || given[1] > 120*time.Second {
+		t.Fatalf("each attempt must get a bounded share of the budget, got %v", given)
+	}
+	for _, attempt := range outcome.Attempts {
+		if attempt.Status == "skipped" {
+			t.Fatalf("the backup must not be skipped: %+v", outcome.Attempts)
+		}
 	}
 }
