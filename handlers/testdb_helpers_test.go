@@ -18,6 +18,7 @@ func migrateAll(db *gorm.DB) error {
 		&models.OTPChallenge{},
 		&models.GitHubConnection{},
 		&models.GitHubOAuthState{},
+		&models.GitHubPublication{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},

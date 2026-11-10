@@ -172,6 +172,9 @@ func purgeUserAccount(tx *gorm.DB, user *models.User, audit *models.AuditLog) er
 	if err := tx.Where("user_id = ?", user.ID).Delete(&models.GitHubOAuthState{}).Error; err != nil {
 		return err
 	}
+	if err := tx.Where("user_id = ?", user.ID).Delete(&models.GitHubPublication{}).Error; err != nil {
+		return err
+	}
 	// Design projects are personal data: remove them with the account.
 	if err := tx.Where("user_id = ?", user.ID).Delete(&models.DesignProject{}).Error; err != nil {
 		return err
