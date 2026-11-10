@@ -150,7 +150,7 @@ func (d *GitHubDownloader) Download(ctx context.Context, owner, repo string, lim
 // yet, which has nothing to download. Asking for the first commit tells them apart: an empty
 // repository answers 409. Any trouble with that lookup falls back to the general message.
 func (d *GitHubDownloader) notFoundError(ctx context.Context, owner, repo string) error {
-	general := errors.New("the repository was not found or is not public")
+	general := errors.New("the repository was not found or is not public (if it is private, connect GitHub in Settings > Integrations)")
 	if d.APIURL == "" {
 		return general
 	}

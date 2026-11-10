@@ -213,3 +213,18 @@ func DeleteGitHubConnection(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "GitHub diputuskan."})
 }
+
+// githubTokenFor returns the user's GitHub access token, or "" when they have not connected GitHub
+// (or the stored token cannot be read). Callers fall back to what works without it.
+func githubTokenFor(userID uint) string {
+	var connection models.GitHubConnection
+	if err := config.DB.Where("user_id = ?", userID).First(&connection).Error; err != nil {
+		return ""
+	}
+	token, err := utils.DecryptString(connection.TokenEnc)
+	if err != nil {
+		log.Printf("[github] the stored token could not be read")
+		return ""
+	}
+	return token
+}

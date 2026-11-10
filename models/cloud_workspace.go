@@ -23,6 +23,13 @@ type CloudWorkspace struct {
 	Description    string     `json:"description" gorm:"type:varchar(500);not null;default:''"`
 	SourceType     string     `json:"source_type" gorm:"type:varchar(20);not null;default:empty"`
 	SourceURL      string     `json:"source_url" gorm:"type:varchar(300);not null;default:''"`
+	// Set for a workspace imported from GitHub: the repository, the branch it was taken from and the
+	// commit that branch was at. Sending changes back starts from here.
+	GitHubOwner   string `json:"github_owner" gorm:"type:varchar(100);not null;default:''"`
+	GitHubRepo    string `json:"github_repo" gorm:"type:varchar(100);not null;default:''"`
+	BaseBranch    string `json:"base_branch" gorm:"type:varchar(255);not null;default:''"`
+	BaseSHA       string `json:"base_sha" gorm:"type:varchar(40);not null;default:''"`
+	SourcePrivate bool   `json:"source_private" gorm:"not null;default:false"`
 	Status         string     `json:"status" gorm:"type:varchar(20);not null;default:creating;index"`
 	StorageRef     string     `json:"-" gorm:"type:varchar(64);not null;uniqueIndex"`
 	DefaultRuntime string     `json:"default_runtime" gorm:"type:varchar(20);not null;default:''"`

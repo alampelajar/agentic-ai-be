@@ -267,8 +267,8 @@ func GetWorkspace(c *gin.Context) {
 
 var safeFileName = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-// CreateWorkspace makes an empty workspace (JSON), imports a public GitHub
-// repository (JSON) or unpacks an uploaded ZIP (multipart form).
+// CreateWorkspace makes an empty workspace (JSON), imports a GitHub repository (public, or private
+// when the user connected GitHub) (JSON) or unpacks an uploaded ZIP (multipart form).
 func CreateWorkspace(c *gin.Context) {
 	userID, ok := getCurrentUserID(c)
 	if !ok {
@@ -343,6 +343,7 @@ func CreateWorkspace(c *gin.Context) {
 	}
 
 	var owner, repo string
+	var repoInfo cloudworkspace.RepoInfo
 	if sourceType == models.WorkspaceSourceGitHub {
 		owner, repo, err = cloudworkspace.ParseGitHubURL(sourceURL)
 		if err != nil {
@@ -372,7 +373,7 @@ func CreateWorkspace(c *gin.Context) {
 	if sourceType == models.WorkspaceSourceGitHub {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 60*time.Second)
 		defer cancel()
-		archive, err = cloudDownloader.Download(ctx, owner, repo, limits)
+		archive, repoInfo, err = cloudDownloader.Fetch(ctx, owner, repo, githubTokenFor(userID), limits)
 		if err != nil {
 			workspaceError(c, http.StatusBadGateway, err.Error())
 			return
@@ -389,6 +390,7 @@ func CreateWorkspace(c *gin.Context) {
 
 	workspace := models.CloudWorkspace{
 		UserID: userID, Name: name, Description: description, SourceType: sourceType, SourceURL: sourceURL,
+		GitHubOwner: repoInfo.Owner, GitHubRepo: repoInfo.Repo, BaseBranch: repoInfo.DefaultBranch, BaseSHA: repoInfo.HeadSHA, SourcePrivate: repoInfo.Private,
 		Status: models.WorkspaceStatusCreating, StorageRef: ref, DefaultRuntime: runtimeName,
 	}
 	if err := config.DB.Create(&workspace).Error; err != nil {
