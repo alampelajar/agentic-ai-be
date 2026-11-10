@@ -174,7 +174,7 @@ func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
 
 func TestEachRoleGetsOnlyItsTools(t *testing.T) {
 	want := map[string][]string{
-		"coding":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution"},
+		"coding":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution", "workspace.publish"},
 		"testing":        {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution"},
 		"debugging":      {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.get_execution"},
 		"review":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes"},

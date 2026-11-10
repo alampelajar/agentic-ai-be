@@ -605,7 +605,7 @@ AGENT ROLE: DEBUGGING AGENT
 	if workspaceID != 0 && agentID != 0 {
 		handle, workspaceErr := openWorkspace(userID, workspaceID, false)
 		if workspaceErr == nil && handle.requireReady() == nil {
-			cloudTools := services.CloudToolsForAgent(agentSlug)
+			cloudTools := services.CloudToolsForWorkspace(agentSlug, workspaceFromGitHub(handle.Workspace))
 			activeToolNames = append(activeToolNames, cloudTools...)
 			systemPrompt += cloudWorkspacePrompt(handle.Workspace, cloudTools)
 			requestBodyTools = providerToolsForNames(activeToolNames)
