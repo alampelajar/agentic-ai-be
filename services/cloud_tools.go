@@ -15,9 +15,10 @@ const (
 	ToolWorkspaceBuild        = "workspace.build"
 	ToolWorkspaceGetExecution = "workspace.get_execution"
 	ToolWorkspaceInstall      = "workspace.install_dependencies"
+	ToolWorkspacePublish      = "workspace.publish"
 )
 
-var cloudToolNames = []string{ToolWorkspaceListFiles, ToolWorkspaceReadFile, ToolWorkspaceWriteFile, ToolWorkspaceGetChanges, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution, ToolWorkspaceInstall}
+var cloudToolNames = []string{ToolWorkspaceListFiles, ToolWorkspaceReadFile, ToolWorkspaceWriteFile, ToolWorkspaceGetChanges, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution, ToolWorkspaceInstall, ToolWorkspacePublish}
 
 func init() {
 	pathProperty := map[string]any{"type": "string", "description": "Path relative to the workspace root, for example src/main.go. Absolute paths and .. are refused."}
@@ -42,6 +43,13 @@ func init() {
 	define(ToolWorkspaceRunTest, "Run the project's tests in the cloud sandbox. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node", "python")})
 	define(ToolWorkspaceBuild, "Build the project in the cloud sandbox. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node")})
 	define(ToolWorkspaceInstall, "Install the project's dependencies in the cloud sandbox (go mod tidy and vendor, npm install without scripts, pip install of pytest and requirements.txt as wheels). Needed before tests or builds of a project that has dependencies, because tests run without a network. Only the package registries are reachable and no project script runs. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node", "python")})
+	define(ToolWorkspacePublish, "Send the workspace's changes since the import to GitHub: one commit on a NEW branch with, by default, a pull request into the branch it came from. Only for a workspace imported from GitHub, and only when the user asks for it. The user must approve it and sees the exact files; nothing on GitHub is overwritten.", "workspace.publish", 150, map[string]any{
+		"message":      map[string]any{"type": "string", "description": "The commit message: what changed and why."},
+		"branch":       map[string]any{"type": "string", "description": "Name of the new branch. Leave empty to name it automatically. Never the branch the workspace came from."},
+		"pull_request": map[string]any{"type": "string", "enum": []any{"open", "skip"}, "description": "open (default) opens a pull request; skip only pushes the branch."},
+		"pr_title":     map[string]any{"type": "string", "description": "Pull request title. Defaults to the first line of the message."},
+		"pr_body":      map[string]any{"type": "string", "description": "Pull request description."},
+	}, "message")
 	define(ToolWorkspaceGetExecution, "Read the status and output of a test, build or install job. wait_seconds (at most 20) waits for it to finish.", "workspace.read", 30, map[string]any{"job_id": map[string]any{"type": "integer", "description": "The job id returned by workspace.run_test, workspace.build or workspace.install_dependencies."}, "wait_seconds": map[string]any{"type": "integer", "description": "Seconds to wait for the job to finish, 0 to 20."}}, "job_id")
 }
 
@@ -58,7 +66,7 @@ func IsCloudTool(name string) bool {
 // CloudToolNeedsApproval is true for tools that change files or run commands.
 func CloudToolNeedsApproval(name string) bool {
 	switch name {
-	case ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall:
+	case ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspacePublish:
 		return true
 	}
 	return false
@@ -85,7 +93,7 @@ func CloudToolsForAgent(slug string) []string {
 		if has("review") {
 			return read // "code review" is a reviewer, not an author
 		}
-		return append(read, ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution)
+		return append(read, ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution, ToolWorkspacePublish)
 	case has("testing", "test"):
 		return append(read, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution)
 	case has("debug"):
@@ -93,6 +101,22 @@ func CloudToolsForAgent(slug string) []string {
 	default: // review, planning and anything else
 		return read
 	}
+}
+
+// CloudToolsForWorkspace is CloudToolsForAgent without workspace.publish when the workspace did not
+// come from GitHub (there is nowhere to send it).
+func CloudToolsForWorkspace(slug string, fromGitHub bool) []string {
+	tools := CloudToolsForAgent(slug)
+	if fromGitHub {
+		return tools
+	}
+	kept := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		if tool != ToolWorkspacePublish {
+			kept = append(kept, tool)
+		}
+	}
+	return kept
 }
 
 // CloudToolAllowedForAgent checks one tool against CloudToolsForAgent.
