@@ -16,6 +16,8 @@ func migrateAll(db *gorm.DB) error {
 		&models.RefreshToken{},
 		&models.PasswordResetChallenge{},
 		&models.OTPChallenge{},
+		&models.GitHubConnection{},
+		&models.GitHubOAuthState{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},

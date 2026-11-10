@@ -70,6 +70,8 @@ func ConnectDatabase() {
 		&models.RefreshToken{},
 		&models.PasswordResetChallenge{},
 		&models.OTPChallenge{},
+		&models.GitHubConnection{},
+		&models.GitHubOAuthState{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},
