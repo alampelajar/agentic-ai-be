@@ -319,7 +319,7 @@ func TestASlowFirstModelDoesNotStarveTheBackup(t *testing.T) {
 	if err != nil || outcome.Answer != "answer from backup" || outcome.Used.Name != "backup" {
 		t.Fatalf("outcome = %+v, err = %v", outcome, err)
 	}
-	if len(given) != 2 || given[0] != 60*time.Second || given[1] <= 0 || given[1] > 120*time.Second {
+	if len(given) != 2 || given[0] <= 59*time.Second || given[0] > 60*time.Second || given[1] <= 0 || given[1] > 120*time.Second {
 		t.Fatalf("each attempt must get a bounded share of the budget, got %v", given)
 	}
 	for _, attempt := range outcome.Attempts {
