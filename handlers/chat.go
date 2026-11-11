@@ -74,7 +74,17 @@ type chatRequest struct {
 	Temperature     float64                  `json:"temperature,omitempty"`
 	MaxTokens       int                      `json:"max_tokens,omitempty"`
 	ReasoningEffort string                   `json:"reasoning_effort,omitempty"`
+	// Timeout limits this one call (0: the default). Not sent to the provider.
+	Timeout time.Duration `json:"-"`
 }
+
+// chatMaxTokens is the longest answer a chat call may produce. Tool calls carry whole
+// files (workspace.write_file sends the complete new content), so 2048 cut off the rewrite
+// of an ordinary web page.
+const chatMaxTokens = 8192
+
+// providerCallTimeout is how long one call to a provider may take when nothing shorter is set.
+const providerCallTimeout = 5 * time.Minute
 
 type providerToolDefinition struct {
 	Type     string `json:"type"`
@@ -605,7 +615,7 @@ AGENT ROLE: DEBUGGING AGENT
 	if workspaceID != 0 && agentID != 0 {
 		handle, workspaceErr := openWorkspace(userID, workspaceID, false)
 		if workspaceErr == nil && handle.requireReady() == nil {
-			cloudTools := services.CloudToolsForAgent(agentSlug)
+			cloudTools := services.CloudToolsForWorkspace(agentSlug, workspaceFromGitHub(handle.Workspace))
 			activeToolNames = append(activeToolNames, cloudTools...)
 			systemPrompt += cloudWorkspacePrompt(handle.Workspace, cloudTools)
 			requestBodyTools = providerToolsForNames(activeToolNames)
@@ -709,7 +719,7 @@ AGENT ROLE: DEBUGGING AGENT
 
 		Temperature: 0.5,
 
-		MaxTokens: 2048,
+		MaxTokens: chatMaxTokens,
 
 		ReasoningEffort: "low",
 	}
@@ -915,7 +925,11 @@ func callAIProvider(
 	// CLIENT
 	// ------------------------------------------------------------
 
-	client := providerHTTPClient(5 * time.Minute)
+	timeout := providerCallTimeout
+	if requestBody.Timeout > 0 && requestBody.Timeout < timeout {
+		timeout = requestBody.Timeout
+	}
+	client := providerHTTPClient(timeout)
 
 	start := time.Now()
 
@@ -1045,6 +1059,9 @@ func callAIProvider(
 		answer = strings.TrimSpace(choice.Text)
 	}
 
+	if answer == "" && choice.FinishReason == "length" {
+		return "", fmt.Errorf("jawaban model terpotong karena mencapai batas panjang jawaban (%d token) sebelum selesai; minta perubahan yang lebih kecil atau coba model lain (model=%s)", requestBody.MaxTokens, aiResponse.Model)
+	}
 	if answer == "" {
 		return "", fmt.Errorf("provider response memiliki choices tetapi content kosong (id=%s model=%s finish_reason=%s completion_tokens=%d tool_calls=%d reasoning=%t reasoning_details=%t refusal=%t)", aiResponse.ID, aiResponse.Model, choice.FinishReason, aiResponse.Usage.CompletionTokens, len(choice.Message.ToolCalls), hasRawValue(choice.Message.Reasoning), hasRawValue(choice.Message.ReasoningDetails), hasRawValue(choice.Message.Refusal))
 	}

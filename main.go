@@ -119,7 +119,11 @@ func main() {
 	registerLimit := httpguard.RateLimit(httpguard.NewLimiter(3, 5), httpguard.ByIP)
 	adminLoginLimit := httpguard.RateLimit(httpguard.NewLimiter(5, 5), httpguard.ByIP)
 	refreshLimit := httpguard.RateLimit(httpguard.NewLimiter(60, 20), httpguard.ByIP)
-	resetLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 10), httpguard.ByIP)
+	// Each e-mail code endpoint gets a bucket of its own (10 a minute). Before sign-in the
+	// key is the address; after it, the user, so people behind one address do not share it.
+	otpLimit := func(key func(*gin.Context) string) gin.HandlerFunc {
+		return httpguard.RateLimit(httpguard.NewLimiter(10, 10), key)
+	}
 	userLimit := httpguard.RateLimit(httpguard.NewLimiter(300, 60), httpguard.ByUserOrIP)
 	chatLimit := httpguard.RateLimit(httpguard.NewLimiter(30, 10), httpguard.ByUserOrIP)
 	importLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 5), httpguard.ByUserOrIP)
@@ -198,24 +202,32 @@ func main() {
 			handlers.Logout,
 		)
 
+		// Sign-up confirmed by an e-mailed code. Nothing is created until verify.
+		auth.POST("/register/request", registerLimit, handlers.RequestRegisterOTP)
+		auth.POST("/register/resend", otpLimit(httpguard.ByIP), handlers.ResendRegisterOTP)
+		auth.POST("/register/verify", otpLimit(httpguard.ByIP), handlers.VerifyRegisterOTP)
+
 		auth.POST(
 			"/forgot-password/request",
-			resetLimit,
+			otpLimit(httpguard.ByIP),
 			handlers.RequestPasswordReset,
 		)
 
 		auth.POST(
 			"/forgot-password/verify",
-			resetLimit,
+			otpLimit(httpguard.ByIP),
 			handlers.VerifyPasswordResetOTP,
 		)
 
 		auth.POST(
 			"/forgot-password/reset",
-			resetLimit,
+			otpLimit(httpguard.ByIP),
 			handlers.ResetPasswordWithOTP,
 		)
 	}
+
+	// GitHub sends the browser back here; the one-time state says whose connection it is.
+	api.GET("/integrations/github/callback", otpLimit(httpguard.ByIP), handlers.GitHubCallback)
 
 	// ============================================================
 	// PROTECTED ROUTES
@@ -231,6 +243,14 @@ func main() {
 	// ============================================================
 	// USER FEEDBACK
 	// ============================================================
+	protected.GET("/integrations/github", handlers.GetGitHubConnection)
+	protected.POST("/integrations/github/connect", otpLimit(httpguard.ByUserOrIP), handlers.StartGitHubConnect)
+	protected.DELETE("/integrations/github", otpLimit(httpguard.ByUserOrIP), handlers.DeleteGitHubConnection)
+	protected.POST("/me/delete/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestDeleteAccountOTP)
+	protected.POST("/me/email/change/request", otpLimit(httpguard.ByUserOrIP), handlers.RequestChangeEmailOTP)
+	protected.POST("/me/email/change/resend", otpLimit(httpguard.ByUserOrIP), handlers.ResendChangeEmailOTP)
+	protected.POST("/me/email/change/verify", otpLimit(httpguard.ByUserOrIP), handlers.VerifyChangeEmailOTP)
+
 	protected.GET("/feedback", handlers.GetMyFeedback)
 	protected.POST("/feedback", handlers.CreateFeedback)
 	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
@@ -304,6 +324,13 @@ func main() {
 		protected.POST("/memories", handlers.CreateMemory)
 		protected.PATCH("/memories/:id", handlers.UpdateMemory)
 		protected.DELETE("/memories/:id", handlers.DeleteMemory)
+
+		// Design Studio
+		protected.GET("/design-projects", handlers.GetDesignProjects)
+		protected.POST("/design-projects", handlers.CreateDesignProject)
+		protected.GET("/design-projects/:id", handlers.GetDesignProject)
+		protected.PUT("/design-projects/:id", handlers.UpdateDesignProject)
+		protected.DELETE("/design-projects/:id", handlers.DeleteDesignProject)
 		protected.GET("/workspaces", handlers.GetWorkspaces)
 		protected.POST("/workspaces", importLimit, handlers.CreateWorkspace)
 		protected.GET("/workspaces/:id", handlers.GetWorkspace)
@@ -314,6 +341,7 @@ func main() {
 		protected.PUT("/workspaces/:id/file", handlers.PutWorkspaceFile)
 		protected.GET("/workspaces/:id/changes", handlers.GetWorkspaceChanges)
 		protected.POST("/workspaces/:id/export", importLimit, handlers.ExportWorkspace)
+		protected.POST("/workspaces/:id/github/publish", importLimit, handlers.PublishWorkspaceToGitHub)
 		protected.GET("/workspaces/:id/executions", handlers.GetWorkspaceExecutions)
 		protected.POST("/workspaces/:id/executions", executionLimit, handlers.CreateExecution)
 		protected.GET("/executions/:id", handlers.GetExecution)

@@ -224,6 +224,8 @@ func executeCloudTool(handle *workspaceHandle, tool string, args toolArgs, agent
 			return gin.H{"ok": false, "error": queueErr.message}
 		}
 		return gin.H{"ok": true, "job_id": job.ID, "job_type": job.JobType, "status": job.Status, "note": "Use workspace.get_execution with this job_id to read the result."}
+	case services.ToolWorkspacePublish:
+		return executePublishTool(handle, args)
 	case services.ToolWorkspaceGetExecution:
 		id, _ := args["job_id"].(int64)
 		wait, _ := args["wait_seconds"].(int64)
@@ -342,6 +344,22 @@ func RunWorkspaceTool(c *gin.Context) {
 		}
 	}
 
+	summary, preview := approvalSummary(tool, args), previewArguments(tool, args)
+	if tool == services.ToolWorkspacePublish {
+		if !workspaceFromGitHub(handle.Workspace) {
+			workspaceError(c, http.StatusBadRequest, "Workspace ini tidak berasal dari GitHub, jadi tidak ada tempat mengirim perubahannya.")
+			return
+		}
+		files, failure := collectPublishFiles(handle)
+		if failure != nil {
+			workspaceError(c, failure.Status, failure.Message)
+			return
+		}
+		// The approval pins exactly these changes; publishing refuses if they differ by then.
+		args[publishFingerprintKey] = changesFingerprint(files)
+		summary, preview = publishApprovalSummary(handle.Workspace, args, files), publishApprovalPreview(handle.Workspace, args, files)
+	}
+
 	started := time.Now()
 	if !services.CloudToolNeedsApproval(tool) {
 		result := executeCloudTool(handle, tool, args, req.AgentID, req.TaskID)
@@ -375,7 +393,7 @@ func RunWorkspaceTool(c *gin.Context) {
 	}
 	c.JSON(http.StatusAccepted, gin.H{"ok": true, "approval_required": true, "approval": gin.H{
 		"id": approval.ID, "tool": tool, "workspace_id": handle.Workspace.ID, "workspace_name": handle.Workspace.Name,
-		"summary": approvalSummary(tool, args), "arguments": previewArguments(tool, args), "expires_at": approval.ExpiresAt,
+		"summary": summary, "arguments": preview, "expires_at": approval.ExpiresAt,
 	}})
 }
 
@@ -517,6 +535,11 @@ func cloudWorkspacePrompt(workspace models.CloudWorkspace, tools []string) strin
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n\nCLOUD WORKSPACE: the user selected the workspace %q (%d files). It lives on the server, so the Local Agent Runner is NOT needed for it. Use these registered tools: %s.\n", memoryPromptName(workspace.Name), workspace.FileCount, strings.Join(tools, ", "))
 	b.WriteString("Call them natively or emit exactly one JSON object inside <AGENT_TOOL>...</AGENT_TOOL>, for example <AGENT_TOOL>{\"action\":\"workspace.read_file\",\"arguments\":{\"path\":\"README.md\"}}</AGENT_TOOL>. Do not use <LOCAL_AGENT_TOOL> markers for workspace files.\n")
+	for _, tool := range tools {
+		if tool == services.ToolWorkspacePublish {
+			fmt.Fprintf(&b, "This workspace was imported from GitHub (%s/%s, branch %s). Only when the user asks to send the changes to GitHub, call workspace.publish with a clear commit message: it puts the changes on a NEW branch with a pull request, after the user approves the exact files. Never call it on your own initiative.\n", memoryPromptName(workspace.GitHubOwner), memoryPromptName(workspace.GitHubRepo), memoryPromptName(workspace.BaseBranch))
+		}
+	}
 	b.WriteString("Paths are relative to the workspace root. Secret files such as .env are not available. Writing a file, running tests and building each need the user's approval, so wait for the actual tool result before continuing. Tests and builds run in a sandbox without internet access, so a project with dependencies needs workspace.install_dependencies first (the user approves it; only package registries are reachable and no project script runs; folders such as node_modules are not listed or readable). A job may be queued: read its result with workspace.get_execution (job_id, wait_seconds up to 20). Never say work succeeded unless a tool result shows it.")
 	return b.String()
 }

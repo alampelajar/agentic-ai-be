@@ -69,6 +69,10 @@ func ConnectDatabase() {
 		&models.User{},
 		&models.RefreshToken{},
 		&models.PasswordResetChallenge{},
+		&models.OTPChallenge{},
+		&models.GitHubConnection{},
+		&models.GitHubOAuthState{},
+		&models.GitHubPublication{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},
@@ -91,6 +95,7 @@ func ConnectDatabase() {
 		&models.AIModelCombo{},
 		&models.AIModelComboMember{},
 		&models.AIModelCallLog{},
+		&models.DesignProject{},
 	)
 
 	if err != nil {

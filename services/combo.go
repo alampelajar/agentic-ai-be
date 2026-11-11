@@ -280,9 +280,39 @@ func OrderTargetsForTask(strategy string, comboID uint, members []ComboTarget, r
 type ComboLimits struct {
 	// MaxAttempts is how many models one request may try.
 	MaxAttempts int
-	// Budget stops new attempts once this much time has passed (a call already
-	// started is not cancelled).
+	// Budget is the time one request may take over all its attempts. Each attempt gets a
+	// share of what is left (see AttemptTimeout), so a model that hangs is cut off in time
+	// and the next model still gets its turn.
 	Budget time.Duration
+}
+
+// ComboMinAttemptTime is the least time an attempt is given while budget is left, so a
+// model is not cut off before it could reasonably answer.
+const ComboMinAttemptTime = 30 * time.Second
+
+// AttemptTimeout is how long the next attempt may take: what is left of the budget shared
+// over the attempts that can still be made, but at least ComboMinAttemptTime (and never
+// more than what is left). The last possible attempt gets everything that is left. Zero
+// means no budget, so the caller's own timeout applies.
+func AttemptTimeout(budget, elapsed time.Duration, attemptsLeft int) time.Duration {
+	if budget <= 0 {
+		return 0
+	}
+	remaining := budget - elapsed
+	if remaining <= 0 {
+		return 0
+	}
+	if attemptsLeft < 1 {
+		attemptsLeft = 1
+	}
+	share := remaining / time.Duration(attemptsLeft)
+	if share < ComboMinAttemptTime {
+		share = ComboMinAttemptTime
+	}
+	if share > remaining {
+		share = remaining
+	}
+	return share
 }
 
 // ErrComboExhausted means every model that was tried failed.
@@ -291,7 +321,9 @@ var ErrComboExhausted = errors.New("semua model dalam combo gagal menjawab")
 // RunCombo tries the ordered models until one answers. A fatal failure (bad request,
 // bad key) moves on to the next model without counting against the model's health;
 // a retryable one does count. It always returns the attempts, also on failure.
-func RunCombo(ordered []ComboTarget, limits ComboLimits, health *ComboHealth, call func(ComboTarget) (string, error)) (ComboOutcome, error) {
+// RunCombo tries the targets in order until one answers. call receives how long that
+// attempt may take (0: no limit from the combo) and must stop by then.
+func RunCombo(ordered []ComboTarget, limits ComboLimits, health *ComboHealth, call func(ComboTarget, time.Duration) (string, error)) (ComboOutcome, error) {
 	outcome := ComboOutcome{}
 	maxAttempts := limits.MaxAttempts
 	if maxAttempts < 1 {
@@ -299,17 +331,22 @@ func RunCombo(ordered []ComboTarget, limits ComboLimits, health *ComboHealth, ca
 	}
 	start := time.Now()
 	tried := 0
-	for _, target := range ordered {
+	for index, target := range ordered {
 		if tried >= maxAttempts {
 			break
 		}
-		if limits.Budget > 0 && tried > 0 && time.Since(start) > limits.Budget {
+		if limits.Budget > 0 && tried > 0 && time.Since(start) >= limits.Budget {
 			outcome.Attempts = append(outcome.Attempts, ComboAttempt{ModelDBID: target.ModelDBID, Name: target.Name, Status: "skipped", Reason: "waktu combo habis"})
 			break
 		}
+		attemptsLeft := maxAttempts - tried
+		if left := len(ordered) - index; left < attemptsLeft {
+			attemptsLeft = left
+		}
+		timeout := AttemptTimeout(limits.Budget, time.Since(start), attemptsLeft)
 		tried++
 		began := time.Now()
-		answer, err := call(target)
+		answer, err := call(target, timeout)
 		attempt := ComboAttempt{ModelDBID: target.ModelDBID, Name: target.Name, LatencyMS: time.Since(began).Milliseconds()}
 		if err == nil {
 			attempt.Status = "ok"

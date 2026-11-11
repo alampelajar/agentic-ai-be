@@ -538,3 +538,33 @@ func TestDownloaderLimitsAndErrors(t *testing.T) {
 		t.Error("a redirect to another host was followed")
 	}
 }
+
+func TestDownloaderExplainsAnEmptyRepository(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/repos/owner/empty/commits":
+			w.WriteHeader(http.StatusConflict) // GitHub: "Git Repository is empty."
+		case r.URL.Path == "/repos/owner/fresh/commits":
+			w.WriteHeader(http.StatusOK) // it has commits, but its archive is not ready yet
+		default:
+			http.NotFound(w, r) // the archive of an empty repository, and of one that does not exist
+		}
+	}))
+	defer server.Close()
+	downloader := &GitHubDownloader{BaseURL: server.URL, APIURL: server.URL, Client: &http.Client{}}
+
+	if _, err := downloader.Download(context.Background(), "owner", "empty", DefaultLimits()); err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Errorf("an empty repository should say so, got %v", err)
+	}
+	if _, err := downloader.Download(context.Background(), "owner", "gone", DefaultLimits()); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("a missing repository should say not found, got %v", err)
+	}
+	if _, err := downloader.Download(context.Background(), "owner", "fresh", DefaultLimits()); err == nil || !strings.Contains(err.Error(), "try again") || strings.Contains(err.Error(), "not found") {
+		t.Errorf("a repository whose archive is not ready should ask to try again, got %v", err)
+	}
+	// If the lookup itself fails, the general message is still given.
+	downloader.APIURL = "http://127.0.0.1:1"
+	if _, err := downloader.Download(context.Background(), "owner", "empty", DefaultLimits()); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Errorf("a failed lookup should fall back to the general message, got %v", err)
+	}
+}

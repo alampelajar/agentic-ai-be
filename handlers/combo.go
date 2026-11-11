@@ -143,7 +143,7 @@ func runComboRequest(userID uint, taskID uint, comboModel models.AIModel, reques
 	ordered := services.OrderTargetsForTask(combo.Strategy, combo.ID, targets, comboRoundRobin, comboHealth, comboSticky, userID, taskID)
 	limits := services.ComboLimits{MaxAttempts: combo.MaxAttempts, Budget: 120 * time.Second}
 
-	outcome, runErr := services.RunCombo(ordered, limits, comboHealth, func(target services.ComboTarget) (string, error) {
+	outcome, runErr := services.RunCombo(ordered, limits, comboHealth, func(target services.ComboTarget, timeout time.Duration) (string, error) {
 		model := byID[target.ModelDBID]
 		key, keyErr := resolveProviderAPIKey(model.Provider, userID)
 		if keyErr != nil {
@@ -151,6 +151,8 @@ func runComboRequest(userID uint, taskID uint, comboModel models.AIModel, reques
 		}
 		memberRequest := request
 		memberRequest.Model = model.ModelID
+		// Bounded by the combo's budget, so a model that hangs leaves time for the next one.
+		memberRequest.Timeout = timeout
 		return callAIProviderWithRepair(key, model.Provider.BaseURL, memberRequest)
 	})
 

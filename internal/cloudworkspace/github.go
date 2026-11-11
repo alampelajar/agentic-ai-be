@@ -93,7 +93,10 @@ func guardedDial(network, address string, _ syscall.RawConn) error {
 // point them at a local server.
 type GitHubDownloader struct {
 	BaseURL string
-	Client  *http.Client
+	// APIURL is where a 404 is looked into to tell an empty repository from a missing one.
+	// Empty means no lookup (tests).
+	APIURL string
+	Client *http.Client
 }
 
 func NewGitHubDownloader() *GitHubDownloader {
@@ -109,7 +112,7 @@ func NewGitHubDownloader() *GitHubDownloader {
 			return nil
 		},
 	}
-	return &GitHubDownloader{BaseURL: "https://codeload.github.com", Client: client}
+	return &GitHubDownloader{BaseURL: "https://codeload.github.com", APIURL: "https://api.github.com", Client: client}
 }
 
 func (d *GitHubDownloader) Download(ctx context.Context, owner, repo string, limits Limits) ([]byte, error) {
@@ -124,7 +127,7 @@ func (d *GitHubDownloader) Download(ctx context.Context, owner, repo string, lim
 	}
 	defer response.Body.Close()
 	if response.StatusCode == http.StatusNotFound {
-		return nil, errors.New("the repository was not found or is not public")
+		return nil, d.notFoundError(ctx, owner, repo)
 	}
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("GitHub answered with HTTP %d", response.StatusCode)
@@ -140,4 +143,37 @@ func (d *GitHubDownloader) Download(ctx context.Context, owner, repo string, lim
 		return nil, fmt.Errorf("repository is larger than %d MiB", limits.MaxZipBytes>>20)
 	}
 	return data, nil
+}
+
+// notFoundError explains a 404 from the archive download. GitHub answers 404 both for a
+// repository that does not exist (or is private) and for one that exists but has no commits
+// yet, which has nothing to download. Asking for the first commit tells them apart: an empty
+// repository answers 409. Any trouble with that lookup falls back to the general message.
+func (d *GitHubDownloader) notFoundError(ctx context.Context, owner, repo string) error {
+	general := errors.New("the repository was not found or is not public (if it is private, connect GitHub in Settings > Integrations)")
+	if d.APIURL == "" {
+		return general
+	}
+	endpoint := fmt.Sprintf("%s/repos/%s/%s/commits?per_page=1", d.APIURL, url.PathEscape(owner), url.PathEscape(repo))
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return general
+	}
+	request.Header.Set("Accept", "application/vnd.github+json")
+	response, err := d.Client.Do(request)
+	if err != nil {
+		return general
+	}
+	defer response.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<16))
+	switch response.StatusCode {
+	case http.StatusConflict:
+		return errors.New("the repository is empty: add at least one commit (for example a README) and try again")
+	case http.StatusOK:
+		// It exists and has commits, yet the archive answered 404: GitHub needs a few seconds to
+		// prepare the archive after a push, so a repository that was just created or pushed to
+		// is not downloadable yet.
+		return errors.New("the repository exists but GitHub has not prepared its download yet (this happens right after a push): wait a few seconds and try again")
+	}
+	return general
 }

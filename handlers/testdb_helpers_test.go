@@ -15,6 +15,10 @@ func migrateAll(db *gorm.DB) error {
 		&models.User{},
 		&models.RefreshToken{},
 		&models.PasswordResetChallenge{},
+		&models.OTPChallenge{},
+		&models.GitHubConnection{},
+		&models.GitHubOAuthState{},
+		&models.GitHubPublication{},
 		&models.AIProvider{},
 		&models.AIModel{},
 		&models.Agent{},
@@ -37,5 +41,6 @@ func migrateAll(db *gorm.DB) error {
 		&models.AIModelCombo{},
 		&models.AIModelComboMember{},
 		&models.AIModelCallLog{},
+		&models.DesignProject{},
 	)
 }
