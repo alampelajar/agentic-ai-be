@@ -25,7 +25,8 @@ import (
 type streamChunk struct {
 	Choices []struct {
 		Delta struct {
-			Content string `json:"content"`
+			Content   string            `json:"content"`
+			ToolCalls []streamToolPiece `json:"tool_calls"`
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -33,11 +34,23 @@ type streamChunk struct {
 	Error *providerError `json:"error,omitempty"`
 }
 
-// wantsChatStream is true when the client asked for a stream and the answer can be streamed as
-// it is: a combo picks its model as it goes and native tool calls are rebuilt after they arrive,
-// so those keep the JSON reply.
-func wantsChatStream(c *gin.Context, isCombo bool, request chatRequest) bool {
-	return c.Query("stream") == "1" && !isCombo && len(request.Tools) == 0
+// streamToolPiece is part of a native tool call: the name usually comes first, the arguments
+// arrive as text in several pieces.
+type streamToolPiece struct {
+	Index    int    `json:"index"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Function struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"function"`
+}
+
+// wantsChatStream is true when the client asked for a stream and the call goes to one model.
+// A combo picks its model as it goes, so it keeps the JSON reply. Calls that offer tools stream
+// too: a native tool call is put together from its pieces at the end (see streamAIProvider).
+func wantsChatStream(c *gin.Context, isCombo bool, _ chatRequest) bool {
+	return c.Query("stream") == "1" && !isCombo
 }
 
 // streamAIProviderWithRetry streams one answer. A model that refuses chatMaxTokens is asked again
@@ -126,6 +139,9 @@ func streamAIProvider(ctx context.Context, apiKey, baseURL string, request chatR
 
 	var answer strings.Builder
 	finish, model := "", request.Model
+	type toolCallText struct{ id, kind, name, arguments string }
+	toolCalls := map[int]*toolCallText{}
+	firstTool := -1
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 64<<10), 4<<20)
 	for scanner.Scan() {
@@ -152,6 +168,24 @@ func streamAIProvider(ctx context.Context, apiKey, baseURL string, request chatR
 				answer.WriteString(choice.Delta.Content)
 				onDelta(choice.Delta.Content)
 			}
+			for _, piece := range choice.Delta.ToolCalls {
+				call := toolCalls[piece.Index]
+				if call == nil {
+					call = &toolCallText{}
+					toolCalls[piece.Index] = call
+					if firstTool < 0 || piece.Index < firstTool {
+						firstTool = piece.Index
+					}
+				}
+				if piece.ID != "" {
+					call.id = piece.ID
+				}
+				if piece.Type != "" {
+					call.kind = piece.Type
+				}
+				call.name += piece.Function.Name
+				call.arguments += piece.Function.Arguments
+			}
 			if choice.FinishReason != "" {
 				finish = choice.FinishReason
 			}
@@ -164,6 +198,23 @@ func streamAIProvider(ctx context.Context, apiKey, baseURL string, request chatR
 		return answer.String(), fmt.Errorf("stream provider terputus: %w", err)
 	}
 	log.Printf("[CHAT AI] Stream selesai setelah %s (finish_reason=%s)", time.Since(start), finish)
+
+	// A native tool call becomes the same marker the JSON path returns.
+	if firstTool >= 0 {
+		pieces := toolCalls[firstTool]
+		var call providerToolCall
+		call.ID, call.Type, call.Function.Name = pieces.id, pieces.kind, pieces.name
+		if strings.TrimSpace(pieces.arguments) != "" {
+			encoded, _ := json.Marshal(pieces.arguments)
+			call.Function.Arguments = encoded
+		}
+		marker, err := normalizeNativeToolCall(call)
+		var invalid *invalidToolCallError
+		if errors.As(err, &invalid) {
+			invalid.Truncated = finish == "length"
+		}
+		return marker, err
+	}
 
 	text := strings.TrimSpace(answer.String())
 	if text == "" && finish == "length" {

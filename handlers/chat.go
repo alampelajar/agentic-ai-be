@@ -763,6 +763,14 @@ AGENT ROLE: DEBUGGING AGENT
 		answer, err = streamAIProviderWithRetry(c.Request.Context(), apiKey, aiModel.Provider.BaseURL, requestBody, func(text string) {
 			stream.send("delta", gin.H{"text": text})
 		})
+		// A broken tool call is repaired as the JSON path does: the model is told what was wrong.
+		var invalid *invalidToolCallError
+		if errors.As(err, &invalid) && c.Request.Context().Err() == nil {
+			log.Printf("[CHAT] tool call tidak valid dari model saat stream (%v); meminta ulang", err)
+			repair := requestBody
+			repair.Messages = append(append([]chatMessage(nil), requestBody.Messages...), chatMessage{Role: "user", Content: toolRepairMessage(invalid)})
+			answer, err = callAIProviderWithRepair(apiKey, aiModel.Provider.BaseURL, repair)
+		}
 		if err != nil {
 			if c.Request.Context().Err() != nil {
 				log.Printf("[CHAT] stream dihentikan oleh pengguna")
