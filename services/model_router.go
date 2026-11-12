@@ -87,8 +87,14 @@ func scoreFor(candidate RouteCandidate, need TaskNeed) int {
 			score++
 		}
 	case NeedFast:
-		if hasAny(text, fastMarkers) || hasAny(provider, fastProviders) {
+		switch {
+		case hasAny(provider, fastProviders):
+			score += 5 // these providers answer fastest, whatever the model
+		case hasAny(text, fastMarkers):
 			score += 4
+		}
+		if strings.HasSuffix(text, ":free") || strings.Contains(text, ":free ") {
+			score-- // OpenRouter's free models share a small daily quota; keep them for when needed
 		}
 		if hasAny(text, strongMarkers) && !hasAny(provider, fastProviders) {
 			score--

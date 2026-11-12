@@ -39,8 +39,12 @@ func TestEachNeedPutsTheFittingModelFirst(t *testing.T) {
 	if first := RankModels(routeCandidates, NeedCoding)[0]; first.ModelDBID != 4 && first.ModelDBID != 2 {
 		t.Errorf("coding should start with a coding model, got %s", first.ModelID)
 	}
-	if first := RankModels(routeCandidates, NeedFast)[0]; !hasAny(first.ModelID+" "+first.Provider, []string{"flash", "lightning", "Groq"}) {
-		t.Errorf("a plain question should start with a fast model, got %s (%s)", first.ModelID, first.Provider)
+	if first := RankModels(routeCandidates, NeedFast)[0]; first.Provider != "Groq" {
+		t.Errorf("a plain question should start with the fast provider, got %s (%s)", first.ModelID, first.Provider)
+	}
+	fast := RankModels(routeCandidates[:2], NeedFast) // a paid flash model and a free mini one
+	if fast[0].ModelDBID != 1 {
+		t.Errorf("a model on the shared free quota should come after an equal paid one, got %v", ids(fast))
 	}
 	long := RankModels(routeCandidates, NeedLong)
 	if long[len(long)-1].ModelDBID != 7 {
