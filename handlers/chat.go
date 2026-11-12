@@ -766,6 +766,11 @@ AGENT ROLE: DEBUGGING AGENT
 			err,
 		)
 
+		if message := imageUnsupportedMessage(err, len(images) > 0, aiModel.ModelID); message != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": "model_cannot_read_images", "error": message, "detail": err.Error()})
+			return
+		}
+
 		c.JSON(http.StatusBadGateway, gin.H{
 			"ok":     false,
 			"error":  "Gagal mendapatkan jawaban dari AI.",
