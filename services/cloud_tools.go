@@ -10,6 +10,7 @@ const (
 	ToolWorkspaceListFiles    = "workspace.list_files"
 	ToolWorkspaceReadFile     = "workspace.read_file"
 	ToolWorkspaceWriteFile    = "workspace.write_file"
+	ToolWorkspaceEditFile     = "workspace.edit_file"
 	ToolWorkspaceGetChanges   = "workspace.get_changes"
 	ToolWorkspaceRunTest      = "workspace.run_test"
 	ToolWorkspaceBuild        = "workspace.build"
@@ -18,7 +19,7 @@ const (
 	ToolWorkspacePublish      = "workspace.publish"
 )
 
-var cloudToolNames = []string{ToolWorkspaceListFiles, ToolWorkspaceReadFile, ToolWorkspaceWriteFile, ToolWorkspaceGetChanges, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution, ToolWorkspaceInstall, ToolWorkspacePublish}
+var cloudToolNames = []string{ToolWorkspaceListFiles, ToolWorkspaceReadFile, ToolWorkspaceWriteFile, ToolWorkspaceEditFile, ToolWorkspaceGetChanges, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceGetExecution, ToolWorkspaceInstall, ToolWorkspacePublish}
 
 func init() {
 	pathProperty := map[string]any{"type": "string", "description": "Path relative to the workspace root, for example src/main.go. Absolute paths and .. are refused."}
@@ -38,7 +39,12 @@ func init() {
 	}
 	define(ToolWorkspaceListFiles, "List files and folders in the cloud workspace. Optional path selects a folder.", "workspace.read", 10, map[string]any{"path": map[string]any{"type": "string", "description": "Folder relative to the workspace root; leave empty for the root."}})
 	define(ToolWorkspaceReadFile, "Read a text file from the cloud workspace.", "workspace.read", 10, map[string]any{"path": pathProperty}, "path")
-	define(ToolWorkspaceWriteFile, "Create or replace a text file in the cloud workspace. The user must approve every write.", "workspace.write", 15, map[string]any{"path": pathProperty, "content": map[string]any{"type": "string", "description": "The complete new content of the file."}}, "path", "content")
+	define(ToolWorkspaceEditFile, "Change part of an existing text file: old_text is replaced by new_text. old_text must appear exactly once in the file, so copy it exactly from workspace.read_file and include enough surrounding lines to make it unique. Prefer this over workspace.write_file for changes to an existing file: only the changed part is sent. For several changes, call it once per change. The user must approve every edit.", "workspace.write", 15, map[string]any{
+		"path":     pathProperty,
+		"old_text": map[string]any{"type": "string", "description": "The exact text to replace, as it is in the file now (whitespace and line breaks included)."},
+		"new_text": map[string]any{"type": "string", "description": "The text to put in its place. Empty removes old_text."},
+	}, "path", "old_text", "new_text")
+	define(ToolWorkspaceWriteFile, "Create a new text file, or replace a whole file, in the cloud workspace. For a change to part of an existing file use workspace.edit_file instead. The user must approve every write.", "workspace.write", 15, map[string]any{"path": pathProperty, "content": map[string]any{"type": "string", "description": "The complete new content of the file."}}, "path", "content")
 	define(ToolWorkspaceGetChanges, "List the files added, modified or deleted in the cloud workspace since it was created or imported.", "workspace.read", 10, map[string]any{})
 	define(ToolWorkspaceRunTest, "Run the project's tests in the cloud sandbox. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node", "python")})
 	define(ToolWorkspaceBuild, "Build the project in the cloud sandbox. The user must approve each run. Returns a job id; use workspace.get_execution for the result.", "workspace.execute", 15, map[string]any{"target": targetProperty("go", "node")})
@@ -66,7 +72,7 @@ func IsCloudTool(name string) bool {
 // CloudToolNeedsApproval is true for tools that change files or run commands.
 func CloudToolNeedsApproval(name string) bool {
 	switch name {
-	case ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspacePublish:
+	case ToolWorkspaceWriteFile, ToolWorkspaceEditFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspacePublish:
 		return true
 	}
 	return false
@@ -93,7 +99,7 @@ func CloudToolsForAgent(slug string) []string {
 		if has("review") {
 			return read // "code review" is a reviewer, not an author
 		}
-		return append(read, ToolWorkspaceWriteFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution, ToolWorkspacePublish)
+		return append(read, ToolWorkspaceWriteFile, ToolWorkspaceEditFile, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution, ToolWorkspacePublish)
 	case has("testing", "test"):
 		return append(read, ToolWorkspaceRunTest, ToolWorkspaceBuild, ToolWorkspaceInstall, ToolWorkspaceGetExecution)
 	case has("debug"):

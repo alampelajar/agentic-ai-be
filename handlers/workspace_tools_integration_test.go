@@ -124,7 +124,7 @@ func (f *toolFixture) fileOnDisk(t *testing.T, name string) (string, bool) {
 }
 
 func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
-	names := []string{"workspace.list_files", "workspace.read_file", "workspace.write_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.get_execution", "workspace.install_dependencies"}
+	names := []string{"workspace.list_files", "workspace.read_file", "workspace.write_file", "workspace.edit_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.get_execution", "workspace.install_dependencies"}
 	seen := map[string]bool{}
 	for _, name := range names {
 		definition, ok := services.ToolRegistry[name]
@@ -157,7 +157,7 @@ func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
 			t.Errorf("legacy skill tool %s is no longer accepted", legacy)
 		}
 	}
-	for _, mutating := range []string{"workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies"} {
+	for _, mutating := range []string{"workspace.write_file", "workspace.edit_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies"} {
 		if !services.CloudToolNeedsApproval(mutating) {
 			t.Errorf("%s must need approval", mutating)
 		}
@@ -174,7 +174,7 @@ func TestCloudToolsAreRegisteredWithSchemas(t *testing.T) {
 
 func TestEachRoleGetsOnlyItsTools(t *testing.T) {
 	want := map[string][]string{
-		"coding":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution", "workspace.publish"},
+		"coding":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.write_file", "workspace.edit_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution", "workspace.publish"},
 		"testing":        {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.build", "workspace.install_dependencies", "workspace.get_execution"},
 		"debugging":      {"workspace.list_files", "workspace.read_file", "workspace.get_changes", "workspace.run_test", "workspace.get_execution"},
 		"review":         {"workspace.list_files", "workspace.read_file", "workspace.get_changes"},
@@ -190,7 +190,7 @@ func TestEachRoleGetsOnlyItsTools(t *testing.T) {
 		}
 	}
 	for _, slug := range []string{"review", "planning", "code-review", "x"} {
-		for _, writer := range []string{"workspace.write_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies"} {
+		for _, writer := range []string{"workspace.write_file", "workspace.edit_file", "workspace.run_test", "workspace.build", "workspace.install_dependencies"} {
 			if services.CloudToolAllowedForAgent(writer, slug) {
 				t.Errorf("%q may use %s", slug, writer)
 			}
