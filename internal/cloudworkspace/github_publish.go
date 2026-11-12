@@ -12,11 +12,13 @@ import (
 	"net/url"
 )
 
-// PublishFile is one changed file. Deleted files carry no content.
+// PublishFile is one changed file. Deleted files carry no content; Added marks a file that is new
+// in the workspace (only shown to the person, GitHub is sent the same blob either way).
 type PublishFile struct {
 	Path    string
 	Content []byte
 	Deleted bool
+	Added   bool
 }
 
 // PublishRequest sends a workspace's changes to GitHub as one commit on a NEW branch made from the

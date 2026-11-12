@@ -47,8 +47,11 @@ func publishApprovalPreview(workspace models.CloudWorkspace, args toolArgs, file
 			break
 		}
 		status := "changed"
-		if file.Deleted {
+		switch {
+		case file.Deleted:
 			status = "deleted"
+		case file.Added:
+			status = "added"
 		}
 		listed = append(listed, gin.H{"path": file.Path, "status": status})
 	}

@@ -91,6 +91,7 @@ func TestPublishApprovalShowsWhereItGoesAndEveryFile(t *testing.T) {
 		files = append(files, cloudworkspace.PublishFile{Path: fmt.Sprintf("f%02d.txt", i), Content: []byte("x")})
 	}
 	files[1].Deleted = true
+	files[2].Added = true
 	args := toolArgs{"message": "Update docs", "branch": "agentic/docs"}
 
 	summary := publishApprovalSummary(workspace, args, files)
@@ -110,5 +111,8 @@ func TestPublishApprovalShowsWhereItGoesAndEveryFile(t *testing.T) {
 	}
 	if listed[1]["status"] != "deleted" {
 		t.Errorf("a deleted file must show as deleted: %v", listed[1])
+	}
+	if listed[2]["status"] != "added" || listed[0]["status"] != "changed" {
+		t.Errorf("a new file must show as added and an edited one as changed: %v %v", listed[2], listed[0])
 	}
 }

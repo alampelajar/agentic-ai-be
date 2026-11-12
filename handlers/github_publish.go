@@ -121,7 +121,7 @@ func collectPublishFiles(handle *workspaceHandle) ([]cloudworkspace.PublishFile,
 		if err != nil {
 			return nil, unreadable
 		}
-		files = append(files, cloudworkspace.PublishFile{Path: change.Path, Content: content})
+		files = append(files, cloudworkspace.PublishFile{Path: change.Path, Content: content, Added: change.Status == "added"})
 	}
 	return files, nil
 }
