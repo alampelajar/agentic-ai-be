@@ -155,6 +155,7 @@ func Chat(c *gin.Context) {
 	autoModel := false
 	var autoModels []models.AIModel
 	var autoReason string
+	var autoNeed services.TaskNeed
 	var workspaceID uint
 	var taskID uint
 
@@ -423,6 +424,7 @@ func Chat(c *gin.Context) {
 			return
 		}
 		autoModels, autoReason = chosen, reason
+		autoNeed = services.NeedFor(len(images) > 0, workspaceID != 0, len(attachedFiles) > 0, len([]rune(prompt)))
 		aiModel = chosen[0]
 		modelID = aiModel.ID
 		log.Printf("[CHAT] auto: %s dipilih (%s)", aiModel.ModelID, reason)
@@ -871,7 +873,7 @@ AGENT ROLE: DEBUGGING AGENT
 		"agent_id": agentID,
 	}
 	if len(autoModels) > 0 {
-		response["auto"] = gin.H{"name": usedModel.Name, "reason": autoReason, "fallback": usedModel.ID != autoModels[0].ID}
+		response["auto"] = gin.H{"name": usedModel.Name, "reason": autoReason, "need": autoNeed, "fallback": usedModel.ID != autoModels[0].ID}
 	}
 	if stream != nil {
 		stream.send("done", response)

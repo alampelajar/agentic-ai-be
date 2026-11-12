@@ -59,7 +59,7 @@ func TestAutoChoosesAModelAndMovesOnWhenItFails(t *testing.T) {
 		t.Fatalf("auto = %d %s", recorder.Code, recorder.Body.String())
 	}
 	auto, _ := reply["auto"].(map[string]any)
-	if auto == nil || auto["fallback"] != true || !strings.Contains(auto["reason"].(string), "pertanyaan biasa") {
+	if auto == nil || auto["fallback"] != true || auto["need"] != "fast" || !strings.Contains(auto["reason"].(string), "pertanyaan biasa") {
 		t.Fatalf("the reply must say auto chose it, why, and that it fell back: %v", reply["auto"])
 	}
 	if asked := f.provider.models(); !strings.HasPrefix(asked, f.system.ModelID+","+f.mine[0].ModelID) || strings.Contains(asked, f.foreign.ModelID) {
