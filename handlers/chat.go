@@ -185,6 +185,7 @@ func Chat(c *gin.Context) {
 	// ============================================================
 
 	var images []*multipart.FileHeader
+	var attachedFiles []*multipart.FileHeader
 
 	if strings.HasPrefix(
 		contentType,
@@ -259,6 +260,7 @@ func Chat(c *gin.Context) {
 
 				images = uploaded
 			}
+			attachedFiles = form.File["files"]
 		}
 	}
 
@@ -632,9 +634,15 @@ AGENT ROLE: DEBUGGING AGENT
 	// CURRENT MESSAGE CONTENT
 	// ============================================================
 
+	filesText, err := attachedFilesText(attachedFiles)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Gagal memproses file.", "detail": err.Error()})
+		return
+	}
+
 	messageContent, err :=
 		buildChatContent(
-			prompt,
+			prompt+filesText,
 			images,
 		)
 
