@@ -94,8 +94,13 @@ func normalizeToolArgs(tool string, raw map[string]any, workspace models.CloudWo
 	if path, present := args.str("path"); present && len(path) > 512 {
 		return nil, errors.New("path is too long")
 	}
-	if content, present := args.str("content"); present && int64(len(content)) > cloudLimitsSnapshot().MaxFileWriteBytes {
-		return nil, errors.New("content is too large")
+	for _, key := range []string{"content", "old_text", "new_text"} {
+		if text, present := args.str(key); present && int64(len(text)) > cloudLimitsSnapshot().MaxFileWriteBytes {
+			return nil, fmt.Errorf("%s is too large", key)
+		}
+	}
+	if oldText, present := args.str("old_text"); present && oldText == "" {
+		return nil, errors.New("old_text must not be empty: use workspace.write_file to create a file")
 	}
 	if wait, present := args["wait_seconds"].(int64); present && wait > maxExecutionWaitSecs {
 		args["wait_seconds"] = int64(maxExecutionWaitSecs)
@@ -145,6 +150,11 @@ func approvalSummary(tool string, args toolArgs) string {
 		path, _ := args.str("path")
 		content, _ := args.str("content")
 		return fmt.Sprintf("Write %s (%d characters)", path, len([]rune(content)))
+	case services.ToolWorkspaceEditFile:
+		path, _ := args.str("path")
+		oldText, _ := args.str("old_text")
+		newText, _ := args.str("new_text")
+		return fmt.Sprintf("Edit %s: replace %d characters with %d", path, len([]rune(oldText)), len([]rune(newText)))
 	case services.ToolWorkspaceRunTest, services.ToolWorkspaceBuild:
 		target, _ := args.str("target")
 		jobType, _ := jobTypeFor(tool, target)
@@ -206,6 +216,17 @@ func executeCloudTool(handle *workspaceHandle, tool string, args toolArgs, agent
 			return failure(err)
 		}
 		return gin.H{"ok": true, "path": path, "created": result.Created, "size": result.Size}
+	case services.ToolWorkspaceEditFile:
+		path, _ := args.str("path")
+		edited, err := plannedEdit(handle, args)
+		if err != nil {
+			return gin.H{"ok": false, "error": err.Error()}
+		}
+		result, err := handle.writeFile(path, edited)
+		if err != nil {
+			return failure(err)
+		}
+		return gin.H{"ok": true, "path": path, "size": result.Size, "replaced": 1}
 	case services.ToolWorkspaceGetChanges:
 		changes, err := handle.changes()
 		if err != nil {
@@ -361,6 +382,15 @@ func RunWorkspaceTool(c *gin.Context) {
 	}
 
 	started := time.Now()
+	// An edit that cannot apply is answered at once, so the model can read the file and try again
+	// without asking the person to approve something that would fail.
+	if tool == services.ToolWorkspaceEditFile {
+		if _, err := plannedEdit(handle, args); err != nil {
+			recordToolActivity(userID, req.AgentID, handle.Workspace.ID, tool, args, "not_required", "failed", err.Error(), started)
+			c.JSON(http.StatusOK, gin.H{"ok": true, "tool": tool, "result": gin.H{"ok": false, "error": err.Error()}})
+			return
+		}
+	}
 	if !services.CloudToolNeedsApproval(tool) {
 		result := executeCloudTool(handle, tool, args, req.AgentID, req.TaskID)
 		execution, message := resultStatus(result)
@@ -402,13 +432,13 @@ func RunWorkspaceTool(c *gin.Context) {
 func previewArguments(tool string, args toolArgs) gin.H {
 	preview := gin.H{}
 	for key, value := range args {
-		if text, ok := value.(string); ok && key == "content" {
+		if text, ok := value.(string); ok && (key == "content" || key == "old_text" || key == "new_text") {
 			runes := []rune(text)
-			preview["content_characters"] = len(runes)
+			preview[key+"_characters"] = len(runes)
 			if len(runes) > 600 {
 				text = string(runes[:600]) + "..."
 			}
-			preview["content_preview"] = redactActivityString(text)
+			preview[key+"_preview"] = redactActivityString(text)
 			continue
 		}
 		preview[key] = value
@@ -540,7 +570,7 @@ func cloudWorkspacePrompt(workspace models.CloudWorkspace, tools []string) strin
 			fmt.Fprintf(&b, "This workspace was imported from GitHub (%s/%s, branch %s). Only when the user asks to send the changes to GitHub, call workspace.publish with a clear commit message: it puts the changes on a NEW branch with a pull request, after the user approves the exact files. Never call it on your own initiative.\n", memoryPromptName(workspace.GitHubOwner), memoryPromptName(workspace.GitHubRepo), memoryPromptName(workspace.BaseBranch))
 		}
 	}
-	b.WriteString("Paths are relative to the workspace root. Secret files such as .env are not available. Writing a file, running tests and building each need the user's approval, so wait for the actual tool result before continuing. Tests and builds run in a sandbox without internet access, so a project with dependencies needs workspace.install_dependencies first (the user approves it; only package registries are reachable and no project script runs; folders such as node_modules are not listed or readable). A job may be queued: read its result with workspace.get_execution (job_id, wait_seconds up to 20). Never say work succeeded unless a tool result shows it.")
+	b.WriteString("Paths are relative to the workspace root. Secret files such as .env are not available. To change part of an existing file use workspace.edit_file (only the changed text, copied exactly) instead of rewriting the whole file. Writing or editing a file, running tests and building each need the user's approval, so wait for the actual tool result before continuing. Tests and builds run in a sandbox without internet access, so a project with dependencies needs workspace.install_dependencies first (the user approves it; only package registries are reachable and no project script runs; folders such as node_modules are not listed or readable). A job may be queued: read its result with workspace.get_execution (job_id, wait_seconds up to 20). Never say work succeeded unless a tool result shows it.")
 	return b.String()
 }
 
