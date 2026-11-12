@@ -120,7 +120,7 @@ func seedAgents() {
 
 			Name: "Coding Agent",
 
-			Description: "Membuat, mengubah, memperbaiki, dan mengembangkan kode aplikasi.",
+			Description: "Fokus pada implementasi fitur, penulisan kode, refactoring terarah, dan perbaikan bug.",
 
 			Status: "ready",
 
@@ -131,7 +131,7 @@ func seedAgents() {
 
 			Name: "Testing Agent",
 
-			Description: "Menguji aplikasi dan membantu menemukan masalah atau bug pada sistem.",
+			Description: "Fokus pada perencanaan dan pembuatan test case, pengujian unit/integrasi, regresi, dan pelaporan hasil.",
 
 			Status: "ready",
 
@@ -142,7 +142,7 @@ func seedAgents() {
 
 			Name: "Code Review Agent",
 
-			Description: "Menganalisis kode untuk menemukan masalah kualitas dan potensi kesalahan.",
+			Description: "Fokus pada code review untuk menemukan bug, risiko keamanan, regresi, dan masalah maintainability.",
 
 			Status: "ready",
 
@@ -153,7 +153,7 @@ func seedAgents() {
 
 			Name: "Planning Agent",
 
-			Description: "Menganalisis goal dan membuat rencana pengerjaan yang terstruktur.",
+			Description: "Fokus memecah tujuan menjadi langkah implementasi, dependensi, acceptance criteria, dan strategi validasi.",
 
 			Status: "ready",
 
@@ -164,7 +164,7 @@ func seedAgents() {
 
 			Name: "Debugging Agent",
 
-			Description: "Menganalisis error dan membantu menemukan penyebab serta solusi masalah.",
+			Description: "Fokus menelusuri log dan gejala, mencari root cause, menyarankan perbaikan minimal, dan memverifikasi solusi.",
 
 			Status: "ready",
 
