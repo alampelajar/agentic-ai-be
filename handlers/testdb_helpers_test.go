@@ -25,6 +25,7 @@ func migrateAll(db *gorm.DB) error {
 		&models.AgentModel{},
 		&models.Task{},
 		&models.TaskMessage{},
+		&models.TaskMessageAttachment{},
 		&models.AuditLog{},
 		&models.Skill{},
 		&models.SkillVersion{},

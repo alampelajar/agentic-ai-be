@@ -397,6 +397,11 @@ func main() {
 			handlers.AddTaskMessage,
 		)
 
+		protected.GET(
+			"/tasks/:id/attachments/:attachmentId",
+			handlers.GetTaskAttachment,
+		)
+
 		// ========================================================
 		// CHAT
 		// ========================================================
