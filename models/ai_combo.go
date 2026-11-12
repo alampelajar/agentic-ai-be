@@ -54,6 +54,8 @@ type AIModelCallLog struct {
 	Attempt    int       `json:"attempt" gorm:"not null"`
 	Status     string    `json:"status" gorm:"type:varchar(20);not null"`
 	ErrorClass string    `json:"error_class,omitempty" gorm:"type:varchar(20)"`
+	// HTTPStatus is the provider's status on a failure (503 busy, 429 limited…), 0 when unknown.
+	HTTPStatus int `json:"http_status,omitempty"`
 	LatencyMS  int64     `json:"latency_ms"`
 	CreatedAt  time.Time `json:"created_at" gorm:"index:idx_call_log_user_day"`
 }

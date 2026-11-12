@@ -110,6 +110,7 @@ func streamAIProvider(ctx context.Context, apiKey, baseURL string, request chatR
 		return "", fmt.Errorf("gagal menghubungi provider AI: %w", err)
 	}
 	defer resp.Body.Close()
+	recordProviderQuota(baseURL, apiKey, resp.Header)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		responseBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		diagnostic := providerRateLimitDiagnostic(resp, responseBody)

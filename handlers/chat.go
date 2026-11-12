@@ -151,6 +151,10 @@ func Chat(c *gin.Context) {
 
 	var agentID uint
 	var modelID uint
+	// Auto: the chat picks the model for what this message needs (see model_auto.go).
+	autoModel := false
+	var autoModels []models.AIModel
+	var autoReason string
 	var workspaceID uint
 	var taskID uint
 
@@ -234,6 +238,7 @@ func Chat(c *gin.Context) {
 		modelID = parseUintForm(
 			c.PostForm("model_id"),
 		)
+		autoModel = c.PostForm("auto_model") == "1"
 
 		workspaceID = parseUintForm(
 			c.PostForm("workspace_id"),
@@ -405,6 +410,22 @@ func Chat(c *gin.Context) {
 			})
 			return
 		}
+	}
+
+	// ------------------------------------------------------------
+	// AUTO: THE MODEL THAT FITS THIS MESSAGE
+	// ------------------------------------------------------------
+
+	if modelID == 0 && autoModel {
+		chosen, reason, problem := chooseAutoModels(userID, agentID, len(images) > 0, workspaceID != 0, len(attachedFiles) > 0, len([]rune(prompt)))
+		if problem != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": "auto_model_unavailable", "error": problem})
+			return
+		}
+		autoModels, autoReason = chosen, reason
+		aiModel = chosen[0]
+		modelID = aiModel.ID
+		log.Printf("[CHAT] auto: %s dipilih (%s)", aiModel.ModelID, reason)
 	}
 
 	// ------------------------------------------------------------
@@ -757,37 +778,6 @@ AGENT ROLE: DEBUGGING AGENT
 	var comboTrace []services.ComboAttempt
 	usedModel := aiModel
 
-	// The person sees the answer while the model writes it.
-	if wantsChatStream(c, isCombo, requestBody) {
-		stream := startChatStream(c)
-		answer, err = streamAIProviderWithRetry(c.Request.Context(), apiKey, aiModel.Provider.BaseURL, requestBody, func(text string) {
-			stream.send("delta", gin.H{"text": text})
-		})
-		// A broken tool call is repaired as the JSON path does: the model is told what was wrong.
-		var invalid *invalidToolCallError
-		if errors.As(err, &invalid) && c.Request.Context().Err() == nil {
-			log.Printf("[CHAT] tool call tidak valid dari model saat stream (%v); meminta ulang", err)
-			repair := requestBody
-			repair.Messages = append(append([]chatMessage(nil), requestBody.Messages...), chatMessage{Role: "user", Content: toolRepairMessage(invalid)})
-			answer, err = callAIProviderWithRepair(apiKey, aiModel.Provider.BaseURL, repair)
-		}
-		if err != nil {
-			if c.Request.Context().Err() != nil {
-				log.Printf("[CHAT] stream dihentikan oleh pengguna")
-				return
-			}
-			log.Printf("[CHAT] ERROR AI (stream): %v", err)
-			if message := imageUnsupportedMessage(err, len(images) > 0, aiModel.ModelID); message != "" {
-				stream.send("error", gin.H{"ok": false, "code": "model_cannot_read_images", "error": message, "detail": err.Error()})
-				return
-			}
-			stream.send("error", gin.H{"ok": false, "error": "Gagal mendapatkan jawaban dari AI.", "detail": err.Error()})
-			return
-		}
-		stream.send("done", gin.H{"ok": true, "message": enforceAgentToolMarkers(answer, activeToolNames), "model": aiModel.ModelID, "model_id": aiModel.ID, "provider": aiModel.Provider.Name, "agent_id": agentID})
-		return
-	}
-
 	if isCombo {
 		var comboErr *comboRunError
 		answer, usedModel, comboTrace, comboErr = runComboRequest(userID, taskID, aiModel, requestBody)
@@ -795,55 +785,97 @@ AGENT ROLE: DEBUGGING AGENT
 			c.JSON(comboErr.Status, gin.H{"ok": false, "error": comboErr.Message, "detail": comboErr.Detail, "combo_trace": comboTrace})
 			return
 		}
-	} else {
-		answer, err = callAIProviderWithRepair(
-			apiKey,
-			aiModel.Provider.BaseURL,
-			requestBody,
-		)
-	}
-
-	if err != nil {
-		log.Printf(
-			"[CHAT] ERROR AI: %v",
-			err,
-		)
-
-		if message := imageUnsupportedMessage(err, len(images) > 0, aiModel.ModelID); message != "" {
-			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": "model_cannot_read_images", "error": message, "detail": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusBadGateway, gin.H{
-			"ok":     false,
-			"error":  "Gagal mendapatkan jawaban dari AI.",
-			"detail": err.Error(),
-		})
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": enforceAgentToolMarkers(answer, activeToolNames), "model": usedModel.ModelID, "model_id": usedModel.ID,
+			"provider": usedModel.Provider.Name, "agent_id": agentID, "combo": aiModel.Name, "combo_trace": comboTrace})
 		return
 	}
 
-	answer = enforceAgentToolMarkers(answer, activeToolNames)
+	// One model, or with Auto the ranked models: when one fails before writing anything with an
+	// error that may pass, the next is tried.
+	candidates := []models.AIModel{aiModel}
+	if len(autoModels) > 0 {
+		candidates = autoModels
+	}
+	var stream *chatStreamWriter
+	if wantsChatStream(c, isCombo, requestBody) {
+		started := startChatStream(c)
+		stream = &started
+	}
+	for index, candidate := range candidates {
+		if index > 0 {
+			key, keyErr := resolveProviderAPIKey(candidate.Provider, userID)
+			if keyErr != nil {
+				log.Printf("[CHAT] auto: %s dilewati (%s)", candidate.ModelID, keyErr.Message)
+				continue
+			}
+			apiKey = key
+			log.Printf("[CHAT] auto: mencoba model berikutnya %s", candidate.ModelID)
+		}
+		usedModel = candidate
+		requestBody.Model = candidate.ModelID
+		started := time.Now()
+		wrote := false
+		if stream != nil {
+			answer, err = streamAIProviderWithRetry(c.Request.Context(), apiKey, candidate.Provider.BaseURL, requestBody, func(text string) {
+				wrote = true
+				stream.send("delta", gin.H{"text": text})
+			})
+			// A broken tool call is repaired as the JSON path does: the model is told what was wrong.
+			var invalid *invalidToolCallError
+			if errors.As(err, &invalid) && c.Request.Context().Err() == nil {
+				log.Printf("[CHAT] tool call tidak valid dari model saat stream (%v); meminta ulang", err)
+				repair := requestBody
+				repair.Messages = append(append([]chatMessage(nil), requestBody.Messages...), chatMessage{Role: "user", Content: toolRepairMessage(invalid)})
+				answer, err = callAIProviderWithRepair(apiKey, candidate.Provider.BaseURL, repair)
+			}
+		} else {
+			answer, err = callAIProviderWithRepair(apiKey, candidate.Provider.BaseURL, requestBody)
+		}
+		if c.Request.Context().Err() != nil {
+			log.Printf("[CHAT] dihentikan oleh pengguna")
+			return
+		}
+		logModelCall(userID, candidate, err, time.Since(started))
+		if err == nil || wrote || index == len(candidates)-1 || services.ClassifyProviderError(err) != services.ErrorRetryable {
+			break
+		}
+		log.Printf("[CHAT] auto: %s gagal (%v)", candidate.ModelID, err)
+	}
+
+	if err != nil {
+		log.Printf("[CHAT] ERROR AI: %v", err)
+		failure := gin.H{"ok": false, "error": "Gagal mendapatkan jawaban dari AI.", "detail": err.Error()}
+		status := http.StatusBadGateway
+		if message := imageUnsupportedMessage(err, len(images) > 0, usedModel.ModelID); message != "" {
+			failure = gin.H{"ok": false, "code": "model_cannot_read_images", "error": message, "detail": err.Error()}
+			status = http.StatusBadRequest
+		}
+		if stream != nil {
+			stream.send("error", failure)
+		} else {
+			c.JSON(status, failure)
+		}
+		return
+	}
 
 	// ============================================================
 	// RESPONSE
 	// ============================================================
 
 	response := gin.H{
-		"ok": true,
-
-		"message": answer,
-
-		"model": usedModel.ModelID,
-
+		"ok":       true,
+		"message":  enforceAgentToolMarkers(answer, activeToolNames),
+		"model":    usedModel.ModelID,
 		"model_id": usedModel.ID,
-
 		"provider": usedModel.Provider.Name,
-
 		"agent_id": agentID,
 	}
-	if isCombo {
-		response["combo"] = aiModel.Name
-		response["combo_trace"] = comboTrace
+	if len(autoModels) > 0 {
+		response["auto"] = gin.H{"name": usedModel.Name, "reason": autoReason, "fallback": usedModel.ID != autoModels[0].ID}
+	}
+	if stream != nil {
+		stream.send("done", response)
+		return
 	}
 	c.JSON(http.StatusOK, response)
 }
@@ -1024,6 +1056,7 @@ func callAIProvider(
 	}
 
 	defer resp.Body.Close()
+	recordProviderQuota(baseURL, apiKey, resp.Header)
 
 	// ------------------------------------------------------------
 	// RESPONSE BODY

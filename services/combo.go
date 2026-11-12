@@ -73,6 +73,17 @@ func (h *ComboHealth) Resting(modelID uint) bool {
 	return state != nil && h.now().Before(state.restTill)
 }
 
+// RestingUntil is when the model's rest ends, or the zero time when it is not resting.
+func (h *ComboHealth) RestingUntil(modelID uint) time.Time {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	state := h.models[modelID]
+	if state == nil || !h.now().Before(state.restTill) {
+		return time.Time{}
+	}
+	return state.restTill
+}
+
 // Success clears the model's failures.
 func (h *ComboHealth) Success(modelID uint) {
 	h.mu.Lock()
