@@ -431,6 +431,9 @@ func DeleteTask(c *gin.Context) {
 		return
 	}
 
+	var task models.Task
+	config.DB.Select("id").Where("id = ? AND user_id = ?", c.Param("id"), userID).First(&task)
+
 	result := config.DB.
 		Where(
 			"id = ? AND user_id = ?",
@@ -438,6 +441,9 @@ func DeleteTask(c *gin.Context) {
 			userID,
 		).
 		Delete(&models.Task{})
+	if result.Error == nil && result.RowsAffected > 0 && task.ID != 0 {
+		removeTaskAttachmentFiles(userID, task.ID) // the rows went with the messages
+	}
 
 	if result.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

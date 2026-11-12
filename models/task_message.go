@@ -13,4 +13,7 @@ type TaskMessage struct {
 	CreatedAt time.Time `json:"created_at"`
 
 	Task Task `json:"-" gorm:"foreignKey:TaskID;constraint:OnDelete:CASCADE"`
+
+	// Files the person attached to this message, shown again when the chat is opened later.
+	Attachments []TaskMessageAttachment `json:"attachments,omitempty" gorm:"foreignKey:TaskMessageID;constraint:OnDelete:CASCADE"`
 }

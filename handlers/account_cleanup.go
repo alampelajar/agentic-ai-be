@@ -69,6 +69,10 @@ func purgeUserAccount(tx *gorm.DB, user *models.User, audit *models.AuditLog) er
 		return err
 	}
 	if len(taskIDs) > 0 {
+		if err := tx.Where("user_id = ?", user.ID).Delete(&models.TaskMessageAttachment{}).Error; err != nil {
+			return err
+		}
+		removeUserAttachmentFiles(user.ID)
 		if err := tx.Where("task_id IN ?", taskIDs).Delete(&models.TaskMessage{}).Error; err != nil {
 			return err
 		}
