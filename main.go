@@ -466,6 +466,12 @@ func main() {
 			handlers.GetAIModels,
 		)
 
+		// HOW EACH MODEL FARED, AND THE QUOTA LEFT PER PROVIDER
+		protected.GET(
+			"/ai/models/health",
+			handlers.GetModelHealth,
+		)
+
 		// CREATE MODEL
 		protected.POST(
 			"/ai/models",
