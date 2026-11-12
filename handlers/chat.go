@@ -78,10 +78,11 @@ type chatRequest struct {
 	Timeout time.Duration `json:"-"`
 }
 
-// chatMaxTokens is the longest answer a chat call may produce. Tool calls carry whole
-// files (workspace.write_file sends the complete new content), so 2048 cut off the rewrite
-// of an ordinary web page.
-const chatMaxTokens = 8192
+// chatMaxTokens is the longest answer a chat call may produce. Tool calls can carry whole
+// files, and reasoning models spend part of the allowance thinking before they answer, so
+// 8192 still cut answers off. A model that allows less refuses the request; the call is then
+// repeated without a limit (see callAIProviderWithRepair).
+const chatMaxTokens = 32768
 
 // providerCallTimeout is how long one call to a provider may take when nothing shorter is set.
 const providerCallTimeout = 5 * time.Minute
@@ -1073,7 +1074,11 @@ func callAIProvider(
 	}
 
 	if answer == "" && choice.FinishReason == "length" {
-		return "", fmt.Errorf("jawaban model terpotong karena mencapai batas panjang jawaban (%d token) sebelum selesai; minta perubahan yang lebih kecil atau coba model lain (model=%s)", requestBody.MaxTokens, aiResponse.Model)
+		limit := "batas model"
+		if requestBody.MaxTokens > 0 {
+			limit = fmt.Sprintf("%d token", requestBody.MaxTokens)
+		}
+		return "", fmt.Errorf("jawaban model terpotong karena mencapai batas panjang jawaban (%s) sebelum selesai; minta perubahan yang lebih kecil atau coba model lain (model=%s)", limit, aiResponse.Model)
 	}
 	if answer == "" {
 		return "", fmt.Errorf("provider response memiliki choices tetapi content kosong (id=%s model=%s finish_reason=%s completion_tokens=%d tool_calls=%d reasoning=%t reasoning_details=%t refusal=%t)", aiResponse.ID, aiResponse.Model, choice.FinishReason, aiResponse.Usage.CompletionTokens, len(choice.Message.ToolCalls), hasRawValue(choice.Message.Reasoning), hasRawValue(choice.Message.ReasoningDetails), hasRawValue(choice.Message.Refusal))
