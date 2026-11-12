@@ -79,7 +79,7 @@ func TestComboPipelineNeedsTwoModelsAndFailsOnlyWhenTheLastOneFails(t *testing.T
 
 func TestComboCannotBecomeAPipelineWithOneModel(t *testing.T) {
 	f := newComboFixture(t, nil)
-	_, resp := f.createCombo(t, f.user.ID, map[string]any{"name": "Biasa", "strategy": "fallback",
+	_, resp := f.createCombo(t, f.user.ID, map[string]any{"name": "Biasa", "strategy": "fallback", "agent_ids": []uint{f.agent.ID},
 		"members": []map[string]any{{"ai_model_id": f.mine[0].ID}}})
 	id := strconv.Itoa(int(comboOf(resp)["id"].(float64)))
 	status, _ := callAs(t, f.user.ID, http.MethodPut, "/", gin.Params{{Key: "id", Value: id}}, map[string]any{"strategy": "pipeline"}, UpdateCombo)

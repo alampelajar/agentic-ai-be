@@ -10,7 +10,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/driver/postgres"
@@ -80,6 +82,8 @@ type comboFixture struct {
 	provider *comboFakeProvider
 }
 
+var comboFixtureSeq atomic.Int64
+
 func newComboFixture(t *testing.T, failFor map[string]int) *comboFixture {
 	t.Helper()
 	dsn := os.Getenv("SKILLS_TEST_DATABASE_URL")
@@ -109,7 +113,8 @@ func newComboFixture(t *testing.T, failFor map[string]int) *comboFixture {
 	}
 	t.Setenv("COMBO_SYSTEM_DAILY_LIMIT", "")
 
-	suffix := strconv.Itoa(os.Getpid()) + "-" + strconv.Itoa(len(t.Name()))
+	// Unique per fixture: a test may build more than one, and tests run against a shared database.
+	suffix := strconv.Itoa(os.Getpid()) + "-" + strconv.FormatInt(comboFixtureSeq.Add(1), 10) + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
 	f := &comboFixture{db: db, provider: newComboFakeProvider(t, failFor)}
 	f.user = models.User{Name: "Combo User", Email: "combo-user-" + suffix + "@example.test", Password: "x"}
 	f.other = models.User{Name: "Combo Other", Email: "combo-other-" + suffix + "@example.test", Password: "x"}
