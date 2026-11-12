@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"agentic-ai-backend/services"
 )
 
 func sseProvider(t *testing.T, handler func(w http.ResponseWriter, request chatRequest)) *httptest.Server {
@@ -131,7 +133,7 @@ func TestStoppingCancelsTheProviderCall(t *testing.T) {
 	}
 }
 
-func TestOnlyPlainAnswersAreStreamed(t *testing.T) {
+func TestAnswersStreamExceptForCombos(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	context := func(query string) *gin.Context {
 		c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -141,11 +143,11 @@ func TestOnlyPlainAnswersAreStreamed(t *testing.T) {
 	plain := baseRequest()
 	withTools := baseRequest()
 	withTools.Tools = []providerToolDefinition{{Type: "function"}}
-	if !wantsChatStream(context("?stream=1"), false, plain) {
-		t.Error("a plain answer asked as a stream must stream")
+	if !wantsChatStream(context("?stream=1"), false, plain) || !wantsChatStream(context("?stream=1"), false, withTools) {
+		t.Error("an answer asked as a stream must stream, also when tools are offered")
 	}
-	if wantsChatStream(context(""), false, plain) || wantsChatStream(context("?stream=1"), true, plain) || wantsChatStream(context("?stream=1"), false, withTools) {
-		t.Error("no stream unless asked, and never for a combo or a call that offers tools")
+	if wantsChatStream(context(""), false, plain) || wantsChatStream(context("?stream=1"), true, plain) {
+		t.Error("no stream unless asked, and never for a combo")
 	}
 }
 
@@ -163,5 +165,42 @@ func TestStreamEventsAreWrittenAndFlushed(t *testing.T) {
 	want := "event: delta\ndata: {\"text\":\"Halo\"}\n\nevent: done\ndata: {\"message\":\"Halo\",\"ok\":true}\n\n"
 	if recorder.Body.String() != want {
 		t.Fatalf("body = %q", recorder.Body.String())
+	}
+}
+
+// A native tool call arrives in pieces; it comes out as the same marker the JSON path returns.
+func TestAStreamedToolCallBecomesTheUsualMarker(t *testing.T) {
+	name := services.ProviderToolName("workspace.read_file")
+	piece := func(fields map[string]any) string {
+		encoded, _ := json.Marshal(map[string]any{"choices": []any{map[string]any{"delta": map[string]any{"tool_calls": []any{fields}}}}})
+		return string(encoded)
+	}
+	server := sseProvider(t, func(w http.ResponseWriter, _ chatRequest) {
+		writeSSE(w,
+			delta("Saya baca dulu. "),
+			piece(map[string]any{"index": 0, "id": "call_1", "type": "function", "function": map[string]any{"name": name, "arguments": ""}}),
+			piece(map[string]any{"index": 0, "function": map[string]any{"arguments": `{"path":`}}),
+			piece(map[string]any{"index": 0, "function": map[string]any{"arguments": `"index.html"}`}}),
+			`{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}`, "[DONE]")
+	})
+	jsonAnswer, jsonErr := normalizeNativeToolCall(func() providerToolCall {
+		var call providerToolCall
+		call.Type, call.Function.Name = "function", name
+		call.Function.Arguments, _ = json.Marshal(`{"path":"index.html"}`)
+		return call
+	}())
+	answer, err := streamAIProvider(context.Background(), "key", server.URL, baseRequest(), func(string) {})
+	if err != nil || jsonErr != nil || answer != jsonAnswer || !strings.Contains(answer, "index.html") {
+		t.Fatalf("answer = %q (%v), want %q (%v)", answer, err, jsonAnswer, jsonErr)
+	}
+
+	broken := sseProvider(t, func(w http.ResponseWriter, _ chatRequest) {
+		writeSSE(w, piece(map[string]any{"index": 0, "type": "function", "function": map[string]any{"name": name, "arguments": `{"path":`}}),
+			`{"choices":[{"delta":{},"finish_reason":"length"}]}`, "[DONE]")
+	})
+	_, err = streamAIProvider(context.Background(), "key", broken.URL, baseRequest(), func(string) {})
+	var invalid *invalidToolCallError
+	if !errors.As(err, &invalid) || !invalid.Truncated {
+		t.Fatalf("a cut-off tool call must be reported as one, got %v", err)
 	}
 }
