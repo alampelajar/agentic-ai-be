@@ -126,6 +126,10 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		})
 		return
 	}
+	if message := notChatModelError(req.ModelID); message != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": message})
+		return
+	}
 	if req.AgentID == 0 && !req.AllAgents {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok": false, "error": "Agent tujuan wajib dipilih.",
@@ -317,6 +321,10 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 		modelID := strings.TrimSpace(*req.ModelID)
 		if modelID == "" {
 			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Model ID tidak boleh kosong."})
+			return
+		}
+		if message := notChatModelError(modelID); message != "" {
+			c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": message})
 			return
 		}
 

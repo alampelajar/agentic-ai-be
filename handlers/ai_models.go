@@ -114,6 +114,10 @@ func CreateAIModel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "Model ID wajib diisi."})
 		return
 	}
+	if message := notChatModelError(req.ModelID); message != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": message})
+		return
+	}
 	if req.APIKey == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "error": "API key wajib diisi."})
 		return
