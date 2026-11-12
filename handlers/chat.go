@@ -74,6 +74,8 @@ type chatRequest struct {
 	Temperature     float64                  `json:"temperature,omitempty"`
 	MaxTokens       int                      `json:"max_tokens,omitempty"`
 	ReasoningEffort string                   `json:"reasoning_effort,omitempty"`
+	// Stream asks the provider for the answer piece by piece (see chat_stream.go).
+	Stream bool `json:"stream,omitempty"`
 	// Timeout limits this one call (0: the default). Not sent to the provider.
 	Timeout time.Duration `json:"-"`
 }
@@ -754,6 +756,30 @@ AGENT ROLE: DEBUGGING AGENT
 	var answer string
 	var comboTrace []services.ComboAttempt
 	usedModel := aiModel
+
+	// The person sees the answer while the model writes it.
+	if wantsChatStream(c, isCombo, requestBody) {
+		stream := startChatStream(c)
+		answer, err = streamAIProviderWithRetry(c.Request.Context(), apiKey, aiModel.Provider.BaseURL, requestBody, func(text string) {
+			stream.send("delta", gin.H{"text": text})
+		})
+		if err != nil {
+			if c.Request.Context().Err() != nil {
+				log.Printf("[CHAT] stream dihentikan oleh pengguna")
+				return
+			}
+			log.Printf("[CHAT] ERROR AI (stream): %v", err)
+			if message := imageUnsupportedMessage(err, len(images) > 0, aiModel.ModelID); message != "" {
+				stream.send("error", gin.H{"ok": false, "code": "model_cannot_read_images", "error": message, "detail": err.Error()})
+				return
+			}
+			stream.send("error", gin.H{"ok": false, "error": "Gagal mendapatkan jawaban dari AI.", "detail": err.Error()})
+			return
+		}
+		stream.send("done", gin.H{"ok": true, "message": enforceAgentToolMarkers(answer, activeToolNames), "model": aiModel.ModelID, "model_id": aiModel.ID, "provider": aiModel.Provider.Name, "agent_id": agentID})
+		return
+	}
+
 	if isCombo {
 		var comboErr *comboRunError
 		answer, usedModel, comboTrace, comboErr = runComboRequest(userID, taskID, aiModel, requestBody)
