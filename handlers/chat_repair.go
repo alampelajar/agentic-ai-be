@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"strings"
 
 	"agentic-ai-backend/services"
@@ -77,6 +78,13 @@ func callAIProviderWithRepair(apiKey, baseURL string, request chatRequest) (stri
 	for attempt := 0; ; attempt++ {
 		request.Messages = messages
 		answer, err := callAIProvider(apiKey, baseURL, request)
+		if request.MaxTokens > 0 && maxTokensRefused(err) {
+			// The model allows a shorter answer than chatMaxTokens: ask again without a limit,
+			// so the provider uses the model's own maximum.
+			log.Printf("[CHAT] provider menolak max_tokens=%d (%v); mengulang tanpa batas", request.MaxTokens, err)
+			request.MaxTokens = 0
+			answer, err = callAIProvider(apiKey, baseURL, request)
+		}
 		var invalid *invalidToolCallError
 		if err == nil || !errors.As(err, &invalid) || attempt >= maxToolCallRepairs {
 			return answer, err
@@ -84,4 +92,15 @@ func callAIProviderWithRepair(apiKey, baseURL string, request chatRequest) (stri
 		log.Printf("[CHAT] tool call tidak valid dari model (%v); meminta ulang (%d/%d)", err, attempt+1, maxToolCallRepairs)
 		messages = append(messages, chatMessage{Role: "user", Content: toolRepairMessage(invalid)})
 	}
+}
+
+// maxTokensRefused is true when the provider refused the request because max_tokens is more than
+// the model allows (for example "max_tokens must be less than or equal to 8192").
+func maxTokensRefused(err error) bool {
+	var providerErr *services.ProviderHTTPError
+	if !errors.As(err, &providerErr) || (providerErr.Status != http.StatusBadRequest && providerErr.Status != http.StatusUnprocessableEntity) {
+		return false
+	}
+	message := strings.ToLower(providerErr.Message)
+	return strings.Contains(message, "max_tokens") || strings.Contains(message, "max_completion_tokens") || strings.Contains(message, "maximum number of tokens") || strings.Contains(message, "max output tokens")
 }
