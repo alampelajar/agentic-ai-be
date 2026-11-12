@@ -48,6 +48,13 @@ var (
 	comboSticky     = services.NewStickyChoices()
 )
 
+func validComboStrategy(strategy string) bool {
+	return strategy == models.ComboStrategyFallback || strategy == models.ComboStrategyRoundRobin || strategy == models.ComboStrategyPipeline
+}
+
+const comboStrategyMessage = "Strategi harus fallback, round_robin, atau pipeline."
+const comboPipelineMembersMessage = "Combo pipeline butuh minimal dua model: yang terakhir menjawab, yang sebelumnya menulis draf."
+
 func isComboModel(model models.AIModel) bool {
 	return strings.EqualFold(strings.TrimSpace(model.Provider.Type), comboProviderType)
 }
@@ -129,6 +136,10 @@ func runComboRequest(userID uint, taskID uint, comboModel models.AIModel, reques
 		return "", models.AIModel{}, nil, &comboRunError{Status: http.StatusConflict, Message: message}
 	}
 
+	if combo.Strategy == models.ComboStrategyPipeline {
+		return runPipelineRequest(userID, combo, targets, byID, request)
+	}
+
 	ordered := services.OrderTargetsForTask(combo.Strategy, combo.ID, targets, comboRoundRobin, comboHealth, comboSticky, userID, taskID)
 	limits := services.ComboLimits{MaxAttempts: combo.MaxAttempts, Budget: 120 * time.Second}
 
@@ -145,18 +156,7 @@ func runComboRequest(userID uint, taskID uint, comboModel models.AIModel, reques
 		return callAIProviderWithRepair(key, model.Provider.BaseURL, memberRequest)
 	})
 
-	for index, attempt := range outcome.Attempts {
-		if attempt.Status == "skipped" {
-			continue
-		}
-		entry := models.AIModelCallLog{
-			UserID: userID, ComboID: combo.ID, AIModelID: attempt.ModelDBID, IsSystem: byID[attempt.ModelDBID].IsSystem,
-			Attempt: index + 1, Status: attempt.Status, ErrorClass: string(attempt.ErrorClass), LatencyMS: attempt.LatencyMS,
-		}
-		if err := config.DB.Create(&entry).Error; err != nil {
-			log.Printf("[COMBO] gagal mencatat panggilan: %v", err)
-		}
-	}
+	logComboAttempts(userID, combo.ID, outcome.Attempts, byID)
 
 	if runErr != nil {
 		log.Printf("[COMBO] %s gagal: %v", combo.Name, runErr)
@@ -166,6 +166,72 @@ func runComboRequest(userID uint, taskID uint, comboModel models.AIModel, reques
 		comboSticky.Set(userID, combo.ID, taskID, outcome.Used.ModelDBID)
 	}
 	return outcome.Answer, byID[outcome.Used.ModelDBID], outcome.Attempts, nil
+}
+
+func logComboAttempts(userID, comboID uint, attempts []services.ComboAttempt, byID map[uint]models.AIModel) {
+	for index, attempt := range attempts {
+		if attempt.Status == "skipped" {
+			continue
+		}
+		entry := models.AIModelCallLog{
+			UserID: userID, ComboID: comboID, AIModelID: attempt.ModelDBID, IsSystem: byID[attempt.ModelDBID].IsSystem,
+			Attempt: index + 1, Status: attempt.Status, ErrorClass: string(attempt.ErrorClass), LatencyMS: attempt.LatencyMS,
+		}
+		if err := config.DB.Create(&entry).Error; err != nil {
+			log.Printf("[COMBO] gagal mencatat panggilan: %v", err)
+		}
+	}
+}
+
+// runPipelineRequest runs a pipeline combo: the models work in position order, each one
+// improving the previous draft, and the last one answers the person.
+func runPipelineRequest(userID uint, combo models.AIModelCombo, stages []services.ComboTarget, byID map[uint]models.AIModel, request chatRequest) (string, models.AIModel, []services.ComboAttempt, *comboRunError) {
+	limits := services.ComboLimits{Budget: 120 * time.Second}
+	outcome, runErr := services.RunPipeline(stages, limits, comboHealth, func(target services.ComboTarget, final bool, draft string) (string, error) {
+		model := byID[target.ModelDBID]
+		key, keyErr := resolveProviderAPIKey(model.Provider, userID)
+		if keyErr != nil {
+			return "", &services.ProviderHTTPError{Status: keyErr.Status, Message: keyErr.Message}
+		}
+		stageRequest := request
+		stageRequest.Model = model.ModelID
+		stageRequest.Messages = pipelineMessages(request.Messages, final, draft)
+		if !final {
+			// Only the last model may act; the others just write.
+			stageRequest.Tools = nil
+			stageRequest.ToolChoice = ""
+		}
+		return callAIProviderWithRepair(key, model.Provider.BaseURL, stageRequest)
+	})
+	logComboAttempts(userID, combo.ID, outcome.Attempts, byID)
+	if runErr != nil {
+		log.Printf("[COMBO] %s gagal: %v", combo.Name, runErr)
+		return "", models.AIModel{}, outcome.Attempts, &comboRunError{Status: http.StatusBadGateway, Message: "Model penjawab terakhir dalam combo gagal menjawab.", Detail: runErr.Error()}
+	}
+	return outcome.Answer, byID[outcome.Used.ModelDBID], outcome.Attempts, nil
+}
+
+// pipelineMessages adds the stage's instruction after the conversation. The messages stay as
+// they are, so the models see the same conversation, tools' results and files as a single model would.
+func pipelineMessages(messages []chatMessage, final bool, draft string) []chatMessage {
+	out := append([]chatMessage(nil), messages...)
+	draft = strings.TrimSpace(draft)
+	var instruction string
+	switch {
+	case final && draft == "":
+		return out
+	case final:
+		instruction = "[Bahan dari model sebelumnya]\nBerikut draf jawaban dari langkah sebelumnya:\n---\n" + draft + "\n---\n" +
+			"Pakai draf ini hanya sebagai bahan. Periksa kebenarannya, perbaiki yang salah, lalu jawab pengguna langsung seperti biasa. " +
+			"Jangan menyebut draf atau langkah ini."
+	case draft == "":
+		instruction = "[Langkah awal combo]\nTulis draf jawaban terbaik untuk permintaan di atas. Draf ini akan diperiksa dan disempurnakan oleh model berikutnya, " +
+			"jadi fokus pada isi yang benar dan lengkap. Jangan memanggil tool."
+	default:
+		instruction = "[Langkah combo]\nBerikut draf dari model sebelumnya:\n---\n" + draft + "\n---\n" +
+			"Periksa draf itu, perbaiki kesalahan, lengkapi yang kurang, lalu tulis draf yang lebih baik. Jangan memanggil tool."
+	}
+	return append(out, chatMessage{Role: "user", Content: instruction})
 }
 
 // ============================================================
@@ -397,13 +463,17 @@ func CreateCombo(c *gin.Context) {
 	if req.Strategy != nil && strings.TrimSpace(*req.Strategy) != "" {
 		strategy = strings.TrimSpace(*req.Strategy)
 	}
-	if strategy != models.ComboStrategyFallback && strategy != models.ComboStrategyRoundRobin {
-		comboErrorJSON(c, http.StatusBadRequest, "Strategi harus fallback atau round_robin.")
+	if !validComboStrategy(strategy) {
+		comboErrorJSON(c, http.StatusBadRequest, comboStrategyMessage)
 		return
 	}
 	var requested []comboMemberRequest
 	if req.Members != nil {
 		requested = *req.Members
+	}
+	if strategy == models.ComboStrategyPipeline && len(requested) < 2 {
+		comboErrorJSON(c, http.StatusBadRequest, comboPipelineMembersMessage)
+		return
 	}
 	members, message := validateComboMembers(userID, requested)
 	if message != "" {
@@ -522,8 +592,8 @@ func UpdateCombo(c *gin.Context) {
 	}
 	if req.Strategy != nil {
 		strategy := strings.TrimSpace(*req.Strategy)
-		if strategy != models.ComboStrategyFallback && strategy != models.ComboStrategyRoundRobin {
-			comboErrorJSON(c, http.StatusBadRequest, "Strategi harus fallback atau round_robin.")
+		if !validComboStrategy(strategy) {
+			comboErrorJSON(c, http.StatusBadRequest, comboStrategyMessage)
 			return
 		}
 		combo.Strategy = strategy
@@ -552,6 +622,10 @@ func UpdateCombo(c *gin.Context) {
 	memberCount := len(combo.Members)
 	if newMembers != nil {
 		memberCount = len(newMembers)
+	}
+	if combo.Strategy == models.ComboStrategyPipeline && memberCount < 2 {
+		comboErrorJSON(c, http.StatusBadRequest, comboPipelineMembersMessage)
+		return
 	}
 	if req.MaxAttempts != nil {
 		if *req.MaxAttempts < 1 || *req.MaxAttempts > comboMaxMembers() {
