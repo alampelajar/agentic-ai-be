@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -120,5 +121,28 @@ func TestResendNeedsAPendingChallenge(t *testing.T) {
 	email := "otp-none-" + time.Now().Format("150405.000000") + "@example.com"
 	if _, err := IssueOTP(db, models.OTPPurposeRegister, email, nil, nil, testPepper); err != ErrOTPNoPending {
 		t.Fatalf("got %v, want ErrOTPNoPending", err)
+	}
+}
+
+// Each code allows a few guesses, so the number of codes per address and day is
+// capped too. The resend gap is skipped here by moving LastSentAt back.
+func TestOTPDailyLimitPerAddress(t *testing.T) {
+	db := otpTestDB(t)
+	email := "otp-daily-" + time.Now().Format("150405.000000") + "@example.com"
+	t.Cleanup(func() { db.Where("email = ?", email).Delete(&models.OTPChallenge{}) })
+	payload := "{}"
+	for i := 0; i < OTPMaxPerDay; i++ {
+		if _, err := IssueOTP(db, models.OTPPurposeRegister, email, nil, &payload, testPepper); err != nil {
+			t.Fatalf("code %d: %v", i+1, err)
+		}
+		db.Model(&models.OTPChallenge{}).Where("email = ?", email).Update("last_sent_at", time.Now().Add(-OTPResendGap-time.Second))
+	}
+	if _, err := IssueOTP(db, models.OTPPurposeRegister, email, nil, &payload, testPepper); !errors.Is(err, ErrOTPDailyLimit) {
+		t.Fatalf("code over the limit: err = %v, want ErrOTPDailyLimit", err)
+	}
+	// A day later the address can get codes again.
+	db.Model(&models.OTPChallenge{}).Where("email = ?", email).Update("sent_window_start", time.Now().Add(-25*time.Hour))
+	if _, err := IssueOTP(db, models.OTPPurposeRegister, email, nil, &payload, testPepper); err != nil {
+		t.Fatalf("after a day: %v", err)
 	}
 }

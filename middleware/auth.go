@@ -87,11 +87,10 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Set("user_id", claims.UserID)
 		c.Set("user_email", claims.Email)
-		c.Set("user_role", claims.Role)
 
 		// Reject still-unexpired JWTs for accounts that have been deleted.
 		var activeUser models.User
-		if err := config.DB.Select("id", "email").First(&activeUser, claims.UserID).Error; err != nil {
+		if err := config.DB.Select("id", "email", "role").First(&activeUser, claims.UserID).Error; err != nil {
 			status := http.StatusUnauthorized
 			message := "Akun pengguna sudah tidak tersedia"
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -115,6 +114,13 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		// The role is read from the database, not the token: an admin who is made an
+		// ordinary user loses admin access at once, not when the token expires.
+		role := strings.TrimSpace(activeUser.Role)
+		if role == "" {
+			role = "user"
+		}
+		c.Set("user_role", role)
 		c.Next()
 	}
 }

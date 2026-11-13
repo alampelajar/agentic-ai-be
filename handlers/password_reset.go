@@ -106,7 +106,8 @@ func RequestPasswordReset(c *gin.Context) {
 	empty := ""
 	userID := user.ID
 	otp, err := services.IssueOTP(config.DB, models.OTPPurposePasswordReset, email, &userID, &empty, pepper)
-	if errors.Is(err, services.ErrOTPThrottled) {
+	// Same answer as for an unknown address, so the limit does not reveal accounts.
+	if errors.Is(err, services.ErrOTPThrottled) || errors.Is(err, services.ErrOTPDailyLimit) {
 		writeGenericResetResponse(c)
 		return
 	}

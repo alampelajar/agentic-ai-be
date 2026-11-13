@@ -136,8 +136,8 @@ func main() {
 	importLimit := httpguard.RateLimit(httpguard.NewLimiter(10, 5), httpguard.ByUserOrIP)
 	executionLimit := httpguard.RateLimit(httpguard.NewLimiter(20, 10), httpguard.ByUserOrIP)
 
-	// Serve uploaded feedback images so the Admin ticket page can preview them.
-	router.Static("/uploads", "./uploads")
+	// Uploaded feedback images are not served publicly: see the feedback attachment
+	// routes below, which check who is asking.
 
 	// ============================================================
 	// API
@@ -262,6 +262,7 @@ func main() {
 	protected.POST("/feedback", handlers.CreateFeedback)
 	protected.PATCH("/feedback/:id/rating", handlers.RateMyFeedback)
 	protected.DELETE("/feedback/:id", handlers.DeleteMyFeedback)
+	protected.GET("/feedback/:id/attachment", handlers.GetMyFeedbackAttachment)
 
 	{
 		// ========================================================
@@ -575,6 +576,7 @@ func main() {
 		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
 		admin.POST("/feedback/:id/replies", handlers.AdminReplyFeedback)
 		admin.DELETE("/feedback/:id", handlers.AdminDeleteFeedback)
+		admin.GET("/feedback/:id/attachment", handlers.AdminGetFeedbackAttachment)
 
 		admin.GET(
 			"/agents",

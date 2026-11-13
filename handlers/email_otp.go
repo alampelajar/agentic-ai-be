@@ -64,6 +64,9 @@ func deliverOTP(c *gin.Context, purpose, email string, userID *uint, payload *st
 	case errors.Is(err, services.ErrOTPThrottled):
 		otpFail(c, http.StatusTooManyRequests, "otp_throttled", "Tunggu sebentar sebelum meminta kode baru.")
 		return false
+	case errors.Is(err, services.ErrOTPDailyLimit):
+		otpFail(c, http.StatusTooManyRequests, "otp_daily_limit", "Terlalu banyak kode dikirim ke email ini. Coba lagi besok.")
+		return false
 	case errors.Is(err, services.ErrOTPNoPending):
 		otpFail(c, http.StatusBadRequest, "no_pending_verification", "Tidak ada verifikasi yang menunggu. Mulai lagi dari awal.")
 		return false

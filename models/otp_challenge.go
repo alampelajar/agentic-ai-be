@@ -23,6 +23,9 @@ type OTPChallenge struct {
 	Attempts     int       `json:"-" gorm:"not null;default:0"`
 	LastSentAt   time.Time `json:"-" gorm:"not null;index"`
 	Payload      string    `json:"-" gorm:"type:text;not null;default:''"`
+	// Codes sent to this address since SentWindowStart, capped per day (OTPMaxPerDay).
+	SentCount       int       `json:"-" gorm:"not null;default:0"`
+	SentWindowStart time.Time `json:"-"`
 	// One-time token issued after the code is verified (password reset only).
 	VerifiedTokenHash      string     `json:"-" gorm:"size:64;not null;default:''"`
 	VerifiedTokenExpiresAt *time.Time `json:"-"`
