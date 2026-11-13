@@ -27,6 +27,9 @@ const (
 	OTPCodeTTL   = 5 * time.Minute
 	OTPResendGap = time.Minute
 	OTPMaxTries  = 5
+	// OTPMaxPerDay caps the codes sent to one address in 24 hours. Each code allows
+	// OTPMaxTries guesses, so this bounds guessing to a few dozen a day per address.
+	OTPMaxPerDay = 10
 )
 
 // Results of VerifyOTP. They are values, not errors, so that a wrong guess
@@ -40,6 +43,8 @@ const (
 var (
 	// ErrOTPThrottled means a code was sent less than OTPResendGap ago.
 	ErrOTPThrottled = errors.New("otp: resend too soon")
+	// ErrOTPDailyLimit means OTPMaxPerDay codes were already sent to the address today.
+	ErrOTPDailyLimit = errors.New("otp: daily limit reached")
 	// ErrOTPNoPending means a resend was asked for but nothing is waiting.
 	ErrOTPNoPending = errors.New("otp: no pending verification")
 )
@@ -133,6 +138,15 @@ func IssueOTP(db *gorm.DB, purpose, email string, userID *uint, payload *string,
 				return ErrOTPNoPending
 			}
 		}
+
+		if now.Sub(challenge.SentWindowStart) >= 24*time.Hour {
+			challenge.SentWindowStart = now
+			challenge.SentCount = 0
+		}
+		if challenge.SentCount >= OTPMaxPerDay {
+			return ErrOTPDailyLimit
+		}
+		challenge.SentCount++
 
 		challenge.UserID = userID
 		challenge.OTPHash = HashOTP(purpose, email, code, pepper)

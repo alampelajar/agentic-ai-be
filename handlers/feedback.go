@@ -250,6 +250,51 @@ func deleteFeedbackRecord(c *gin.Context, scope func(*gorm.DB) *gorm.DB) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Laporan berhasil dihapus"})
 }
 
+// feedbackAttachmentTypes are the image types CreateFeedback accepts, by the extension it gives them.
+var feedbackAttachmentTypes = map[string]string{".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+// serveFeedbackAttachment sends a ticket's image to someone allowed to see the ticket.
+// Images used to be public under /uploads; they are screenshots of people's screens.
+func serveFeedbackAttachment(c *gin.Context, scope func(*gorm.DB) *gorm.DB) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "ID feedback tidak valid"})
+		return
+	}
+	var item models.Feedback
+	if err := scope(config.DB.Where("id = ?", id)).First(&item).Error; err != nil || !strings.HasPrefix(item.Attachment, "/uploads/feedback/") {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "message": "Lampiran tidak ditemukan"})
+		return
+	}
+	name := filepath.Base(item.Attachment)
+	contentType, ok := feedbackAttachmentTypes[strings.ToLower(filepath.Ext(name))]
+	path := filepath.Join("uploads", "feedback", name)
+	if _, statErr := os.Stat(path); !ok || statErr != nil {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "message": "Lampiran tidak ditemukan"})
+		return
+	}
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", "inline")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Cache-Control", "private, max-age=3600")
+	c.File(path)
+}
+
+// GetMyFeedbackAttachment sends the image of one of the signed-in user's own tickets.
+func GetMyFeedbackAttachment(c *gin.Context) {
+	userID, ok := currentFeedbackUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
+		return
+	}
+	serveFeedbackAttachment(c, func(q *gorm.DB) *gorm.DB { return q.Where("user_id = ?", userID) })
+}
+
+// AdminGetFeedbackAttachment sends the image of any ticket, for the admin console.
+func AdminGetFeedbackAttachment(c *gin.Context) {
+	serveFeedbackAttachment(c, func(q *gorm.DB) *gorm.DB { return q })
+}
+
 func DeleteMyFeedback(c *gin.Context) {
 	userID, ok := currentFeedbackUserID(c)
 	if !ok {

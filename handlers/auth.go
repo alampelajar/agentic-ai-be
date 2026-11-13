@@ -3,6 +3,7 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -23,6 +24,28 @@ var loginGuard = httpguard.NewLoginGuard()
 
 // wrongCredentials records a failed attempt and sends the one answer used for
 // every kind of failure, so the response never says which part was wrong.
+// dummyPasswordHash is compared against when no account has the address, so a
+// wrong address takes as long to answer as a wrong password and the timing does
+// not tell which addresses are registered.
+var dummyPasswordHash = func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("not-a-real-password"), bcrypt.DefaultCost)
+	if err != nil {
+		panic(err)
+	}
+	return hash
+}()
+
+// spendPasswordCheck does the work of a password check that is bound to fail.
+func spendPasswordCheck(password string) {
+	_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
+}
+
+// refreshReuseGrace is how long a just-rotated refresh token is still accepted.
+// Two tabs can refresh at the same moment with the same cookie; the second one
+// must not be taken for a stolen token. After this, using a rotated token again
+// means it was copied, and every session of that account is ended.
+const refreshReuseGrace = 30 * time.Second
+
 func wrongCredentials(c *gin.Context, email string) {
 	loginGuard.Fail(email, c.ClientIP())
 	c.JSON(http.StatusUnauthorized, gin.H{
@@ -186,6 +209,7 @@ func Login(c *gin.Context) {
 		First(&user)
 
 	if result.Error != nil {
+		spendPasswordCheck(req.Password)
 		wrongCredentials(c, req.Email)
 		return
 	}
@@ -315,6 +339,7 @@ func AdminLogin(c *gin.Context) {
 		First(&user)
 
 	if result.Error != nil {
+		spendPasswordCheck(req.Password)
 		wrongCredentials(c, req.Email)
 		return
 	}
@@ -485,7 +510,19 @@ func refreshSession(c *gin.Context, cookie refreshCookie) {
 		return
 	}
 
-	if storedToken.RevokedAt != nil {
+	inGrace := storedToken.ReplacedAt != nil && time.Since(*storedToken.ReplacedAt) <= refreshReuseGrace
+	if storedToken.RevokedAt != nil && !inGrace {
+		// A revoked token used again: someone holds a copy. End every session of this
+		// account, so the copy and anything issued from it stop working, and take away
+		// the grace period of tokens rotated just now.
+		now := time.Now()
+		config.DB.Model(&models.RefreshToken{}).
+			Where("user_id = ? AND revoked_at IS NULL", storedToken.UserID).
+			Update("revoked_at", now)
+		config.DB.Model(&models.RefreshToken{}).
+			Where("user_id = ? AND replaced_at IS NOT NULL", storedToken.UserID).
+			Update("replaced_at", nil)
+		log.Printf("[auth] reuse of a revoked refresh token; all sessions of user %d ended", storedToken.UserID)
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"ok":      false,
 			"message": "Refresh token sudah tidak berlaku",
@@ -563,10 +600,12 @@ func refreshSession(c *gin.Context, cookie refreshCookie) {
 		return
 	}
 
-	now := time.Now()
-	storedToken.RevokedAt = &now
-
-	if err := config.DB.Save(&storedToken).Error; err != nil {
+	// Only revokes a token that is not revoked yet: a second refresh within the
+	// grace period keeps the first rotation time, so the grace does not extend.
+	rotatedAt := time.Now()
+	if err := config.DB.Model(&models.RefreshToken{}).
+		Where("id = ? AND revoked_at IS NULL", storedToken.ID).
+		Updates(map[string]any{"revoked_at": rotatedAt, "replaced_at": rotatedAt}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal memperbarui refresh token",

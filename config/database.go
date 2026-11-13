@@ -5,10 +5,12 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 
 	"agentic-ai-backend/models"
 )
@@ -53,7 +55,18 @@ func ConnectDatabase() {
 
 	db, err := gorm.Open(
 		postgres.Open(dsn),
-		&gorm.Config{},
+		&gorm.Config{
+			// Queries are logged without their values (addresses, hashes) and a
+			// lookup that finds nothing, such as a sign-in with an unknown
+			// address, is not logged at all.
+			Logger: logger.New(log.New(os.Stdout, "", log.LstdFlags), logger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  logger.Warn,
+				IgnoreRecordNotFoundError: true,
+				ParameterizedQueries:      true,
+				Colorful:                  false,
+			}),
+		},
 	)
 
 	if err != nil {

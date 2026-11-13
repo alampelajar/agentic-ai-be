@@ -8,3 +8,6 @@ data/
 deploy/.env.staging
 deploy/.env.*
 !deploy/staging.env.example
+
+# Build output
+*.exe
