@@ -116,3 +116,28 @@ func TestTrustedProxiesAndSSLModeDefaults(t *testing.T) {
 		t.Error("the setting is ignored")
 	}
 }
+
+func TestJWTSecretsAreRequiredInEveryMode(t *testing.T) {
+	for _, mode := range []string{"", "development", "production"} {
+		t.Setenv("APP_ENV", mode)
+		t.Setenv("JWT_ACCESS_SECRET", "")
+		t.Setenv("JWT_REFRESH_SECRET", "")
+		if problems := AlwaysRequiredProblems(); len(problems) != 2 {
+			t.Fatalf("APP_ENV=%q with no JWT keys: problems = %v", mode, problems)
+		}
+	}
+	t.Setenv("JWT_ACCESS_SECRET", "same-value")
+	t.Setenv("JWT_REFRESH_SECRET", "same-value")
+	if problems := AlwaysRequiredProblems(); len(problems) != 1 || !strings.Contains(problems[0], "different") {
+		t.Fatalf("equal keys: problems = %v", problems)
+	}
+	t.Setenv("JWT_REFRESH_SECRET", "other-value")
+	if problems := AlwaysRequiredProblems(); len(problems) != 0 {
+		t.Fatalf("set keys: problems = %v", problems)
+	}
+	for _, problem := range AlwaysRequiredProblems() {
+		if strings.Contains(problem, "same-value") || strings.Contains(problem, "other-value") {
+			t.Fatalf("a secret reached the message: %s", problem)
+		}
+	}
+}

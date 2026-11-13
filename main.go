@@ -69,6 +69,13 @@ func main() {
 	// PRODUCTION CONFIGURATION CHECK
 	// ============================================================
 
+	if problems := config.AlwaysRequiredProblems(); len(problems) > 0 {
+		for _, problem := range problems {
+			log.Printf("[CONFIG] %s", problem)
+		}
+		log.Fatal("Konfigurasi belum aman. Perbaiki hal di atas di file .env lalu jalankan ulang.")
+	}
+
 	if config.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 		if problems := config.ProductionProblems(); len(problems) > 0 {

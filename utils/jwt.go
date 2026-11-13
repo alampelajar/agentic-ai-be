@@ -3,7 +3,6 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,7 +16,10 @@ type Claims struct {
 }
 
 func GenerateAccessToken(userID uint, email string, role string) (string, error) {
-	secret := os.Getenv("JWT_ACCESS_SECRET")
+	secret, err := AccessSecret()
+	if err != nil {
+		return "", err
+	}
 
 	claims := Claims{
 		UserID: userID,
@@ -36,11 +38,14 @@ func GenerateAccessToken(userID uint, email string, role string) (string, error)
 		claims,
 	)
 
-	return token.SignedString([]byte(secret))
+	return token.SignedString(secret)
 }
 
 func GenerateRefreshToken(userID uint, email string, role string) (string, error) {
-	secret := os.Getenv("JWT_REFRESH_SECRET")
+	secret, err := RefreshSecret()
+	if err != nil {
+		return "", err
+	}
 
 	claims := Claims{
 		UserID: userID,
@@ -62,11 +67,14 @@ func GenerateRefreshToken(userID uint, email string, role string) (string, error
 		claims,
 	)
 
-	return token.SignedString([]byte(secret))
+	return token.SignedString(secret)
 }
 
 func ParseRefreshToken(tokenString string) (*Claims, error) {
-	secret := os.Getenv("JWT_REFRESH_SECRET")
+	secret, err := RefreshSecret()
+	if err != nil {
+		return nil, err
+	}
 
 	token, err := jwt.ParseWithClaims(
 		tokenString,
@@ -76,7 +84,7 @@ func ParseRefreshToken(tokenString string) (*Claims, error) {
 				return nil, jwt.ErrSignatureInvalid
 			}
 
-			return []byte(secret), nil
+			return secret, nil
 		},
 	)
 

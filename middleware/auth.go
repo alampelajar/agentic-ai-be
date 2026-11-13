@@ -3,7 +3,6 @@ package middleware
 import (
 	"errors"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -43,7 +42,16 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		accessToken := parts[1]
-		secret := os.Getenv("JWT_ACCESS_SECRET")
+		secret, secretErr := utils.AccessSecret()
+		if secretErr != nil {
+			// Never check a token against an empty key: anyone could have signed it.
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"ok":      false,
+				"message": "Server belum dikonfigurasi dengan benar",
+			})
+			c.Abort()
+			return
+		}
 
 		token, err := jwt.ParseWithClaims(
 			accessToken,
@@ -53,7 +61,7 @@ func AuthMiddleware() gin.HandlerFunc {
 					return nil, jwt.ErrSignatureInvalid
 				}
 
-				return []byte(secret), nil
+				return secret, nil
 			},
 		)
 

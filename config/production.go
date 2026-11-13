@@ -70,6 +70,25 @@ func DatabaseSSLMode() string {
 
 var validSSLModes = map[string]bool{"disable": true, "allow": true, "prefer": true, "require": true, "verify-ca": true, "verify-full": true}
 
+// AlwaysRequiredProblems lists what must be set before the server starts in any mode,
+// development included. An empty JWT key lets anyone sign a token for any user or role,
+// and a development server is often reachable from the rest of the local network.
+func AlwaysRequiredProblems() []string {
+	var problems []string
+	access := strings.TrimSpace(os.Getenv("JWT_ACCESS_SECRET"))
+	refresh := strings.TrimSpace(os.Getenv("JWT_REFRESH_SECRET"))
+	if access == "" {
+		problems = append(problems, "JWT_ACCESS_SECRET must be set (a long random value, see .env.example)")
+	}
+	if refresh == "" {
+		problems = append(problems, "JWT_REFRESH_SECRET must be set (a long random value, see .env.example)")
+	}
+	if access != "" && access == refresh {
+		problems = append(problems, "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different")
+	}
+	return problems
+}
+
 // ProductionProblems lists what is unsafe about the configuration for a public
 // deployment. It names variables, never their values.
 func ProductionProblems() []string {
