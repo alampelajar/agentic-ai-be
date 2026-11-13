@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -90,7 +91,10 @@ func (s *Server) listTree(c *gin.Context) {
 
 func (s *Server) readFile(c *gin.Context) {
 	w, ok := s.workspace(c.Param("id")); if !ok { c.JSON(http.StatusNotFound, gin.H{"error":"workspace not found"}); return }
-	path, err := s.resolve(w, c.Query("path"), false); if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }
+	path, err := s.resolve(w, c.Query("path"), false)
+	// A file that does not exist yet is "not found", so the app can tell a new file from a refused path.
+	if errors.Is(err, fs.ErrNotExist) { c.JSON(http.StatusNotFound, gin.H{"error":"file not found"}); return }
+	if err != nil { c.JSON(http.StatusBadRequest, gin.H{"error":err.Error()}); return }
 	f, err := os.Open(path); if err != nil { c.JSON(http.StatusNotFound, gin.H{"error":"file not found"}); return }; defer f.Close()
 	info, err := f.Stat(); if err != nil || !info.Mode().IsRegular() { c.JSON(http.StatusBadRequest, gin.H{"error":"regular file required"}); return }
 	if info.Size() > maxFileBytes { c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error":"file exceeds 1 MiB read limit"}); return }
@@ -138,7 +142,8 @@ func (s *Server) execute(c *gin.Context) {
 		cmd = exec.CommandContext(ctx, "cmd.exe", append([]string{"/D","/S","/C"}, args...)...)
 	} else { cmd = exec.CommandContext(ctx, args[0], args[1:]...) }
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "CI=true", "NO_COLOR=1")
+	// Only what tools need to run: the project's scripts never see the person's keys.
+	cmd.Env = projectCommandEnv()
 	output, runErr := cmd.CombinedOutput()
 	if len(output) > maxCommandOutput { output = append(output[:maxCommandOutput], []byte("\n...[output truncated]")...) }
 	status := "success"; code := 0
