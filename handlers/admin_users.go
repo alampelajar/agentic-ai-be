@@ -5,10 +5,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
@@ -188,10 +190,10 @@ func AdminCreateUser(c *gin.Context) {
 		return
 	}
 
-	if len(req.Password) < 6 {
+	if len(req.Password) < 8 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok":      false,
-			"message": "Password minimal 6 karakter",
+			"message": "Password minimal 8 karakter",
 		})
 		return
 	}
@@ -424,11 +426,61 @@ func AdminUpdateUser(c *gin.Context) {
 	// Update user
 	// --------------------------------------------------------
 
-	user.Name = req.Name
-	user.Email = req.Email
-	user.Role = req.Role
+	// An admin cannot take away their own admin role: they would lose this page at once.
+	if user.ID == c.GetUint("user_id") && user.Role == "admin" && req.Role != "admin" {
+		c.JSON(http.StatusConflict, gin.H{
+			"ok":      false,
+			"message": "Admin tidak dapat menurunkan role akun sendiri",
+		})
+		return
+	}
 
-	if err := config.DB.Save(&user).Error; err != nil {
+	oldName, oldEmail, oldRole := user.Name, user.Email, user.Role
+	err = config.DB.Transaction(func(tx *gorm.DB) error {
+		if oldRole == "admin" && req.Role != "admin" {
+			// Lock every admin row so two demotions at once cannot both see a second admin.
+			var admins []models.User
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Select("id").Where("role = ?", "admin").Find(&admins).Error; err != nil {
+				return err
+			}
+			if len(admins) <= 1 {
+				return errCannotDemoteLastAdmin
+			}
+		}
+
+		user.Name = req.Name
+		user.Email = req.Email
+		user.Role = req.Role
+		if err := tx.Save(&user).Error; err != nil {
+			return err
+		}
+
+		// A new address ends every session: the old sign-in belonged to the old address.
+		if !strings.EqualFold(oldEmail, user.Email) {
+			if err := tx.Model(&models.RefreshToken{}).
+				Where("user_id = ? AND revoked_at IS NULL", user.ID).
+				Update("revoked_at", time.Now()).Error; err != nil {
+				return err
+			}
+		}
+
+		changes := userChanges(oldName, user.Name, oldEmail, user.Email, oldRole, user.Role)
+		if changes == "" {
+			return nil
+		}
+		audit := newAuditLog(c, "user.updated_by_admin", "user", strconv.FormatUint(userID, 10), user.Name,
+			"Akun pengguna \""+oldEmail+"\" diubah oleh administrator: "+changes+".")
+		return tx.Create(&audit).Error
+	})
+	if errors.Is(err, errCannotDemoteLastAdmin) {
+		c.JSON(http.StatusConflict, gin.H{
+			"ok":      false,
+			"message": "Admin terakhir tidak dapat diturunkan menjadi user",
+		})
+		return
+	}
+	if err != nil {
+		c.Error(err)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal mengupdate user",
@@ -565,4 +617,20 @@ func AdminDeleteUser(c *gin.Context) {
 		"ok":      true,
 		"message": "User berhasil dihapus permanen",
 	})
+}
+var errCannotDemoteLastAdmin = errors.New("cannot demote the last admin account")
+
+// userChanges describes what an admin changed, for the audit log, or "" when nothing changed.
+func userChanges(oldName, newName, oldEmail, newEmail, oldRole, newRole string) string {
+	var parts []string
+	if oldName != newName {
+		parts = append(parts, "nama \""+oldName+"\" menjadi \""+newName+"\"")
+	}
+	if !strings.EqualFold(oldEmail, newEmail) {
+		parts = append(parts, "email "+oldEmail+" menjadi "+newEmail)
+	}
+	if oldRole != newRole {
+		parts = append(parts, "role "+oldRole+" menjadi "+newRole)
+	}
+	return strings.Join(parts, ", ")
 }
