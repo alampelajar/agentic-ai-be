@@ -140,7 +140,7 @@ func DeleteMe(c *gin.Context) {
 
 	removeWorkspaceFiles(user.ID, workspaceRefs)
 
-	c.SetCookie("refresh_token", "", -1, "/", "", false, true)
+	setRefreshCookie(c, userRefresh, "", -1)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Akun dan data pribadi terkait berhasil dihapus permanen"})
 }
 

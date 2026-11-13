@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"log"
@@ -25,6 +26,40 @@ import (
 )
 
 const githubStateTTL = 10 * time.Minute
+
+// githubStateCookie holds the state in the browser that started the connection. The
+// callback needs both: the state says whose account it is, and the cookie proves the
+// browser coming back is the one that asked. Without it, someone could send another
+// person their own authorize link and get that person's GitHub (scope "repo") linked
+// to their account. The cookie is only sent to the callback.
+const (
+	githubStateCookie     = "github_oauth_state"
+	githubStateCookiePath = "/api/integrations/github/callback"
+)
+
+func setGitHubStateCookie(c *gin.Context, value string, maxAge int) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     githubStateCookie,
+		Value:    value,
+		Path:     githubStateCookiePath,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   config.IsProduction(),
+		// Lax: sent when GitHub sends the browser back (a top-level GET), never on
+		// requests other sites make in the background.
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// githubStateMatchesBrowser reports whether the state GitHub sent back is the one this
+// browser was given when it started connecting.
+func githubStateMatchesBrowser(c *gin.Context, state string) bool {
+	cookie, err := c.Cookie(githubStateCookie)
+	if err != nil || len(cookie) != len(state) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(cookie), []byte(state)) == 1
+}
 
 // githubConnectionUpsertColumns are the columns a reconnect overwrites. They are database column
 // names, not field names: GORM turns GitHubID into git_hub_id, so a guessed "github_id" fails on a
@@ -103,11 +138,13 @@ func StartGitHubConnect(c *gin.Context) {
 		githubFail(c, http.StatusInternalServerError, "github_failed", "Tidak dapat memulai koneksi GitHub.")
 		return
 	}
+	setGitHubStateCookie(c, state, int(githubStateTTL/time.Second))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "url": oauth.AuthorizeURL(state)})
 }
 
 // GitHubCallback receives the browser from GitHub. It has no login of its own: the one-time
-// state, created for a signed-in user, says whose connection this is.
+// state, created for a signed-in user, says whose connection this is, and the state cookie
+// shows this is the browser that user started from.
 func GitHubCallback(c *gin.Context) {
 	back := func(result string) { c.Redirect(http.StatusFound, frontendIntegrationsURL(result)) }
 
@@ -120,6 +157,13 @@ func GitHubCallback(c *gin.Context) {
 		back("error")
 		return
 	}
+	// Checked before the state is used up, so a link sent by someone else can neither
+	// connect nor spoil the attempt of the person who made it.
+	if !githubStateMatchesBrowser(c, state) {
+		back("error")
+		return
+	}
+	setGitHubStateCookie(c, "", -1)
 
 	// The state works once: taking it deletes it.
 	var pending models.GitHubOAuthState

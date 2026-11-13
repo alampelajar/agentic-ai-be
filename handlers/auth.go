@@ -260,15 +260,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(
-		"refresh_token",
-		refreshToken,
-		7*24*60*60,
-		"/",
-		"",
-		false,
-		true,
-	)
+	setRefreshCookie(c, userRefresh, refreshToken, refreshCookieMaxAge)
 
 	c.JSON(http.StatusOK, gin.H{
 	"ok":           true,
@@ -391,15 +383,7 @@ func AdminLogin(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie(
-		adminRefreshCookie,
-		refreshToken,
-		7*24*60*60,
-		adminCookiePath,
-		"",
-		false,
-		true,
-	)
+	setRefreshCookie(c, adminRefresh, refreshToken, refreshCookieMaxAge)
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok":           true,
@@ -434,6 +418,25 @@ var (
 	userRefresh  = refreshCookie{name: "refresh_token", path: "/"}
 	adminRefresh = refreshCookie{name: adminRefreshCookie, path: adminCookiePath, adminOnly: true}
 )
+
+// refreshCookieMaxAge matches the refresh token's own lifetime (seven days).
+const refreshCookieMaxAge = 7 * 24 * 60 * 60
+
+// setRefreshCookie writes (or, with maxAge -1, clears) a refresh cookie. It is
+// HttpOnly so scripts never see it, Secure in production so it never travels
+// over plain HTTP, and SameSite=Strict so other sites cannot make the browser
+// send it: the apps call the API from the same site, so they are not affected.
+func setRefreshCookie(c *gin.Context, cookie refreshCookie, value string, maxAge int) {
+	http.SetCookie(c.Writer, &http.Cookie{
+		Name:     cookie.name,
+		Value:    value,
+		Path:     cookie.path,
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   config.IsProduction(),
+		SameSite: http.SameSiteStrictMode,
+	})
+}
 
 func Refresh(c *gin.Context) { refreshSession(c, userRefresh) }
 
@@ -585,15 +588,7 @@ func refreshSession(c *gin.Context, cookie refreshCookie) {
 		return
 	}
 
-	c.SetCookie(
-		cookie.name,
-		newRefreshToken,
-		7*24*60*60,
-		cookie.path,
-		"",
-		false,
-		true,
-	)
+	setRefreshCookie(c, cookie, newRefreshToken, refreshCookieMaxAge)
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok":           true,
@@ -625,15 +620,7 @@ func logoutSession(c *gin.Context, cookie refreshCookie) {
 		}
 	}
 
-	c.SetCookie(
-		cookie.name,
-		"",
-		-1,
-		cookie.path,
-		"",
-		false,
-		true,
-	)
+	setRefreshCookie(c, cookie, "", -1)
 
 	c.JSON(http.StatusOK, gin.H{
 		"ok":      true,

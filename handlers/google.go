@@ -108,6 +108,19 @@ func GoogleLogin(c *gin.Context) {
 		return
 	}
 
+	// An account is found by its address, so the address must be one Google has
+	// confirmed belongs to this person. Otherwise a Google account carrying someone
+	// else's unconfirmed address would sign in to that person's account.
+	if !googleEmailVerified(payload.Claims) {
+		log.Println("Google login - email belum diverifikasi Google")
+
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"ok":      false,
+			"message": "Email akun Google belum diverifikasi",
+		})
+		return
+	}
+
 	email := strings.ToLower(strings.TrimSpace(emailValue))
 
 	// ==========================================
@@ -134,7 +147,6 @@ func GoogleLogin(c *gin.Context) {
 		avatar = strings.TrimSpace(value)
 	}
 
-	log.Printf("Google login - email: %s", email)
 
 	// ==========================================
 	// CARI USER DI POSTGRESQL
@@ -152,10 +164,8 @@ func GoogleLogin(c *gin.Context) {
 		// USER BELUM ADA
 		// ==========================================
 
-		log.Printf(
-			"Google login - user %s belum ada, membuat akun baru",
-			email,
-		)
+		// Addresses are personal data: they stay out of the log.
+		log.Println("Google login - user belum ada, membuat akun baru")
 
 		randomPassword := make([]byte, 32)
 
@@ -337,24 +347,15 @@ func GoogleLogin(c *gin.Context) {
 	// SET REFRESH TOKEN COOKIE
 	// ==========================================
 
-	c.SetCookie(
-		"refresh_token",
-		refreshToken,
-		7*24*60*60,
-		"/",
-		"",
-		false,
-		true,
-	)
+	setRefreshCookie(c, userRefresh, refreshToken, refreshCookieMaxAge)
 
 	// ==========================================
 	// RESPONSE
 	// ==========================================
 
 	log.Printf(
-		"Google login berhasil - user ID: %d, email: %s, role: %s",
+		"Google login berhasil - user ID: %d, role: %s",
 		user.ID,
-		user.Email,
 		user.Role,
 	)
 
@@ -370,4 +371,16 @@ func GoogleLogin(c *gin.Context) {
 			"role":   user.Role,
 		},
 	})
+}
+
+// googleEmailVerified reads the email_verified claim, which Google sends as a boolean
+// (and in some older tokens as the string "true"). Anything else counts as unverified.
+func googleEmailVerified(claims map[string]interface{}) bool {
+	switch value := claims["email_verified"].(type) {
+	case bool:
+		return value
+	case string:
+		return strings.EqualFold(value, "true")
+	}
+	return false
 }
