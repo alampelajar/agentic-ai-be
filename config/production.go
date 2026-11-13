@@ -70,6 +70,25 @@ func DatabaseSSLMode() string {
 
 var validSSLModes = map[string]bool{"disable": true, "allow": true, "prefer": true, "require": true, "verify-ca": true, "verify-full": true}
 
+// JWTProblems lists what is wrong with the token signing secrets. It applies in
+// every environment, not only production: HMAC accepts an empty key, so a missing
+// secret would let anyone sign a token for any user and role.
+func JWTProblems() []string {
+	var problems []string
+	access := strings.TrimSpace(os.Getenv("JWT_ACCESS_SECRET"))
+	refresh := strings.TrimSpace(os.Getenv("JWT_REFRESH_SECRET"))
+	if len(access) < 32 {
+		problems = append(problems, "JWT_ACCESS_SECRET must be set to a random value of at least 32 characters")
+	}
+	if len(refresh) < 32 {
+		problems = append(problems, "JWT_REFRESH_SECRET must be set to a random value of at least 32 characters")
+	}
+	if access != "" && access == refresh {
+		problems = append(problems, "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different")
+	}
+	return problems
+}
+
 // ProductionProblems lists what is unsafe about the configuration for a public
 // deployment. It names variables, never their values.
 func ProductionProblems() []string {
@@ -81,11 +100,7 @@ func ProductionProblems() []string {
 		}
 		return value
 	}
-	access := secret("JWT_ACCESS_SECRET", 32)
-	refresh := secret("JWT_REFRESH_SECRET", 32)
-	if access != "" && access == refresh {
-		problems = append(problems, "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different")
-	}
+	problems = append(problems, JWTProblems()...)
 	secret("PASSWORD_RESET_PEPPER", 32)
 	secret("AI_ENCRYPTION_KEY", 32)
 

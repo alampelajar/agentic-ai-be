@@ -116,3 +116,27 @@ func TestTrustedProxiesAndSSLModeDefaults(t *testing.T) {
 		t.Error("the setting is ignored")
 	}
 }
+
+// The JWT check is not only for production: HMAC accepts an empty key.
+func TestJWTProblemsApplyOutsideProduction(t *testing.T) {
+	t.Setenv("APP_ENV", "")
+	good := strings.Repeat("x", 40)
+	cases := map[string]struct{ access, refresh, want string }{
+		"missing": {"", good + "r", "JWT_ACCESS_SECRET"},
+		"short":   {good, "short", "JWT_REFRESH_SECRET"},
+		"same":    {good, good, "must be different"},
+	}
+	for name, tc := range cases {
+		t.Setenv("JWT_ACCESS_SECRET", tc.access)
+		t.Setenv("JWT_REFRESH_SECRET", tc.refresh)
+		problems := JWTProblems()
+		if !strings.Contains(strings.Join(problems, "; "), tc.want) {
+			t.Errorf("%s: problems %v do not mention %q", name, problems, tc.want)
+		}
+	}
+	t.Setenv("JWT_ACCESS_SECRET", good+"a")
+	t.Setenv("JWT_REFRESH_SECRET", good+"r")
+	if problems := JWTProblems(); len(problems) != 0 {
+		t.Errorf("good secrets were refused: %v", problems)
+	}
+}
