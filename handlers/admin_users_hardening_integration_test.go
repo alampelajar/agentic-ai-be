@@ -105,3 +105,14 @@ func TestAdminCreatedAccountsRefuseOverlongPasswords(t *testing.T) {
 		t.Fatalf("a 73-byte password = %d %s, want 400", rec.Code, rec.Body.String())
 	}
 }
+
+func TestAdminCreatedAccountsRefuseCommonPasswords(t *testing.T) {
+	f := newGuardFixture(t)
+	f.asAdmin()
+	email := "guard-common-" + f.suffix + "@example.test"
+	t.Cleanup(func() { config.DB.Unscoped().Where("email = ?", email).Delete(&models.User{}) })
+	rec := f.send(http.MethodPost, "/admin/users", `{"name":"Common","email":"`+email+`","password":"password123","role":"user"}`)
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "password_common") {
+		t.Fatalf("a common password = %d %s, want 400 password_common", rec.Code, rec.Body.String())
+	}
+}

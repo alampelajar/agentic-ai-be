@@ -110,7 +110,7 @@ docker compose -f deploy/compose.staging.yml --env-file deploy/.env.staging up -
 |---|---|
 | Email verification and CAPTCHA at registration | Registration is rate limited but not verified; accounts can still be made in bulk with throwaway addresses. Needs a Turnstile/hCaptcha key and a user-model change |
 | Versioned migrations (the schema is created by `AutoMigrate`) | Safe schema changes on real data; includes a rollback story |
-| Backups and a **tested** restore | Not done; the compose file keeps data in a volume only |
+| Backups and a **tested** restore | Scripts and a restore test exist (`docs/backup-restore.md`); still needed: run them by cron on the server, copy dumps off it, and a home for uploaded files |
 | Error tracking, metrics and alerts | Logs exist, nothing watches them |
 | Content-Security-Policy for the web app | The app loads Google and Clerk scripts; a policy must be written and tried in a real browser. The nginx config says so and omits it for now |
 | CD pipeline (CI exists) | Builds and tests run on GitHub, nothing deploys |

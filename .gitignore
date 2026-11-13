@@ -11,3 +11,6 @@ deploy/.env.*
 
 # Build output
 *.exe
+
+# Database dumps from deploy/backup.sh: never commit them
+deploy/backups/

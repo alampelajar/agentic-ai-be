@@ -95,14 +95,10 @@ func otpResult(c *gin.Context, result string) {
 	otpFail(c, http.StatusBadRequest, "invalid_otp", "Kode OTP tidak valid atau kedaluwarsa.")
 }
 
-func validNewPassword(password string) (string, string) {
-	if len(password) < 8 {
-		return "password_too_short", "Password minimal 8 karakter."
-	}
-	if len([]byte(password)) > 72 {
-		return "password_too_long", "Password maksimal 72 byte."
-	}
-	return "", ""
+// validNewPassword applies the shared password rules (services.PasswordProblem),
+// with the account's own details as words the password must not contain.
+func validNewPassword(password string, personal ...string) (string, string) {
+	return services.PasswordProblem(password, personal...)
 }
 
 // RequestRegisterOTP validates the sign-up form and e-mails a code. The account
@@ -124,7 +120,7 @@ func RequestRegisterOTP(c *gin.Context) {
 		otpFail(c, http.StatusBadRequest, "invalid_email", "Email tidak valid.")
 		return
 	}
-	if code, message := validNewPassword(req.Password); code != "" {
+	if code, message := validNewPassword(req.Password, req.Email, req.Name); code != "" {
 		otpFail(c, http.StatusBadRequest, code, message)
 		return
 	}

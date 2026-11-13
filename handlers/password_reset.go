@@ -224,16 +224,8 @@ func ResetPasswordWithOTP(c *gin.Context) {
 		})
 		return
 	}
-	if len(req.NewPassword) < 8 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"ok": false, "code": "password_too_short", "message": "Password baru minimal 8 karakter.",
-		})
-		return
-	}
-	if len([]byte(req.NewPassword)) > 72 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"ok": false, "code": "password_too_long", "message": "Password baru maksimal 72 byte.",
-		})
+	if code, message := services.PasswordProblem(req.NewPassword, email); code != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": code, "message": message})
 		return
 	}
 	if req.NewPassword != req.ConfirmPassword {

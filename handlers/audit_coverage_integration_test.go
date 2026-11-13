@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 
@@ -88,5 +89,26 @@ func TestFailedSignInIsLoggedWithoutTheAddress(t *testing.T) {
 	}
 	if strings.Contains(strings.ToLower(out), strings.ToLower(f.user.Email)) {
 		t.Fatalf("the address reached the log: %q", out)
+	}
+}
+
+func TestReusedRefreshTokenIsAudited(t *testing.T) {
+	f := newGuardFixture(t)
+	f.router.POST("/refresh", Refresh)
+	id := strconv.Itoa(int(f.user.ID))
+	t.Cleanup(func() { config.DB.Where("entity_id = ? AND action = ?", id, "security.refresh_token_reused").Delete(&models.AuditLog{}) })
+	cookie := cookieNamed(f.post("/login", f.user.Email, "correct horse", "10.2.0.9"), "refresh_token")
+	if cookie == nil {
+		t.Fatal("login set no refresh cookie")
+	}
+	past := time.Now().Add(-refreshReuseGrace - time.Second)
+	config.DB.Model(&models.RefreshToken{}).Where("token_hash = ?", hashToken(cookie.Value)).
+		Updates(map[string]any{"revoked_at": past, "replaced_at": past})
+	before := auditCount(t, "security.refresh_token_reused", id)
+	if rec := f.refresh("/refresh", cookie); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("reuse = %d, want 401", rec.Code)
+	}
+	if auditCount(t, "security.refresh_token_reused", id) != before+1 {
+		t.Fatal("a reused refresh token left no audit entry")
 	}
 }

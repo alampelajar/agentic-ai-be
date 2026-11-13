@@ -533,6 +533,18 @@ func refreshSession(c *gin.Context, cookie refreshCookie) {
 			Where("user_id = ? AND replaced_at IS NOT NULL", storedToken.UserID).
 			Update("replaced_at", nil)
 		log.Printf("[auth] reuse of a revoked refresh token; all sessions of user %d ended", storedToken.UserID)
+		// The clearest sign of a stolen session: keep it where admins look, not only in the server log.
+		userID := storedToken.UserID
+		reuse := models.AuditLog{
+			ActorUserID: &userID, ActorName: "Sistem keamanan", ActorRole: "system",
+			Action: "security.refresh_token_reused", EntityType: "user", EntityID: strconv.FormatUint(uint64(userID), 10),
+			Message: "Refresh token yang sudah dicabut dipakai lagi dari " + httpguard.ClientKey(c.ClientIP()) +
+				". Kemungkinan sesi dicuri; semua sesi akun ini diakhiri.",
+			CreatedAt: now,
+		}
+		if err := config.DB.Create(&reuse).Error; err != nil {
+			log.Printf("[audit] refresh token reuse for user %d was not recorded: %v", userID, err)
+		}
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"ok":      false,
 			"message": "Refresh token sudah tidak berlaku",

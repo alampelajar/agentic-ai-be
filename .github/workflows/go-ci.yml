@@ -47,3 +47,8 @@ jobs:
 
       - name: Build packages
         run: go build ./...
+
+      # Known vulnerabilities in Go and in the modules the code actually calls.
+      # A new advisory fails the build so it is seen the day it is published.
+      - name: Check for known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...

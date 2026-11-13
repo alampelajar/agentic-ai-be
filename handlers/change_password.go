@@ -12,6 +12,7 @@ import (
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
+	"agentic-ai-backend/services"
 )
 
 type ChangePasswordRequest struct {
@@ -43,13 +44,8 @@ func ChangePassword(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Konfirmasi password baru tidak cocok"})
 		return
 	}
-	if len(req.NewPassword) < 8 {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Password baru minimal 8 karakter"})
-		return
-	}
-	// bcrypt only accepts passwords up to 72 bytes.
-	if len([]byte(req.NewPassword)) > 72 {
-		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Password baru maksimal 72 byte"})
+	if code, message := services.PasswordProblem(req.NewPassword, c.GetString("user_email"), c.GetString("user_name")); code != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": code, "message": message})
 		return
 	}
 	if req.CurrentPassword == req.NewPassword {

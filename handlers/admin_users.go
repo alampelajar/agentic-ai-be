@@ -14,6 +14,7 @@ import (
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
+	"agentic-ai-backend/services"
 )
 
 // ============================================================
@@ -190,19 +191,11 @@ func AdminCreateUser(c *gin.Context) {
 		return
 	}
 
-	if len(req.Password) < 8 {
+	if code, message := services.PasswordProblem(req.Password, req.Email, req.Name); code != "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok":      false,
-			"message": "Password minimal 8 karakter",
-		})
-		return
-	}
-
-	// bcrypt only uses the first 72 bytes, and refuses longer input.
-	if len([]byte(req.Password)) > 72 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"ok":      false,
-			"message": "Password maksimal 72 byte",
+			"code":    code,
+			"message": message,
 		})
 		return
 	}
