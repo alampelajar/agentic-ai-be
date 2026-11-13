@@ -269,6 +269,8 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		})
 		return
 	}
+	recordAudit(c, "model.created", "ai_model", strconv.FormatUint(uint64(aiModel.ID), 10), aiModel.Name,
+		"Model global \""+aiModel.Name+"\" ("+aiModel.ModelID+") ditambahkan oleh administrator.")
 
 	if err := config.DB.Preload("Provider").Preload("Agents").First(&aiModel, aiModel.ID).Error; err != nil {
 		c.JSON(http.StatusCreated, gin.H{
@@ -406,6 +408,8 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Gagal menyimpan perubahan model global."})
 		return
 	}
+	recordAudit(c, "model.updated", "ai_model", strconv.FormatUint(uint64(aiModel.ID), 10), aiModel.Name,
+		"Model global \""+aiModel.Name+"\" ("+aiModel.ModelID+") diubah oleh administrator.")
 
 	if err := config.DB.Preload("Provider").Preload("Agents").First(&aiModel, aiModel.ID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Model diperbarui tetapi gagal memuat ulang data."})

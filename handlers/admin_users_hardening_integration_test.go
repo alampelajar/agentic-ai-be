@@ -94,3 +94,14 @@ func TestUserChangesDescribesOnlyWhatChanged(t *testing.T) {
 		t.Fatalf("changes = %q", got)
 	}
 }
+
+func TestAdminCreatedAccountsRefuseOverlongPasswords(t *testing.T) {
+	f := newGuardFixture(t)
+	f.asAdmin()
+	email := "guard-long-" + f.suffix + "@example.test"
+	t.Cleanup(func() { config.DB.Unscoped().Where("email = ?", email).Delete(&models.User{}) })
+	long := strings.Repeat("a", 73)
+	if rec := f.send(http.MethodPost, "/admin/users", `{"name":"Long","email":"`+email+`","password":"`+long+`","role":"user"}`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("a 73-byte password = %d %s, want 400", rec.Code, rec.Body.String())
+	}
+}

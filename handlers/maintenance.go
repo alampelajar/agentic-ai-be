@@ -127,6 +127,13 @@ func UpdateMaintenanceStatus(c *gin.Context) {
 		}
 	}
 
+	state := "dimatikan"
+	if req.Maintenance {
+		state = "dinyalakan"
+	}
+	recordAudit(c, "settings.maintenance_changed", "system_settings", "maintenance_mode", "Maintenance mode",
+		"Maintenance mode "+state+" oleh administrator.")
+
 	c.JSON(http.StatusOK, gin.H{
 		"ok":          true,
 		"message":     "Maintenance mode berhasil diperbarui",

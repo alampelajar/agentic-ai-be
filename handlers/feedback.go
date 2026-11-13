@@ -306,6 +306,10 @@ func DeleteMyFeedback(c *gin.Context) {
 
 func AdminDeleteFeedback(c *gin.Context) {
 	deleteFeedbackRecord(c, func(q *gorm.DB) *gorm.DB { return q })
+	if c.Writer.Status() == http.StatusOK {
+		id := c.Param("id")
+		recordAudit(c, "feedback.deleted_by_admin", "feedback", id, "Feedback #"+id, "Feedback #"+id+" dihapus oleh administrator.")
+	}
 }
 
 func AdminGetFeedback(c *gin.Context) {
@@ -336,6 +340,8 @@ func AdminUpdateFeedbackStatus(c *gin.Context) {
 	result := config.DB.Model(&models.Feedback{}).Where("id = ?",id).Update("status",req.Status)
 	if result.Error != nil { c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal memperbarui status"}); return }
 	if result.RowsAffected == 0 { c.JSON(http.StatusNotFound, gin.H{"ok":false,"message":"Feedback tidak ditemukan"}); return }
+	idText := strconv.FormatUint(id, 10)
+	recordAudit(c, "feedback.status_changed", "feedback", idText, "Feedback #"+idText, "Status feedback #"+idText+" diubah menjadi "+req.Status+" oleh administrator.")
 	c.JSON(http.StatusOK, gin.H{"ok":true})
 }
 
@@ -354,5 +360,6 @@ func AdminReplyFeedback(c *gin.Context) {
 	reply := models.FeedbackReply{FeedbackID:uint(id),AdminID:adminID,Message:req.Message}
 	if err := config.DB.Create(&reply).Error; err != nil { c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal mengirim balasan"}); return }
 	if item.Status == "new" { config.DB.Model(&item).Update("status","processing") }
+	recordAudit(c, "feedback.replied", "feedback", strconv.FormatUint(uint64(item.ID), 10), "Feedback #"+strconv.FormatUint(uint64(item.ID), 10), "Administrator membalas feedback #"+strconv.FormatUint(uint64(item.ID), 10)+".")
 	c.JSON(http.StatusCreated, gin.H{"ok":true,"reply":reply})
 }

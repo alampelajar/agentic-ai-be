@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,7 @@ const refreshReuseGrace = 30 * time.Second
 
 func wrongCredentials(c *gin.Context, email string) {
 	loginGuard.Fail(email, c.ClientIP())
+	securityEvent(c, "login_failed", email)
 	c.JSON(http.StatusUnauthorized, gin.H{
 		"ok":      false,
 		"message": "Email atau password salah",
@@ -198,6 +200,7 @@ func Login(c *gin.Context) {
 	// Refused before the password is looked at, so a correct guess made during a
 	// lock does not reveal itself.
 	if locked, wait := loginGuard.Check(req.Email, c.ClientIP()); locked {
+		securityEvent(c, "login_locked", req.Email)
 		httpguard.TooManyRequests(c, wait)
 		return
 	}
@@ -328,6 +331,7 @@ func AdminLogin(c *gin.Context) {
 	// Refused before the password is looked at, so a correct guess made during a
 	// lock does not reveal itself.
 	if locked, wait := loginGuard.Check(req.Email, c.ClientIP()); locked {
+		securityEvent(c, "login_locked", req.Email)
 		httpguard.TooManyRequests(c, wait)
 		return
 	}
@@ -363,6 +367,14 @@ func AdminLogin(c *gin.Context) {
 	}
 
 	loginGuard.Success(req.Email, c.ClientIP())
+
+	// Every admin console sign-in is kept, so a stolen admin password leaves a trace.
+	c.Set("user_id", user.ID)
+	c.Set("user_email", user.Email)
+	c.Set("user_name", user.Name)
+	c.Set("user_role", user.Role)
+	recordAudit(c, "admin.login", "user", strconv.FormatUint(uint64(user.ID), 10), user.Name,
+		"Administrator \""+user.Email+"\" masuk ke admin console dari "+httpguard.ClientKey(c.ClientIP())+".")
 
 	accessToken, err := utils.GenerateAccessToken(
 		user.ID,

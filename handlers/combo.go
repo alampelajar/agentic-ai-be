@@ -728,3 +728,14 @@ func removeModelFromCombos(tx *gorm.DB, aiModelID uint) {
 		}
 	}
 }
+
+// usesSystemModel is true when any of the models a chat may call is a shared system model.
+func usesSystemModel(candidates []models.AIModel) bool {
+	for _, model := range candidates {
+		if model.IsSystem {
+			return true
+		}
+	}
+	return false
+}
+

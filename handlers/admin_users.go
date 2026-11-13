@@ -198,6 +198,15 @@ func AdminCreateUser(c *gin.Context) {
 		return
 	}
 
+	// bcrypt only uses the first 72 bytes, and refuses longer input.
+	if len([]byte(req.Password)) > 72 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":      false,
+			"message": "Password maksimal 72 byte",
+		})
+		return
+	}
+
 	// --------------------------------------------------------
 	// Default role
 	// --------------------------------------------------------
@@ -277,6 +286,9 @@ func AdminCreateUser(c *gin.Context) {
 		})
 		return
 	}
+
+	recordAudit(c, "user.created_by_admin", "user", strconv.FormatUint(uint64(user.ID), 10), user.Name,
+		"Akun \""+user.Email+"\" dengan role "+user.Role+" dibuat oleh administrator.")
 
 	c.JSON(http.StatusCreated, gin.H{
 		"ok":      true,

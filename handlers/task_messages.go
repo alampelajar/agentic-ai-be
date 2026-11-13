@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -137,7 +138,10 @@ func AddTaskMessage(c *gin.Context) {
 		saved, err := saveTaskAttachments(task.UserID, task.ID, message.ID, attachments)
 		if err != nil {
 			config.DB.Delete(&message) // a message is kept with all its files or not at all
-			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": err.Error()})
+			// The cause can name server paths or database details: it goes to the log only.
+			c.Error(err)
+			log.Printf("[task-attachments] saving files of task %d failed: %v", task.ID, err)
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "error": "Lampiran gagal disimpan. Coba lagi."})
 			return
 		}
 		message.Attachments = saved

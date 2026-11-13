@@ -798,6 +798,14 @@ AGENT ROLE: DEBUGGING AGENT
 	if len(autoModels) > 0 {
 		candidates = autoModels
 	}
+	// The shared system models run on the operator's own keys: each person gets a daily
+	// number of requests to them, the same budget combos already use. Every call is
+	// already logged (logModelCall), so only the refusal was missing.
+	if usesSystemModel(candidates) && systemCallsToday(userID) >= int64(comboSystemDaily()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"ok": false, "code": "system_model_daily_limit",
+			"error": "Batas harian model gratis sudah tercapai. Coba lagi besok, atau pakai provider dengan API key sendiri."})
+		return
+	}
 	var stream *chatStreamWriter
 	if wantsChatStream(c, isCombo, requestBody) {
 		started := startChatStream(c)
