@@ -175,23 +175,30 @@ func makeSlug(value string) string {
 // seen from the text alone: credentials in the URL, a missing host, plain http in
 // production, and an address literal that is internal.
 func validBaseURL(value string) bool {
+	return baseURLProblem(value) == ""
+}
+
+// baseURLProblem says, in the words shown to the person, why a base URL is refused,
+// or "" when it is accepted. Each reason gets its own message so a refused internal
+// address is not reported as a wrong scheme.
+func baseURLProblem(value string) string {
 	parsed, err := url.ParseRequestURI(value)
 	if err != nil || parsed.Host == "" || parsed.Hostname() == "" || parsed.User != nil {
-		return false
+		return "Base URL tidak valid. Contoh: https://api.example.com/v1"
 	}
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return false
+		return "Base URL harus menggunakan http atau https."
 	}
 	if config.AllowPrivateProviderURLs() {
-		return true
+		return ""
+	}
+	if ip := net.ParseIP(parsed.Hostname()); (ip != nil && cloudworkspace.BlockedIP(ip)) || strings.EqualFold(parsed.Hostname(), "localhost") {
+		return "Base URL tidak boleh menunjuk ke komputer server atau jaringan lokal. Gunakan alamat provider yang publik."
 	}
 	if parsed.Scheme != "https" {
-		return false
+		return "Base URL harus menggunakan https."
 	}
-	if ip := net.ParseIP(parsed.Hostname()); ip != nil && cloudworkspace.BlockedIP(ip) {
-		return false
-	}
-	return !strings.EqualFold(parsed.Hostname(), "localhost")
+	return ""
 }
 
 func normalizeChatEndpoint(baseURL string) string {
@@ -246,10 +253,10 @@ func TestAIProviderConnection(c *gin.Context) {
 		return
 	}
 
-	if !validBaseURL(req.BaseURL) {
+	if problem := baseURLProblem(req.BaseURL); problem != "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok":    false,
-			"error": "Base URL harus menggunakan http atau https.",
+			"error": problem,
 		})
 		return
 	}
@@ -463,10 +470,10 @@ func CreateAIProvider(c *gin.Context) {
 		return
 	}
 
-	if !validBaseURL(req.BaseURL) {
+	if problem := baseURLProblem(req.BaseURL); problem != "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok":    false,
-			"error": "Base URL harus menggunakan http atau https.",
+			"error": problem,
 		})
 		return
 	}
@@ -577,10 +584,10 @@ func UpdateAIProvider(c *gin.Context) {
 	if req.BaseURL != nil {
 		baseURL := strings.TrimSpace(*req.BaseURL)
 
-		if !validBaseURL(baseURL) {
+		if problem := baseURLProblem(baseURL); problem != "" {
 			c.JSON(http.StatusBadRequest, gin.H{
 				"ok":    false,
-				"error": "Base URL harus menggunakan http atau https.",
+				"error": problem,
 			})
 			return
 		}

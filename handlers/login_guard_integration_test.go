@@ -127,9 +127,10 @@ func TestAdminLoginDoesNotRevealWhichAccountsAreOrdinaryUsers(t *testing.T) {
 	if stranger.Code != http.StatusUnauthorized || stranger.Code != ordinaryWrong.Code || stranger.Body.String() != ordinaryWrong.Body.String() {
 		t.Fatalf("an unknown address and an ordinary user with a wrong password differ: %d %s / %d %s", stranger.Code, stranger.Body.String(), ordinaryWrong.Code, ordinaryWrong.Body.String())
 	}
-	// Only someone who knows the password learns the account is not an admin's.
-	if got := f.post("/admin/login", f.user.Email, "correct horse", "198.51.100.32"); got.Code != http.StatusForbidden {
-		t.Fatalf("an ordinary user with the right password = %d", got.Code)
+	// Even the right password of an ordinary account gets the wrong-password answer,
+	// so trying stolen passwords on the admin page confirms nothing.
+	if got := f.post("/admin/login", f.user.Email, "correct horse", "198.51.100.32"); got.Code != stranger.Code || got.Body.String() != stranger.Body.String() {
+		t.Fatalf("an ordinary user with the right password = %d %s", got.Code, got.Body.String())
 	}
 	if got := f.post("/admin/login", f.admin.Email, "correct horse", "198.51.100.33"); got.Code != http.StatusOK {
 		t.Fatalf("a real admin = %d %s", got.Code, got.Body.String())

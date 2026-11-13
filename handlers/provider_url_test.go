@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,4 +69,26 @@ func TestProductionProviderClientCannotCallThisComputerEvenWithAnAcceptedURL(t *
 		t.Fatalf("development could not reach a local model server: %v", err)
 	}
 	response.Body.Close()
+}
+
+func TestARefusedBaseURLSaysWhy(t *testing.T) {
+	t.Setenv("ALLOW_PRIVATE_PROVIDER_URLS", "false")
+	cases := map[string]string{
+		"not a url":                       "tidak valid",
+		"https://user:pw@api.example.com": "tidak valid",
+		"ftp://api.example.com":           "http atau https",
+		"http://api.example.com/v1":       "harus menggunakan https",
+		"https://127.0.0.1:5432":          "jaringan lokal",
+		"https://192.168.1.1":             "jaringan lokal",
+		"https://localhost/v1":            "jaringan lokal",
+		"https://[::1]/v1":                "jaringan lokal",
+	}
+	for value, want := range cases {
+		if got := baseURLProblem(value); !strings.Contains(got, want) {
+			t.Errorf("%s: problem = %q, want it to mention %q", value, got, want)
+		}
+	}
+	if got := baseURLProblem("https://api.example.com/v1"); got != "" {
+		t.Errorf("a public https URL was refused: %q", got)
+	}
 }

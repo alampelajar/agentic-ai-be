@@ -354,17 +354,15 @@ func AdminLogin(c *gin.Context) {
 		return
 	}
 
-	loginGuard.Success(req.Email, c.ClientIP())
-
-	// Only after the password is right: answering earlier would tell anyone which
-	// addresses belong to ordinary accounts.
+	// An ordinary account gets the same answer as a wrong password, and the attempt
+	// counts toward the lock. A different answer would confirm that the password
+	// of that account is right, which helps someone trying stolen passwords.
 	if user.Role != "admin" {
-		c.JSON(http.StatusForbidden, gin.H{
-			"ok":      false,
-			"message": "Akun ini bukan akun admin",
-		})
+		wrongCredentials(c, req.Email)
 		return
 	}
+
+	loginGuard.Success(req.Email, c.ClientIP())
 
 	accessToken, err := utils.GenerateAccessToken(
 		user.ID,
