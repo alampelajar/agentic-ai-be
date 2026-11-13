@@ -3,38 +3,10 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
-	"fmt"
-	"os"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-// MinJWTSecretLength is the shortest signing secret accepted, in every environment.
-// HMAC accepts any key, even an empty one, so a missing secret would otherwise let
-// anyone sign their own tokens (with any role).
-const MinJWTSecretLength = 32
-
-// ErrWeakJWTSecret is returned when a signing secret is missing or too short.
-var ErrWeakJWTSecret = errors.New("JWT secret is missing or too short")
-
-// JWTSecret returns the signing secret held in the named variable, or
-// ErrWeakJWTSecret when it is shorter than MinJWTSecretLength.
-func JWTSecret(name string) ([]byte, error) {
-	value := strings.TrimSpace(os.Getenv(name))
-	if len(value) < MinJWTSecretLength {
-		return nil, fmt.Errorf("%w: %s", ErrWeakJWTSecret, name)
-	}
-	return []byte(value), nil
-}
-
-// AccessTokenSecret is the key access tokens are signed and checked with.
-func AccessTokenSecret() ([]byte, error) { return JWTSecret("JWT_ACCESS_SECRET") }
-
-// RefreshTokenSecret is the key refresh tokens are signed and checked with.
-func RefreshTokenSecret() ([]byte, error) { return JWTSecret("JWT_REFRESH_SECRET") }
 
 type Claims struct {
 	UserID uint   `json:"user_id"`
@@ -44,7 +16,7 @@ type Claims struct {
 }
 
 func GenerateAccessToken(userID uint, email string, role string) (string, error) {
-	secret, err := AccessTokenSecret()
+	secret, err := AccessSecret()
 	if err != nil {
 		return "", err
 	}
@@ -70,7 +42,7 @@ func GenerateAccessToken(userID uint, email string, role string) (string, error)
 }
 
 func GenerateRefreshToken(userID uint, email string, role string) (string, error) {
-	secret, err := RefreshTokenSecret()
+	secret, err := RefreshSecret()
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +71,7 @@ func GenerateRefreshToken(userID uint, email string, role string) (string, error
 }
 
 func ParseRefreshToken(tokenString string) (*Claims, error) {
-	secret, err := RefreshTokenSecret()
+	secret, err := RefreshSecret()
 	if err != nil {
 		return nil, err
 	}

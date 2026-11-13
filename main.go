@@ -66,21 +66,15 @@ func main() {
 	}
 
 	// ============================================================
-	// JWT SECRETS (every environment)
+	// PRODUCTION CONFIGURATION CHECK
 	// ============================================================
 
-	// HMAC accepts an empty key: without real secrets anyone could sign an admin
-	// token. Refuse to start rather than run that way, in development too.
-	if problems := config.JWTProblems(); len(problems) > 0 {
+	if problems := config.AlwaysRequiredProblems(); len(problems) > 0 {
 		for _, problem := range problems {
 			log.Printf("[CONFIG] %s", problem)
 		}
-		log.Fatal("JWT secret belum aman. Atur JWT_ACCESS_SECRET dan JWT_REFRESH_SECRET (lihat .env.example).")
+		log.Fatal("Konfigurasi belum aman. Perbaiki hal di atas di file .env lalu jalankan ulang.")
 	}
-
-	// ============================================================
-	// PRODUCTION CONFIGURATION CHECK
-	// ============================================================
 
 	if config.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)

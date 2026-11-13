@@ -42,9 +42,9 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		accessToken := parts[1]
-		secret, err := utils.AccessTokenSecret()
-		if err != nil {
-			// Never check a token against a missing or short key: anyone could sign one.
+		secret, secretErr := utils.AccessSecret()
+		if secretErr != nil {
+			// Never check a token against an empty key: anyone could have signed it.
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"ok":      false,
 				"message": "Server belum dikonfigurasi dengan benar",

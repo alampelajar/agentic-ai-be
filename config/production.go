@@ -70,18 +70,18 @@ func DatabaseSSLMode() string {
 
 var validSSLModes = map[string]bool{"disable": true, "allow": true, "prefer": true, "require": true, "verify-ca": true, "verify-full": true}
 
-// JWTProblems lists what is wrong with the token signing secrets. It applies in
-// every environment, not only production: HMAC accepts an empty key, so a missing
-// secret would let anyone sign a token for any user and role.
-func JWTProblems() []string {
+// AlwaysRequiredProblems lists what must be set before the server starts in any mode,
+// development included. An empty JWT key lets anyone sign a token for any user or role,
+// and a development server is often reachable from the rest of the local network.
+func AlwaysRequiredProblems() []string {
 	var problems []string
 	access := strings.TrimSpace(os.Getenv("JWT_ACCESS_SECRET"))
 	refresh := strings.TrimSpace(os.Getenv("JWT_REFRESH_SECRET"))
-	if len(access) < 32 {
-		problems = append(problems, "JWT_ACCESS_SECRET must be set to a random value of at least 32 characters")
+	if access == "" {
+		problems = append(problems, "JWT_ACCESS_SECRET must be set (a long random value, see .env.example)")
 	}
-	if len(refresh) < 32 {
-		problems = append(problems, "JWT_REFRESH_SECRET must be set to a random value of at least 32 characters")
+	if refresh == "" {
+		problems = append(problems, "JWT_REFRESH_SECRET must be set (a long random value, see .env.example)")
 	}
 	if access != "" && access == refresh {
 		problems = append(problems, "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different")
@@ -100,7 +100,11 @@ func ProductionProblems() []string {
 		}
 		return value
 	}
-	problems = append(problems, JWTProblems()...)
+	access := secret("JWT_ACCESS_SECRET", 32)
+	refresh := secret("JWT_REFRESH_SECRET", 32)
+	if access != "" && access == refresh {
+		problems = append(problems, "JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different")
+	}
 	secret("PASSWORD_RESET_PEPPER", 32)
 	secret("AI_ENCRYPTION_KEY", 32)
 

@@ -117,26 +117,27 @@ func TestTrustedProxiesAndSSLModeDefaults(t *testing.T) {
 	}
 }
 
-// The JWT check is not only for production: HMAC accepts an empty key.
-func TestJWTProblemsApplyOutsideProduction(t *testing.T) {
-	t.Setenv("APP_ENV", "")
-	good := strings.Repeat("x", 40)
-	cases := map[string]struct{ access, refresh, want string }{
-		"missing": {"", good + "r", "JWT_ACCESS_SECRET"},
-		"short":   {good, "short", "JWT_REFRESH_SECRET"},
-		"same":    {good, good, "must be different"},
-	}
-	for name, tc := range cases {
-		t.Setenv("JWT_ACCESS_SECRET", tc.access)
-		t.Setenv("JWT_REFRESH_SECRET", tc.refresh)
-		problems := JWTProblems()
-		if !strings.Contains(strings.Join(problems, "; "), tc.want) {
-			t.Errorf("%s: problems %v do not mention %q", name, problems, tc.want)
+func TestJWTSecretsAreRequiredInEveryMode(t *testing.T) {
+	for _, mode := range []string{"", "development", "production"} {
+		t.Setenv("APP_ENV", mode)
+		t.Setenv("JWT_ACCESS_SECRET", "")
+		t.Setenv("JWT_REFRESH_SECRET", "")
+		if problems := AlwaysRequiredProblems(); len(problems) != 2 {
+			t.Fatalf("APP_ENV=%q with no JWT keys: problems = %v", mode, problems)
 		}
 	}
-	t.Setenv("JWT_ACCESS_SECRET", good+"a")
-	t.Setenv("JWT_REFRESH_SECRET", good+"r")
-	if problems := JWTProblems(); len(problems) != 0 {
-		t.Errorf("good secrets were refused: %v", problems)
+	t.Setenv("JWT_ACCESS_SECRET", "same-value")
+	t.Setenv("JWT_REFRESH_SECRET", "same-value")
+	if problems := AlwaysRequiredProblems(); len(problems) != 1 || !strings.Contains(problems[0], "different") {
+		t.Fatalf("equal keys: problems = %v", problems)
+	}
+	t.Setenv("JWT_REFRESH_SECRET", "other-value")
+	if problems := AlwaysRequiredProblems(); len(problems) != 0 {
+		t.Fatalf("set keys: problems = %v", problems)
+	}
+	for _, problem := range AlwaysRequiredProblems() {
+		if strings.Contains(problem, "same-value") || strings.Contains(problem, "other-value") {
+			t.Fatalf("a secret reached the message: %s", problem)
+		}
 	}
 }
