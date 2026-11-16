@@ -293,77 +293,25 @@ func main() {
 			handlers.DeleteMe,
 		)
 
-		// ========================================================
-		// AGENTIC
-		// ========================================================
-
-		protected.POST(
-			"/agent/plan",
-			handlers.AgentPlan,
-		)
-
-		protected.GET(
-			"/agents",
-			handlers.GetAgents,
-		)
-
-		protected.GET(
-			"/agents/:id",
-			handlers.GetAgent,
-		)
-
-		// ========================================================
-		// SKILLS
-		// ========================================================
-
-		protected.GET("/skills", handlers.GetSkills)
-		protected.POST("/skills", handlers.CreateSkill)
-		protected.GET("/skills/:id", handlers.GetSkill)
-		protected.PUT("/skills/:id", handlers.UpdateSkill)
-		protected.DELETE("/skills/:id", handlers.DeleteSkill)
-		protected.POST("/skills/import/zip", importLimit, handlers.ImportSkillZIP)
-		protected.POST("/skills/import/github", importLimit, handlers.ImportSkillGitHub)
-		protected.POST("/skills/:id/validate", handlers.ValidateSkill)
-		protected.GET("/agents/:id/skills", handlers.GetAgentSkills)
-		protected.POST("/agents/:id/skills", handlers.AssignSkillToAgent)
-		protected.PATCH("/agents/:id/skills/:skill_id", handlers.UpdateAgentSkill)
-		protected.DELETE("/agents/:id/skills/:skill_id", handlers.RemoveSkillFromAgent)
-		protected.GET("/memories", handlers.GetMemories)
-		protected.POST("/memories", handlers.CreateMemory)
-		protected.PATCH("/memories/:id", handlers.UpdateMemory)
-		protected.DELETE("/memories/:id", handlers.DeleteMemory)
-
-		// Design Studio
-		protected.GET("/design-projects", handlers.GetDesignProjects)
-		protected.POST("/design-projects", handlers.CreateDesignProject)
-		protected.GET("/design-projects/:id", handlers.GetDesignProject)
-		protected.PUT("/design-projects/:id", handlers.UpdateDesignProject)
-		protected.DELETE("/design-projects/:id", handlers.DeleteDesignProject)
-		protected.GET("/workspaces", handlers.GetWorkspaces)
-		protected.POST("/workspaces", importLimit, handlers.CreateWorkspace)
-		protected.GET("/workspaces/:id", handlers.GetWorkspace)
-		protected.PATCH("/workspaces/:id", handlers.UpdateWorkspace)
-		protected.DELETE("/workspaces/:id", handlers.DeleteWorkspace)
-		protected.GET("/workspaces/:id/tree", handlers.GetWorkspaceTree)
-		protected.GET("/workspaces/:id/file", handlers.GetWorkspaceFile)
-		protected.PUT("/workspaces/:id/file", handlers.PutWorkspaceFile)
-		protected.GET("/workspaces/:id/changes", handlers.GetWorkspaceChanges)
-		protected.POST("/workspaces/:id/export", importLimit, handlers.ExportWorkspace)
-		protected.POST("/workspaces/:id/github/publish", importLimit, handlers.PublishWorkspaceToGitHub)
-		protected.GET("/workspaces/:id/executions", handlers.GetWorkspaceExecutions)
-		protected.POST("/workspaces/:id/executions", executionLimit, handlers.CreateExecution)
-		protected.GET("/executions/:id", handlers.GetExecution)
-		protected.POST("/workspace-tools/run", executionLimit, handlers.RunWorkspaceTool)
-		protected.POST("/workspace-tools/approvals/:id/approve", handlers.ApproveWorkspaceTool)
-		protected.POST("/workspace-tools/approvals/:id/deny", handlers.DenyWorkspaceTool)
-		protected.POST("/executions/:id/cancel", handlers.CancelExecution)
-		protected.GET("/delegations", handlers.GetDelegations)
-		protected.POST("/delegations", handlers.CreateDelegation)
-		protected.DELETE("/delegations/:id", handlers.DeleteDelegation)
-		protected.GET("/memory-settings", handlers.GetMemorySettings)
-		protected.PUT("/memory-settings", handlers.UpdateMemorySettings)
-		protected.POST("/tool-activities", handlers.CreateToolActivity)
-		protected.GET("/tool-activities", handlers.GetToolActivities)
+		// Website Builder (WEBSITE-BUILDER.md in the frontend repository).
+		protected.GET("/sites", handlers.GetSites)
+		protected.POST("/sites", importLimit, handlers.CreateSite)
+		protected.GET("/sites/slug-available", handlers.SiteSlugAvailable)
+		protected.GET("/sites/:id", handlers.GetSite)
+		protected.PATCH("/sites/:id", handlers.UpdateSite)
+		protected.DELETE("/sites/:id", handlers.DeleteSite)
+		protected.POST("/sites/:id/questions", chatLimit, handlers.SiteQuestions)
+		protected.POST("/sites/:id/brief", chatLimit, handlers.SiteBrief)
+		protected.POST("/sites/:id/images", importLimit, handlers.UploadSiteImage)
+		protected.DELETE("/sites/:id/images", handlers.DeleteSiteImage)
+		protected.POST("/sites/:id/runs", executionLimit, handlers.StartSiteRun)
+		protected.GET("/sites/:id/runs/:runId", handlers.GetSiteRun)
+		protected.GET("/sites/:id/runs/:runId/events", handlers.SiteRunEvents)
+		protected.POST("/sites/:id/runs/:runId/cancel", handlers.CancelSiteRun)
+		protected.POST("/sites/:id/versions/:number/restore", handlers.RestoreSiteVersion)
+		protected.GET("/sites/:id/preview", handlers.SitePreview)
+		protected.POST("/sites/:id/publish", handlers.PublishSite)
+		protected.POST("/sites/:id/unpublish", handlers.UnpublishSite)
 
 		// ========================================================
 		// TASKS
@@ -410,123 +358,6 @@ func main() {
 			handlers.GetTaskAttachment,
 		)
 
-		// ========================================================
-		// CHAT
-		// ========================================================
-
-		protected.POST(
-			"/chat",
-			chatLimit,
-			handlers.Chat,
-		)
-
-		// ========================================================
-		// GENERATOR
-		// ========================================================
-
-		protected.POST(
-			"/generator/landing-page",
-			chatLimit,
-			handlers.GenerateLandingPage,
-		)
-
-		// ========================================================
-		// AI PROVIDERS
-		// ========================================================
-
-		// GET PROVIDERS
-		protected.GET(
-			"/ai/providers",
-			handlers.GetAIProviders,
-		)
-
-		// CREATE PROVIDER
-		protected.POST(
-			"/ai/providers",
-			handlers.CreateAIProvider,
-		)
-
-		// TEST CONNECTION
-		protected.POST(
-			"/ai/providers/test",
-			handlers.TestAIProviderConnection,
-		)
-
-		// UPDATE PROVIDER
-		protected.PUT(
-			"/ai/providers/:id",
-			handlers.UpdateAIProvider,
-		)
-
-		// DELETE PROVIDER
-		protected.DELETE(
-			"/ai/providers/:id",
-			handlers.DeleteAIProvider,
-		)
-
-		// ========================================================
-		// AI MODELS
-		// ========================================================
-
-		// GET ALL MODELS
-		protected.GET(
-			"/ai/models",
-			handlers.GetAIModels,
-		)
-
-		// HOW EACH MODEL FARED, AND THE QUOTA LEFT PER PROVIDER
-		protected.GET(
-			"/ai/models/health",
-			handlers.GetModelHealth,
-		)
-
-		// CREATE MODEL
-		protected.POST(
-			"/ai/models",
-			handlers.CreateAIModel,
-		)
-
-		// UPDATE MODEL
-		protected.PUT(
-			"/ai/models/:id",
-			handlers.UpdateAIModel,
-		)
-
-		// ========================================================
-		// REMOVE MODEL FROM ONE AGENT
-		//
-		// Ini hanya menghapus relasi:
-		//
-		// agent_models
-		//
-		// Model AI tetap ada dan Agent lain yang memakai model
-		// tersebut tidak akan terpengaruh.
-		// ========================================================
-
-		protected.DELETE(
-			"/ai/models/:id/agents",
-			handlers.RemoveModelFromAgent,
-		)
-
-		// ========================================================
-		// DELETE MODEL
-		//
-		// Ini menghapus model AI beserta relasinya.
-		// ========================================================
-
-		protected.DELETE(
-			"/ai/models/:id",
-			handlers.DeleteAIModel,
-		)
-
-		// ========================================================
-		// COMBOS (a model made of several models, owned by the user)
-		// ========================================================
-
-		protected.GET("/ai/combos", handlers.GetCombos)
-		protected.POST("/ai/combos", handlers.CreateCombo)
-		protected.PUT("/ai/combos/:id", handlers.UpdateCombo)
-		protected.DELETE("/ai/combos/:id", handlers.DeleteCombo)
 	}
 
 	// ============================================================
@@ -564,6 +395,9 @@ func main() {
 		middleware.AuthMiddleware(),
 		middleware.AdminMiddleware(),
 	)
+
+	// The agent features that left the person's app (routes_admin_features.go).
+	registerBackgroundFeatures(admin, importLimit, executionLimit, chatLimit)
 
 	{
 		admin.GET(

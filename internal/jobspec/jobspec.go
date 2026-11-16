@@ -42,19 +42,27 @@ const (
 )
 
 // Images are the only images a job may use. A deployment can pin different tags
-// with CLOUD_EXEC_IMAGE_GO, _NODE and _PYTHON; whatever is chosen is still this
-// fixed set of three, never a value from a request.
+// with CLOUD_EXEC_IMAGE_GO, _NODE, _PYTHON and _SITE; whatever is chosen is still
+// this fixed set, never a value from a request. Site is the Website Builder's image
+// (deploy/site-image), which carries every package a generated site may use.
 type Images struct {
-	Go, Node, Python string
+	Go, Node, Python, Site string
 }
 
 func DefaultImages() Images {
-	return Images{Go: "golang:1.27", Node: "node:22-bookworm", Python: "python:3.12-slim"}
+	return Images{Go: "golang:1.27", Node: "node:22-bookworm", Python: "python:3.12-slim", Site: "agentic-site-node:1"}
 }
 
 func (i Images) Approved(image string) bool {
-	return image != "" && (image == i.Go || image == i.Node || image == i.Python)
+	return image != "" && (image == i.Go || image == i.Node || image == i.Python || image == i.Site)
 }
+
+// SiteBuildJob builds and checks a Website Builder site. Only the agent worker
+// queues it; it is not in JobTypes, so a person cannot request it directly.
+const SiteBuildJob = "site-build"
+
+// IsInternal reports a job type that only the server itself may queue.
+func IsInternal(jobType string) bool { return jobType == SiteBuildJob }
 
 var jobTypes = []string{"go-test", "go-build", "npm-test", "npm-build", "npm-lint", "python-test", "go-deps", "npm-install", "pip-install"}
 
@@ -122,6 +130,13 @@ func Resolve(jobType string, images Images, filesDir string) (CommandSpec, error
 		spec = CommandSpec{JobType: jobType, Runtime: "python", Image: images.Python, Argv: argv, Label: label, Default: 5 * time.Minute, Install: true}
 		if !has("requirements.txt", "pyproject.toml", "pytest.ini", "tests") {
 			return CommandSpec{}, errors.New("this workspace has no requirements.txt, pytest configuration or tests folder")
+		}
+	case SiteBuildJob:
+		// Type check, build, render every page, bundle the server and call it. The tool
+		// and every package it uses are in the image; the job has no network.
+		spec = CommandSpec{JobType: jobType, Runtime: "site", Image: images.Site, Argv: []string{"node", "/opt/site/tools/build.mjs"}, Label: "build and check the website", Default: 5 * time.Minute}
+		if !has("web/src/main.tsx") || !has("server/index.js") {
+			return CommandSpec{}, errors.New("this workspace is not a Website Builder site")
 		}
 	default:
 		return CommandSpec{}, fmt.Errorf("%w: %q (supported: %s)", ErrUnknownJobType, jobType, strings.Join(jobTypes, ", "))

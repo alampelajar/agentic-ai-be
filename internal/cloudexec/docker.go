@@ -171,6 +171,8 @@ func environmentFor(spec jobspec.CommandSpec, filesDir, proxy string) []string {
 		return append(env, "GOTMPDIR="+goScratch, "GOCACHE="+goScratch+"/go-build", "GOPATH="+goScratch+"/gopath", proxySetting, "GOFLAGS="+flags, "GOTOOLCHAIN=local", "CGO_ENABLED=0")
 	case "node":
 		return append(env, "npm_config_cache=/tmp/npm-cache", "npm_config_update_notifier=false", "npm_config_audit=false", "npm_config_fund=false")
+	case "site":
+		return append(env, "NODE_ENV=production")
 	case "python":
 		env = append(env, "PYTHONDONTWRITEBYTECODE=1", "PYTHONPYCACHEPREFIX=/tmp/pycache", "PYTHONPATH=/workspace/"+jobspec.DependencyDir)
 		if !spec.Install {
@@ -206,6 +208,18 @@ func (e *DockerExecutor) Available(ctx context.Context) error {
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("approved images are missing on this host (pull them first): %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+// SiteImageReady checks the Website Builder image, which is built on the host
+// (docker build -t agentic-site-node:1 deploy/site-image) rather than pulled. Without
+// it only site builds fail; the other jobs are unaffected.
+func (e *DockerExecutor) SiteImageReady(ctx context.Context) error {
+	check, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	if e.Config.Images.Site == "" || e.command(check, "image", "inspect", "--format", "{{.Id}}", e.Config.Images.Site).Run() != nil {
+		return fmt.Errorf("the site image %q is not on this host (docker build -t %s deploy/site-image)", e.Config.Images.Site, e.Config.Images.Site)
 	}
 	return nil
 }

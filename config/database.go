@@ -109,7 +109,11 @@ func ConnectDatabase() {
 		&models.AIModelCombo{},
 		&models.AIModelComboMember{},
 		&models.AIModelCallLog{},
-		&models.DesignProject{},
+		&models.Site{},
+		&models.AgentRun{},
+		&models.AgentRunStep{},
+		&models.SiteVersion{},
+		&models.SiteRelease{},
 	)
 
 	if err != nil {

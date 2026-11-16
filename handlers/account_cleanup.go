@@ -179,9 +179,12 @@ func purgeUserAccount(tx *gorm.DB, user *models.User, audit *models.AuditLog) er
 	if err := tx.Where("user_id = ?", user.ID).Delete(&models.GitHubPublication{}).Error; err != nil {
 		return err
 	}
-	// Design projects are personal data: remove them with the account.
-	if err := tx.Where("user_id = ?", user.ID).Delete(&models.DesignProject{}).Error; err != nil {
-		return err
+	// Design Studio was removed (WEBSITE-BUILDER.md, section 20), but its table may still
+	// hold designs made before: they are personal data, removed with the account.
+	if tx.Migrator().HasTable("design_projects") {
+		if err := tx.Exec("DELETE FROM design_projects WHERE user_id = ?", user.ID).Error; err != nil {
+			return err
+		}
 	}
 	// Persistent memories are personal data: remove them with the account.
 	if err := tx.Unscoped().Where("user_id = ?", user.ID).Delete(&models.AgentMemory{}).Error; err != nil {

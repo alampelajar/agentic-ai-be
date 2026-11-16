@@ -14,6 +14,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/joho/godotenv"
+
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/internal/cloudexec"
 	"agentic-ai-backend/internal/cloudworkspace"
@@ -28,6 +30,7 @@ func envInt(name string, fallback int) int {
 }
 
 func main() {
+	_ = godotenv.Load() // development: the same .env as the API server; real environment wins
 	if !strings.EqualFold(strings.TrimSpace(os.Getenv("CLOUD_EXECUTION_ENABLED")), "true") {
 		log.Fatal("CLOUD_EXECUTION_ENABLED is not true; the worker will not start. Execution is off by default.")
 	}
@@ -43,7 +46,7 @@ func main() {
 
 	dockerConfig := cloudexec.DefaultDockerConfig()
 	dockerConfig.Images = jobspec.DefaultImages()
-	for name, target := range map[string]*string{"CLOUD_EXEC_IMAGE_GO": &dockerConfig.Images.Go, "CLOUD_EXEC_IMAGE_NODE": &dockerConfig.Images.Node, "CLOUD_EXEC_IMAGE_PYTHON": &dockerConfig.Images.Python, "CLOUD_EXEC_MEMORY": &dockerConfig.Memory, "CLOUD_EXEC_CPUS": &dockerConfig.CPUs, "CLOUD_EXEC_RUN_AS": &dockerConfig.RunAs} {
+	for name, target := range map[string]*string{"CLOUD_EXEC_IMAGE_GO": &dockerConfig.Images.Go, "CLOUD_EXEC_IMAGE_NODE": &dockerConfig.Images.Node, "CLOUD_EXEC_IMAGE_PYTHON": &dockerConfig.Images.Python, "CLOUD_EXEC_IMAGE_SITE": &dockerConfig.Images.Site, "CLOUD_EXEC_MEMORY": &dockerConfig.Memory, "CLOUD_EXEC_CPUS": &dockerConfig.CPUs, "CLOUD_EXEC_RUN_AS": &dockerConfig.RunAs} {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 			*target = value
 		}
@@ -67,6 +70,14 @@ func main() {
 	if err != nil {
 		log.Fatalf("The sandbox is not available, so no job will be run: %v", err)
 	}
+
+	siteCheck, cancelSite := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := executor.SiteImageReady(siteCheck); err != nil {
+		fmt.Printf("Website Builder builds: NOT READY, site builds will fail: %v\n", err)
+	} else {
+		fmt.Printf("Website Builder builds: on, image %s.\n", dockerConfig.Images.Site)
+	}
+	cancelSite()
 
 	if dockerConfig.InstallNetwork == "" {
 		fmt.Println("Dependency installation: off (CLOUD_EXEC_INSTALL_NETWORK is not set).")
