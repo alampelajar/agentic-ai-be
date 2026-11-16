@@ -1,0 +1,1657 @@
+[
+  {
+    "key": "warm-editorial",
+    "name": {
+      "id": "Hangat dan klasik",
+      "en": "Warm and classic"
+    },
+    "description": {
+      "id": "Warna krem dan cokelat bata, judul besar seperti sampul majalah.",
+      "en": "Cream and brick brown, big headings like a magazine cover."
+    },
+    "fits": [
+      "food",
+      "cafe",
+      "bakery",
+      "craft",
+      "travel",
+      "general",
+      "wedding"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/fraunces",
+      "family": "Fraunces Variable",
+      "fallback": "Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/dm-sans",
+      "family": "DM Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FBF6EE",
+      "surface": "#F3EADB",
+      "foreground": "#2B2118",
+      "muted": "#6E5E4C",
+      "primary": "#A8471F",
+      "primary_foreground": "#FFF8F0",
+      "accent": "#E2A93B",
+      "border": "#E2D3BD"
+    },
+    "radius": {
+      "sm": "2px",
+      "md": "4px",
+      "lg": "6px",
+      "xl": "10px"
+    },
+    "shape": "Hairline borders (border-border), no shadows, generous white space.",
+    "composition": [
+      "Header: name in the heading font on the left, small uppercase nav links with wide letter spacing on the right.",
+      "Hero: asymmetric. A very large serif headline (text-5xl to text-7xl, tight leading) over two thirds of the width, a short paragraph and one primary button below; a thin rule (border-t) separates it from the next section.",
+      "Sections alternate between bg-background and bg-surface bands. Content is laid out in an editorial grid: a narrow column with a small label and number (01, 02...) beside a wide column of text.",
+      "Lists of items (menu, products, services) are rows separated by hairlines with the name left and a short note right, not cards.",
+      "A pull quote set large in italic heading font breaks the page once.",
+      "Footer: three columns (address, hours, contact) on bg-surface."
+    ],
+    "voice": {
+      "id": "Hangat, bercerita, seperti pemilik yang bangga dengan usahanya.",
+      "en": "Warm and story-led, like an owner proud of the place."
+    },
+    "tags": [
+      "krem",
+      "cokelat",
+      "oranye"
+    ],
+    "variants": [
+      {
+        "key": "garden",
+        "name": {
+          "id": "Hijau kebun",
+          "en": "Garden green"
+        },
+        "palette": {
+          "background": "#F6F4EA",
+          "surface": "#E8EBD8",
+          "foreground": "#23291E",
+          "muted": "#5E6652",
+          "primary": "#3F6B3A",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#C9A24A",
+          "border": "#D8DCC3"
+        },
+        "tags": [
+          "hijau",
+          "krem"
+        ]
+      },
+      {
+        "key": "rose",
+        "name": {
+          "id": "Merah muda",
+          "en": "Soft pink"
+        },
+        "palette": {
+          "background": "#FBF4F2",
+          "surface": "#F3E1DD",
+          "foreground": "#2E1F1F",
+          "muted": "#725A57",
+          "primary": "#A8455A",
+          "primary_foreground": "#FFF7F7",
+          "accent": "#C9902F",
+          "border": "#E8D2CD"
+        },
+        "tags": [
+          "pink",
+          "merah"
+        ]
+      }
+    ],
+    "moods": [
+      "hangat",
+      "klasik",
+      "akrab",
+      "warm",
+      "classic",
+      "cozy"
+    ],
+    "kit": "Ornament kind line between sections; FramedPhoto frame thin; for an event or invitation also Countdown, Timeline and AddToCalendar."
+  },
+  {
+    "key": "bold-industrial",
+    "name": {
+      "id": "Tegas dan kuat",
+      "en": "Bold and strong"
+    },
+    "description": {
+      "id": "Hitam dan kuning, garis tebal, tulisan besar. Cocok untuk bengkel dan jasa.",
+      "en": "Black and yellow, thick lines, big letters. Good for workshops and services."
+    },
+    "fits": [
+      "workshop",
+      "automotive",
+      "construction",
+      "repair",
+      "logistics",
+      "general"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/archivo",
+      "family": "Archivo Variable",
+      "fallback": "Arial Narrow, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/work-sans",
+      "family": "Work Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#F2F2EE",
+      "surface": "#FFFFFF",
+      "foreground": "#141414",
+      "muted": "#55554F",
+      "primary": "#141414",
+      "primary_foreground": "#F5C518",
+      "accent": "#F5C518",
+      "border": "#141414"
+    },
+    "radius": {
+      "sm": "0px",
+      "md": "0px",
+      "lg": "0px",
+      "xl": "0px"
+    },
+    "shape": "Square corners everywhere, 2px borders in border-border, no shadows.",
+    "composition": [
+      "Header: a full-width bar with a 2px bottom border; name in heavy uppercase heading font (font-black), nav links uppercase, a call button in bg-accent with dark text.",
+      "Hero: left-aligned, uppercase headline in font-black at text-5xl to text-7xl with tight tracking, a short line of facts below (for example opening hours or area served) separated by slashes, and two buttons: call/WhatsApp (bg-accent) and services (outlined).",
+      "Services in a grid of boxes with 2px borders, each with a big number, an icon and a short description; the grid lines touch (no gaps, borders shared).",
+      "One full-width band in bg-foreground with text-background for the strongest message (guarantee, working process in steps).",
+      "Process or steps shown as a numbered horizontal sequence on desktop, stacked on phones.",
+      "Footer dark (bg-foreground, text-background) with address and contact in large type."
+    ],
+    "voice": {
+      "id": "Lugas, singkat, meyakinkan. Kalimat pendek dan kata kerja aktif.",
+      "en": "Direct, short and confident. Short sentences, active verbs."
+    },
+    "tags": [
+      "hitam",
+      "kuning"
+    ],
+    "variants": [
+      {
+        "key": "blue",
+        "name": {
+          "id": "Biru",
+          "en": "Blue"
+        },
+        "palette": {
+          "background": "#EEF1F4",
+          "surface": "#FFFFFF",
+          "foreground": "#101418",
+          "muted": "#4E5761",
+          "primary": "#101418",
+          "primary_foreground": "#7CC4FF",
+          "accent": "#2F80ED",
+          "border": "#101418"
+        },
+        "tags": [
+          "biru",
+          "hitam"
+        ]
+      },
+      {
+        "key": "red",
+        "name": {
+          "id": "Merah",
+          "en": "Red"
+        },
+        "palette": {
+          "background": "#F3F0EE",
+          "surface": "#FFFFFF",
+          "foreground": "#141414",
+          "muted": "#55514F",
+          "primary": "#141414",
+          "primary_foreground": "#FF7A5C",
+          "accent": "#E03A1E",
+          "border": "#141414"
+        },
+        "tags": [
+          "merah",
+          "oranye",
+          "hitam"
+        ]
+      }
+    ],
+    "moods": [
+      "tegas",
+      "kuat",
+      "gagah",
+      "berani",
+      "strong",
+      "bold"
+    ],
+    "kit": "Ornament kind line with a thick rule (className with border-t-4); for an event Timeline."
+  },
+  {
+    "key": "quiet-luxury",
+    "name": {
+      "id": "Mewah dan tenang",
+      "en": "Calm and elegant"
+    },
+    "description": {
+      "id": "Putih gading dengan sentuhan emas. Banyak ruang kosong, terasa istimewa.",
+      "en": "Ivory with a touch of gold. Lots of space, feels special."
+    },
+    "fits": [
+      "beauty",
+      "salon",
+      "spa",
+      "fashion",
+      "wedding",
+      "jewelry",
+      "hotel",
+      "event"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/playfair-display",
+      "family": "Playfair Display Variable",
+      "fallback": "Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/manrope",
+      "family": "Manrope Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FAF8F4",
+      "surface": "#F1ECE3",
+      "foreground": "#1C1B19",
+      "muted": "#6F6A62",
+      "primary": "#1C1B19",
+      "primary_foreground": "#FAF8F4",
+      "accent": "#9C7A3C",
+      "border": "#E3DDD2"
+    },
+    "radius": {
+      "sm": "0px",
+      "md": "0px",
+      "lg": "2px",
+      "xl": "2px"
+    },
+    "shape": "Thin borders only where needed, no shadows, very generous spacing (py-24 to py-32 sections).",
+    "composition": [
+      "Header: centred name in the heading font with letter spacing, nav centred below it in small uppercase; very light.",
+      "Hero: centred, calm. A small uppercase label in text-accent, a serif headline in a light weight (font-normal) at text-5xl to text-6xl, one short line, and a text link with an underline instead of a heavy button.",
+      "Services or offers in two columns with generous gaps: name in serif, a one-line description in muted text, no icons.",
+      "Images (when there are photos) tall and narrow (aspect-[3/4]) set beside text, never in a busy grid.",
+      "A single centred statement in italic serif between thin rules.",
+      "Footer minimal and centred: address, hours, one booking link."
+    ],
+    "voice": {
+      "id": "Tenang, halus, percaya diri. Sedikit kata, tidak berlebihan.",
+      "en": "Calm, refined, assured. Few words, never loud."
+    },
+    "tags": [
+      "putih",
+      "krem",
+      "emas",
+      "hitam"
+    ],
+    "variants": [
+      {
+        "key": "sage",
+        "name": {
+          "id": "Hijau lembut",
+          "en": "Soft green"
+        },
+        "palette": {
+          "background": "#F5F6F1",
+          "surface": "#E7EBE2",
+          "foreground": "#1E231D",
+          "muted": "#646B60",
+          "primary": "#2F3D2C",
+          "primary_foreground": "#F5F6F1",
+          "accent": "#8A6F35",
+          "border": "#DADFD3"
+        },
+        "tags": [
+          "hijau",
+          "emas"
+        ]
+      },
+      {
+        "key": "blush",
+        "name": {
+          "id": "Merah muda lembut",
+          "en": "Blush pink"
+        },
+        "palette": {
+          "background": "#FBF6F4",
+          "surface": "#F2E6E2",
+          "foreground": "#2A1E1E",
+          "muted": "#73625F",
+          "primary": "#2A1E1E",
+          "primary_foreground": "#FBF6F4",
+          "accent": "#A25F59",
+          "border": "#E9DAD5"
+        },
+        "tags": [
+          "pink"
+        ]
+      }
+    ],
+    "moods": [
+      "mewah",
+      "elegan",
+      "tenang",
+      "anggun",
+      "istimewa",
+      "luxury",
+      "elegant",
+      "calm"
+    ],
+    "kit": "Ornament kind diamond between sections; for an invitation a Monogram (frame circle) above the names, Countdown, Timeline, AddToCalendar and MapLink; FramedPhoto frame thin."
+  },
+  {
+    "key": "fresh-clinic",
+    "name": {
+      "id": "Bersih dan ramah",
+      "en": "Clean and friendly"
+    },
+    "description": {
+      "id": "Hijau toska lembut dan putih. Rapi dan menenangkan.",
+      "en": "Soft teal and white. Tidy and calming."
+    },
+    "fits": [
+      "health",
+      "clinic",
+      "dentist",
+      "pharmacy",
+      "wellness",
+      "education",
+      "professional"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/plus-jakarta-sans",
+      "family": "Plus Jakarta Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/figtree",
+      "family": "Figtree Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#F6FAF9",
+      "surface": "#FFFFFF",
+      "foreground": "#12302B",
+      "muted": "#4F6964",
+      "primary": "#1D6F62",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#BFE6DC",
+      "border": "#D6E6E2"
+    },
+    "radius": {
+      "sm": "6px",
+      "md": "10px",
+      "lg": "16px",
+      "xl": "24px"
+    },
+    "shape": "Rounded panels in bg-surface with a 1px border, no shadows.",
+    "composition": [
+      "Header: name left, nav right, an appointment button (bg-primary) at the end; on phones a menu button.",
+      "Hero: split in two. Left: headline in semibold at text-4xl to text-5xl, a reassuring sentence, appointment and WhatsApp buttons. Right: a rounded panel in bg-accent holding the opening hours and the three main facts as a short list with check icons.",
+      "Services as rounded panels in a 2 or 3 column grid, each with an icon in a soft circle (bg-accent), a title and two lines of text.",
+      "A section answering common questions as an accessible accordion (button with aria-expanded) of 4 to 6 questions.",
+      "A clear contact section with the form on one side and address, phone and hours on the other.",
+      "Footer light with small text and the opening hours."
+    ],
+    "voice": {
+      "id": "Ramah, jelas, menenangkan. Menjelaskan tanpa istilah sulit.",
+      "en": "Friendly, clear and reassuring. Explains without jargon."
+    },
+    "tags": [
+      "hijau",
+      "tosca",
+      "putih"
+    ],
+    "variants": [
+      {
+        "key": "blue",
+        "name": {
+          "id": "Biru",
+          "en": "Blue"
+        },
+        "palette": {
+          "background": "#F5F8FC",
+          "surface": "#FFFFFF",
+          "foreground": "#12233A",
+          "muted": "#4D6078",
+          "primary": "#1E5AA8",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#C7DCF5",
+          "border": "#D8E2EF"
+        },
+        "tags": [
+          "biru",
+          "putih"
+        ]
+      },
+      {
+        "key": "lavender",
+        "name": {
+          "id": "Ungu lembut",
+          "en": "Lavender"
+        },
+        "palette": {
+          "background": "#F8F6FC",
+          "surface": "#FFFFFF",
+          "foreground": "#241F3A",
+          "muted": "#5D5878",
+          "primary": "#5B4BA8",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#DCD5F5",
+          "border": "#E3DEF0"
+        },
+        "tags": [
+          "ungu"
+        ]
+      }
+    ],
+    "moods": [
+      "bersih",
+      "segar",
+      "ramah",
+      "sehat",
+      "clean",
+      "fresh",
+      "friendly"
+    ],
+    "kit": "Ornament kind dots between sections; Timeline for a schedule."
+  },
+  {
+    "key": "playful-pop",
+    "name": {
+      "id": "Ceria dan berwarna",
+      "en": "Bright and playful"
+    },
+    "description": {
+      "id": "Oranye cerah dan sudut membulat. Penuh semangat.",
+      "en": "Bright orange and round corners. Full of energy."
+    },
+    "fits": [
+      "kids",
+      "school",
+      "snack",
+      "event",
+      "community",
+      "toys",
+      "cafe"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/bricolage-grotesque",
+      "family": "Bricolage Grotesque Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/nunito",
+      "family": "Nunito Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FFF6E5",
+      "surface": "#FFFFFF",
+      "foreground": "#1E1A3A",
+      "muted": "#545072",
+      "primary": "#E8441F",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#21A99C",
+      "border": "#1E1A3A"
+    },
+    "radius": {
+      "sm": "8px",
+      "md": "14px",
+      "lg": "22px",
+      "xl": "32px"
+    },
+    "shape": "2px dark outlines (border-2 border-border) on cards and buttons; instead of soft shadows use a hard offset made with a second outlined block behind (no blur).",
+    "composition": [
+      "Header: name in extra-bold heading font, nav links as outlined pills, the active page filled.",
+      "Hero: a huge headline (text-5xl to text-7xl, font-extrabold) with one word set in a filled pill (bg-accent, text-background, rounded-full, px-4). Below, two chunky buttons with 2px outlines.",
+      "A row of 3 or 4 outlined cards in bg-surface, each slightly rotated (-rotate-1, rotate-1) on desktop only (md:), with an icon in a coloured circle.",
+      "A band in bg-primary with text-primary-foreground listing what makes the place special, as large short phrases.",
+      "Schedule, prices or activities shown as a friendly outlined table or list with bold headings.",
+      "Footer in bg-foreground with text-background and a big sign-off line."
+    ],
+    "voice": {
+      "id": "Ceria, akrab, bersemangat. Boleh santai, tetap sopan.",
+      "en": "Cheerful, familiar and upbeat. Casual but polite."
+    },
+    "tags": [
+      "oranye",
+      "kuning"
+    ],
+    "variants": [
+      {
+        "key": "green",
+        "name": {
+          "id": "Hijau segar",
+          "en": "Fresh green"
+        },
+        "palette": {
+          "background": "#F2FAEE",
+          "surface": "#FFFFFF",
+          "foreground": "#17301E",
+          "muted": "#4D6655",
+          "primary": "#24803F",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#E0962B",
+          "border": "#17301E"
+        },
+        "tags": [
+          "hijau"
+        ]
+      },
+      {
+        "key": "pink",
+        "name": {
+          "id": "Merah muda",
+          "en": "Pink"
+        },
+        "palette": {
+          "background": "#FFF2F6",
+          "surface": "#FFFFFF",
+          "foreground": "#2B1A2E",
+          "muted": "#66506A",
+          "primary": "#C42A60",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#2F8FB8",
+          "border": "#2B1A2E"
+        },
+        "tags": [
+          "pink",
+          "ungu"
+        ]
+      }
+    ],
+    "moods": [
+      "ceria",
+      "lucu",
+      "seru",
+      "meriah",
+      "fun",
+      "cheerful",
+      "playful"
+    ],
+    "kit": "Ornament kind dots; for an event Countdown and Timeline; PhotoGallery for photos."
+  },
+  {
+    "key": "nordic-minimal",
+    "name": {
+      "id": "Sederhana dan alami",
+      "en": "Simple and natural"
+    },
+    "description": {
+      "id": "Abu-abu hangat, hijau tua, dan warna kayu. Rapi tanpa hiasan.",
+      "en": "Warm grey, dark green and wood. Tidy, no decoration."
+    },
+    "fits": [
+      "furniture",
+      "architecture",
+      "interior",
+      "coffee",
+      "creative",
+      "craft",
+      "general",
+      "wedding"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/instrument-sans",
+      "family": "Instrument Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/instrument-sans",
+      "family": "Instrument Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#F4F3EF",
+      "surface": "#E9E7E1",
+      "foreground": "#22231F",
+      "muted": "#64655E",
+      "primary": "#2E4A3B",
+      "primary_foreground": "#F4F3EF",
+      "accent": "#B98E68",
+      "border": "#D6D3CB"
+    },
+    "radius": {
+      "sm": "4px",
+      "md": "6px",
+      "lg": "8px",
+      "xl": "12px"
+    },
+    "shape": "Flat surfaces in bg-surface, 1px borders, no shadows. Strict grid.",
+    "composition": [
+      "Header: name left in medium weight, nav right, very small; a thin bottom border.",
+      "Hero: a 12-column grid. Headline in medium weight (not bold) at text-4xl to text-6xl spanning 8 columns, a short paragraph in the last 4 columns aligned to the bottom of the headline.",
+      "Work or products in a clean grid of equal tiles in bg-surface with a caption below each (name, one detail in muted text).",
+      "A section of three numbered principles in columns, numbers small in text-accent.",
+      "Generous margins, left aligned everything, nothing centred except the footer line.",
+      "Footer: one row with name, address and contact in small text."
+    ],
+    "voice": {
+      "id": "Sederhana, jujur, tenang. Kalimat pendek tanpa hiasan.",
+      "en": "Plain, honest and calm. Short sentences without decoration."
+    },
+    "tags": [
+      "abu",
+      "hijau",
+      "cokelat"
+    ],
+    "variants": [
+      {
+        "key": "blue",
+        "name": {
+          "id": "Biru tenang",
+          "en": "Calm blue"
+        },
+        "palette": {
+          "background": "#F3F4F5",
+          "surface": "#E6E9EC",
+          "foreground": "#1F2328",
+          "muted": "#5F656C",
+          "primary": "#2C4A66",
+          "primary_foreground": "#F3F4F5",
+          "accent": "#A07650",
+          "border": "#D3D8DD"
+        },
+        "tags": [
+          "biru",
+          "abu"
+        ]
+      },
+      {
+        "key": "clay",
+        "name": {
+          "id": "Cokelat tanah",
+          "en": "Clay brown"
+        },
+        "palette": {
+          "background": "#F6F2EE",
+          "surface": "#ECE4DC",
+          "foreground": "#2A2420",
+          "muted": "#6B6058",
+          "primary": "#8A4B32",
+          "primary_foreground": "#F6F2EE",
+          "accent": "#5E7A63",
+          "border": "#DDD2C7"
+        },
+        "tags": [
+          "cokelat",
+          "oranye",
+          "merah"
+        ]
+      }
+    ],
+    "moods": [
+      "sederhana",
+      "simpel",
+      "tenang",
+      "alami",
+      "simple",
+      "calm",
+      "natural"
+    ],
+    "kit": "Ornament kind line; FramedPhoto frame thin; for an invitation Timeline and AddToCalendar."
+  },
+  {
+    "key": "night-studio",
+    "name": {
+      "id": "Gelap dan modern",
+      "en": "Dark and modern"
+    },
+    "description": {
+      "id": "Latar gelap dengan warna hijau terang. Cocok untuk karya dan foto.",
+      "en": "A dark background with bright green. Good for work and photos."
+    },
+    "fits": [
+      "creative",
+      "portfolio",
+      "photography",
+      "music",
+      "agency",
+      "tech",
+      "event"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/syne",
+      "family": "Syne Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/dm-sans",
+      "family": "DM Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#0F0F12",
+      "surface": "#1A1A20",
+      "foreground": "#F2F0EA",
+      "muted": "#A3A1AA",
+      "primary": "#D4FF3A",
+      "primary_foreground": "#0F0F12",
+      "accent": "#FF6B4A",
+      "border": "#2C2C34"
+    },
+    "radius": {
+      "sm": "4px",
+      "md": "8px",
+      "lg": "12px",
+      "xl": "20px"
+    },
+    "shape": "Dark panels in bg-surface with 1px borders, no shadows, no gradients.",
+    "composition": [
+      "Header: name left in bold heading font, nav right, a primary button in bg-primary with dark text.",
+      "Hero: a massive headline (text-6xl to text-8xl, font-bold, leading-none) across the full width, one word in text-primary; a small line of muted text and a scroll hint below.",
+      "Selected work or services as a list of large rows: index number, title in heading font at text-2xl to text-4xl, short note on the right; rows separated by borders, the title turns text-primary on hover.",
+      "A section of short facts as big numbers or words in heading font (only facts given by the owner, never invented).",
+      "Contact section with a very large email or WhatsApp link in heading font.",
+      "Footer small and muted."
+    ],
+    "voice": {
+      "id": "Percaya diri, ringkas, sedikit berani.",
+      "en": "Confident, concise, a little bold."
+    },
+    "tags": [
+      "hitam",
+      "gelap"
+    ],
+    "variants": [
+      {
+        "key": "violet",
+        "name": {
+          "id": "Ungu",
+          "en": "Violet"
+        },
+        "palette": {
+          "background": "#0F0E14",
+          "surface": "#1A1822",
+          "foreground": "#F1EFF7",
+          "muted": "#A29EB2",
+          "primary": "#B69CFF",
+          "primary_foreground": "#0F0E14",
+          "accent": "#FF7AB6",
+          "border": "#2C2938"
+        },
+        "tags": [
+          "ungu",
+          "pink",
+          "gelap"
+        ]
+      },
+      {
+        "key": "amber",
+        "name": {
+          "id": "Kuning emas",
+          "en": "Amber"
+        },
+        "palette": {
+          "background": "#12100D",
+          "surface": "#1E1A15",
+          "foreground": "#F5F0E8",
+          "muted": "#ADA493",
+          "primary": "#FFB547",
+          "primary_foreground": "#12100D",
+          "accent": "#4FD1C5",
+          "border": "#332C22"
+        },
+        "tags": [
+          "kuning",
+          "emas",
+          "oranye",
+          "gelap"
+        ]
+      }
+    ],
+    "moods": [
+      "gelap",
+      "modern",
+      "keren",
+      "misterius",
+      "dark",
+      "modern",
+      "cool"
+    ],
+    "kit": "Ornament kind line; FramedPhoto frame offset; for an event Countdown."
+  },
+  {
+    "key": "heritage-serif",
+    "name": {
+      "id": "Resmi dan terpercaya",
+      "en": "Formal and trusted"
+    },
+    "description": {
+      "id": "Biru tua dan merah marun. Serius, cocok untuk jasa profesional.",
+      "en": "Navy and maroon. Serious, good for professional services."
+    },
+    "fits": [
+      "professional",
+      "law",
+      "consulting",
+      "finance",
+      "notary",
+      "education",
+      "foundation",
+      "community"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/eb-garamond",
+      "family": "EB Garamond Variable",
+      "fallback": "Garamond, Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/public-sans",
+      "family": "Public Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#F7F4EC",
+      "surface": "#FFFDF8",
+      "foreground": "#1F2A44",
+      "muted": "#59607A",
+      "primary": "#1F2A44",
+      "primary_foreground": "#F7F4EC",
+      "accent": "#8E2A24",
+      "border": "#D6CFBD"
+    },
+    "radius": {
+      "sm": "2px",
+      "md": "2px",
+      "lg": "4px",
+      "xl": "4px"
+    },
+    "shape": "Double rules (two thin borders) to frame key sections, 1px borders elsewhere, no shadows.",
+    "composition": [
+      "Header: a thin top bar in bg-primary with phone and email in small text; below it the name in the serif heading font and nav links.",
+      "Hero: left aligned, serif headline at text-4xl to text-6xl, a paragraph explaining who they help, and a primary button; on the right a framed panel (double rule) with three key areas of work.",
+      "Areas of practice or services as a two-column list with small burgundy (text-accent) markers and short descriptions.",
+      "A section about the people or the firm in a calm text column with a pull quote in serif italic.",
+      "A clear consultation section with the form and office details.",
+      "Footer in bg-primary with text-primary-foreground, three columns."
+    ],
+    "voice": {
+      "id": "Formal, tepat, berwibawa. Menggunakan bahasa baku.",
+      "en": "Formal, precise and assured."
+    },
+    "tags": [
+      "biru",
+      "maroon",
+      "merah"
+    ],
+    "variants": [
+      {
+        "key": "green",
+        "name": {
+          "id": "Hijau tua",
+          "en": "Forest green"
+        },
+        "palette": {
+          "background": "#F5F4EC",
+          "surface": "#FFFEF8",
+          "foreground": "#1C2B22",
+          "muted": "#56655B",
+          "primary": "#1C3B2B",
+          "primary_foreground": "#F5F4EC",
+          "accent": "#7A5A1C",
+          "border": "#D4D0BC"
+        },
+        "tags": [
+          "hijau",
+          "emas"
+        ]
+      },
+      {
+        "key": "burgundy",
+        "name": {
+          "id": "Merah marun",
+          "en": "Burgundy"
+        },
+        "palette": {
+          "background": "#F8F3F0",
+          "surface": "#FFFCFA",
+          "foreground": "#2E1A1C",
+          "muted": "#6A5658",
+          "primary": "#5E1D27",
+          "primary_foreground": "#F8F3F0",
+          "accent": "#24466B",
+          "border": "#DACDC7"
+        },
+        "tags": [
+          "maroon",
+          "merah"
+        ]
+      }
+    ],
+    "moods": [
+      "resmi",
+      "terpercaya",
+      "formal",
+      "berwibawa",
+      "trusted",
+      "formal"
+    ],
+    "kit": "Ornament kind diamond; Monogram frame square for an invitation; Timeline."
+  },
+  {
+    "key": "tropical-sun",
+    "name": {
+      "id": "Tropis dan santai",
+      "en": "Tropical and relaxed"
+    },
+    "description": {
+      "id": "Oranye matahari dan hijau daun. Hangat seperti liburan.",
+      "en": "Sun orange and leaf green. Warm like a holiday."
+    },
+    "fits": [
+      "travel",
+      "villa",
+      "tourism",
+      "restaurant",
+      "food",
+      "juice",
+      "hotel"
+    ],
+    "heading": {
+      "package": "@fontsource/dm-serif-display",
+      "family": "DM Serif Display",
+      "fallback": "Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/outfit",
+      "family": "Outfit Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FFFAF0",
+      "surface": "#FCEBCB",
+      "foreground": "#21302A",
+      "muted": "#58664F",
+      "primary": "#C9541F",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#2C7A50",
+      "border": "#EBD9B4"
+    },
+    "radius": {
+      "sm": "8px",
+      "md": "14px",
+      "lg": "24px",
+      "xl": "40px"
+    },
+    "shape": "Large rounded panels in bg-surface, some with one corner left square (rounded-tl-none) for a leaf shape; no shadows.",
+    "composition": [
+      "Header: name in the serif heading font, nav links, a booking button in bg-primary as a rounded-full pill.",
+      "Hero: a big rounded panel in bg-surface filling the width, with the headline in serif at text-5xl to text-7xl, a sentence and a pill button; when there is a photo it sits inside the panel with a large radius.",
+      "Highlights (rooms, dishes, trips) as cards with large radius, a title in serif and a short line, arranged in a 3-column grid that becomes a horizontal scroll row on phones (overflow-x-auto inside the section only, snap-x).",
+      "A band in bg-accent with text-background telling how to get there or how to book, in 3 steps.",
+      "A gentle section of practical information (location, hours, what to bring) as icon rows.",
+      "Footer in bg-surface with a large serif sign-off."
+    ],
+    "voice": {
+      "id": "Hangat, santai, mengundang. Membuat pembaca ingin datang.",
+      "en": "Warm, easy-going, inviting."
+    },
+    "tags": [
+      "oranye",
+      "hijau",
+      "krem"
+    ],
+    "variants": [
+      {
+        "key": "ocean",
+        "name": {
+          "id": "Biru laut",
+          "en": "Ocean blue"
+        },
+        "palette": {
+          "background": "#F4FAFA",
+          "surface": "#DDF0EF",
+          "foreground": "#14302F",
+          "muted": "#4B6766",
+          "primary": "#0F7C7A",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#C9692A",
+          "border": "#C3E0DE"
+        },
+        "tags": [
+          "biru",
+          "tosca"
+        ]
+      },
+      {
+        "key": "pink",
+        "name": {
+          "id": "Merah muda",
+          "en": "Pink"
+        },
+        "palette": {
+          "background": "#FFF6F3",
+          "surface": "#FDE3DA",
+          "foreground": "#2E1F1B",
+          "muted": "#6E5952",
+          "primary": "#C23A5C",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#2C8A5B",
+          "border": "#F0D1C6"
+        },
+        "tags": [
+          "pink"
+        ]
+      }
+    ],
+    "moods": [
+      "santai",
+      "tropis",
+      "pantai",
+      "liburan",
+      "relaxed",
+      "tropical",
+      "beach"
+    ],
+    "kit": "Ornament kind flourish; FramedPhoto frame arch; for an event Countdown and MapLink."
+  },
+  {
+    "key": "tech-precise",
+    "name": {
+      "id": "Rapi dan modern",
+      "en": "Neat and modern"
+    },
+    "description": {
+      "id": "Biru di atas putih, tertata rapi. Cocok untuk jasa teknologi.",
+      "en": "Blue on white, neatly arranged. Good for tech services."
+    },
+    "fits": [
+      "tech",
+      "startup",
+      "software",
+      "it",
+      "agency",
+      "education",
+      "professional"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/sora",
+      "family": "Sora Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/onest",
+      "family": "Onest Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#F7F8FA",
+      "surface": "#FFFFFF",
+      "foreground": "#0E1726",
+      "muted": "#566175",
+      "primary": "#1F45C9",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#0E9F6E",
+      "border": "#DDE2EB"
+    },
+    "radius": {
+      "sm": "6px",
+      "md": "8px",
+      "lg": "12px",
+      "xl": "16px"
+    },
+    "shape": "White panels with 1px borders on a light grey page; a faint grid of lines may decorate the hero background using border utilities, no gradients, no shadows.",
+    "composition": [
+      "Header: name left, nav centre, a primary button right; a 1px bottom border.",
+      "Hero: left aligned. A small label with a dot in text-accent, a semibold headline at text-4xl to text-6xl with tight tracking, a paragraph, two buttons; on the right a panel that shows the product or service as a structured list (steps or features with check icons), not a fake screenshot.",
+      "Features as a bento grid: panels of different sizes (one wide, two small) with an icon, a title and a sentence.",
+      "How it works in numbered steps connected by a line on desktop.",
+      "A plain pricing or packages section only if the owner gave prices; otherwise a contact call to action.",
+      "Footer with columns of links and small text."
+    ],
+    "voice": {
+      "id": "Jelas, efisien, meyakinkan. Fokus pada manfaat nyata.",
+      "en": "Clear, efficient and convincing. Focused on real benefits."
+    },
+    "tags": [
+      "biru",
+      "putih"
+    ],
+    "variants": [
+      {
+        "key": "green",
+        "name": {
+          "id": "Hijau",
+          "en": "Green"
+        },
+        "palette": {
+          "background": "#F6F9F7",
+          "surface": "#FFFFFF",
+          "foreground": "#0F1F17",
+          "muted": "#536459",
+          "primary": "#0F7A4D",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#2F6FE0",
+          "border": "#DCE6E0"
+        },
+        "tags": [
+          "hijau"
+        ]
+      },
+      {
+        "key": "purple",
+        "name": {
+          "id": "Ungu",
+          "en": "Purple"
+        },
+        "palette": {
+          "background": "#F8F7FB",
+          "surface": "#FFFFFF",
+          "foreground": "#17142B",
+          "muted": "#5C5875",
+          "primary": "#5B3FD1",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#0E8F8B",
+          "border": "#E2DFEE"
+        },
+        "tags": [
+          "ungu"
+        ]
+      }
+    ],
+    "moods": [
+      "modern",
+      "rapi",
+      "canggih",
+      "profesional",
+      "tech",
+      "neat",
+      "professional"
+    ],
+    "kit": "Ornament kind line; Timeline for steps or a schedule."
+  },
+  {
+    "key": "handmade-craft",
+    "name": {
+      "id": "Akrab dan buatan tangan",
+      "en": "Homely and handmade"
+    },
+    "description": {
+      "id": "Hijau zaitun dan cokelat tanah. Terasa dekat dan tulus.",
+      "en": "Olive green and earth brown. Feels close and sincere."
+    },
+    "fits": [
+      "craft",
+      "bakery",
+      "organic",
+      "farm",
+      "florist",
+      "handmade",
+      "food",
+      "community",
+      "wedding"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/lora",
+      "family": "Lora Variable",
+      "fallback": "Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/nunito",
+      "family": "Nunito Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#F4EFE6",
+      "surface": "#FBF8F2",
+      "foreground": "#3A2E25",
+      "muted": "#6E6052",
+      "primary": "#5C7A40",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#C97C4E",
+      "border": "#D9CCB8"
+    },
+    "radius": {
+      "sm": "6px",
+      "md": "12px",
+      "lg": "18px",
+      "xl": "28px"
+    },
+    "shape": "Dashed borders (border-dashed) for frames and dividers, soft rounded corners, no shadows.",
+    "composition": [
+      "Header: name in serif italic with a small leaf or flower icon, nav links underlined on hover.",
+      "Hero: centred text in a dashed frame: a handwritten-feeling serif italic headline at text-4xl to text-6xl, a short story sentence, a button.",
+      "Products or offers as cards in bg-surface with dashed borders, name in serif, a short note about how it is made.",
+      "A 'how we make it' section as a vertical timeline of 3 to 4 steps with small icons.",
+      "A personal note from the maker in serif italic, signed with the owner's name if given.",
+      "Footer in bg-surface with a dashed top border."
+    ],
+    "voice": {
+      "id": "Personal, tulus, hangat. Seperti pembuatnya bicara langsung.",
+      "en": "Personal, sincere and warm, as if the maker speaks."
+    },
+    "tags": [
+      "hijau",
+      "cokelat",
+      "krem"
+    ],
+    "variants": [
+      {
+        "key": "rose",
+        "name": {
+          "id": "Merah muda",
+          "en": "Rose"
+        },
+        "palette": {
+          "background": "#F7EFEC",
+          "surface": "#FCF8F6",
+          "foreground": "#3A2A27",
+          "muted": "#725F5A",
+          "primary": "#9A4E5F",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#5F7F4A",
+          "border": "#E2D0CA"
+        },
+        "tags": [
+          "pink",
+          "merah"
+        ]
+      },
+      {
+        "key": "blue",
+        "name": {
+          "id": "Biru",
+          "en": "Blue"
+        },
+        "palette": {
+          "background": "#EFF2F4",
+          "surface": "#F9FBFC",
+          "foreground": "#22303A",
+          "muted": "#5B6A75",
+          "primary": "#3E6D8E",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#B07436",
+          "border": "#D3DCE2"
+        },
+        "tags": [
+          "biru"
+        ]
+      }
+    ],
+    "moods": [
+      "alami",
+      "akrab",
+      "rustik",
+      "hangat",
+      "buatan tangan",
+      "natural",
+      "rustic",
+      "homely"
+    ],
+    "kit": "Ornament kind flourish between sections; FramedPhoto frame arch; for an invitation a Monogram (frame circle), Countdown, Timeline and AddToCalendar."
+  },
+  {
+    "key": "street-market",
+    "name": {
+      "id": "Ramai dan siap jualan",
+      "en": "Busy and ready to sell"
+    },
+    "description": {
+      "id": "Hijau, kuning, dan hitam yang mencolok. Jelas untuk toko.",
+      "en": "Striking green, yellow and black. Clear for a shop."
+    },
+    "fits": [
+      "shop",
+      "catalog",
+      "grocery",
+      "fashion",
+      "retail",
+      "snack",
+      "general"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/outfit",
+      "family": "Outfit Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/work-sans",
+      "family": "Work Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FFFFFF",
+      "surface": "#F3F0E8",
+      "foreground": "#141414",
+      "muted": "#555550",
+      "primary": "#0A7A3D",
+      "primary_foreground": "#FFFFFF",
+      "accent": "#FFD23F",
+      "border": "#141414"
+    },
+    "radius": {
+      "sm": "0px",
+      "md": "4px",
+      "lg": "6px",
+      "xl": "8px"
+    },
+    "shape": "Strong 2px borders, flat colour blocks, sticker-like labels in bg-accent; no shadows.",
+    "composition": [
+      "Header: a thin announcement bar in bg-accent (for example delivery area or opening hours), then the name in extra-bold uppercase heading font and nav links.",
+      "Hero: split. Left a bold uppercase headline at text-5xl to text-6xl, a line about how to order, an order-by-WhatsApp button in bg-primary. Right a block in bg-surface with 2px border listing what is sold in big type.",
+      "Products or categories in a dense grid of bordered tiles, each with a name, a short note and a small sticker label in bg-accent (for example 'Baru', only when true).",
+      "A 'how to order' strip with 3 numbered steps in bold.",
+      "Delivery, payment and hours information as a simple bordered table.",
+      "Footer in bg-foreground with text-background."
+    ],
+    "voice": {
+      "id": "Semangat jualan, jelas, langsung ke intinya.",
+      "en": "Energetic, clear and to the point."
+    },
+    "tags": [
+      "hijau",
+      "kuning",
+      "hitam"
+    ],
+    "variants": [
+      {
+        "key": "red",
+        "name": {
+          "id": "Merah",
+          "en": "Red"
+        },
+        "palette": {
+          "background": "#FFFFFF",
+          "surface": "#F5EFEA",
+          "foreground": "#141414",
+          "muted": "#555050",
+          "primary": "#C8281E",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#FFD23F",
+          "border": "#141414"
+        },
+        "tags": [
+          "merah",
+          "kuning"
+        ]
+      },
+      {
+        "key": "blue",
+        "name": {
+          "id": "Biru",
+          "en": "Blue"
+        },
+        "palette": {
+          "background": "#FFFFFF",
+          "surface": "#EEF2F6",
+          "foreground": "#141414",
+          "muted": "#50555B",
+          "primary": "#1D4FB8",
+          "primary_foreground": "#FFFFFF",
+          "accent": "#FFB703",
+          "border": "#141414"
+        },
+        "tags": [
+          "biru",
+          "kuning"
+        ]
+      }
+    ],
+    "moods": [
+      "ramai",
+      "promo",
+      "murah",
+      "meriah",
+      "busy",
+      "bargain"
+    ],
+    "kit": "Ornament kind dots; PhotoGallery for products."
+  },
+  {
+    "key": "romantic-soft",
+    "name": {
+      "id": "Romantis dan lembut",
+      "en": "Romantic and soft"
+    },
+    "description": {
+      "id": "Merah muda pudar dan putih gading. Lengkung lembut dan hiasan halus, cocok untuk undangan.",
+      "en": "Faded pink and ivory. Soft curves and fine decoration, made for invitations."
+    },
+    "fits": [
+      "wedding",
+      "event",
+      "engagement",
+      "anniversary",
+      "personal",
+      "florist"
+    ],
+    "heading": {
+      "package": "@fontsource-variable/eb-garamond",
+      "family": "EB Garamond Variable",
+      "fallback": "Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/figtree",
+      "family": "Figtree Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FBF5F3",
+      "surface": "#F3E5E1",
+      "foreground": "#2E2024",
+      "muted": "#6E5A5E",
+      "primary": "#8A3E54",
+      "primary_foreground": "#FFF8F6",
+      "accent": "#A0566A",
+      "border": "#E8D6D1"
+    },
+    "radius": {
+      "sm": "6px",
+      "md": "12px",
+      "lg": "20px",
+      "xl": "28px"
+    },
+    "shape": "Soft rounded corners and arches, thin borders in the accent colour, no shadows, airy spacing (py-20 to py-28 sections).",
+    "composition": [
+      "Header: the names in an italic heading centred, a small navigation below in uppercase with wide letter spacing; a menu button on phones.",
+      "Hero: a Monogram in an arch frame, the names very large in an italic heading (text-5xl to text-7xl, font-normal), the date in small uppercase with wide letter spacing, then the Countdown and the AddToCalendar button.",
+      "Sections are separated by an Ornament of kind flourish. Short text blocks are centred and narrow (max-w-xl), and they alternate with two-column blocks where a FramedPhoto with an arch frame sits beside left-aligned text, so the page is not centred all the way down.",
+      "The schedule of the day as a Timeline; the place with its address and a MapLink.",
+      "Photos: one FramedPhoto (arch) as the feature, the PhotoGallery for the rest; without photos, use the Monogram and Ornaments instead.",
+      "Wishes: the form beside the Guestbook on wide screens, stacked on phones.",
+      "Footer: the names, the date and one short line of thanks, centred and small."
+    ],
+    "voice": {
+      "id": "Hangat, lembut, penuh syukur. Kalimat pendek yang menyentuh.",
+      "en": "Warm, gentle, grateful. Short heartfelt sentences."
+    },
+    "tags": [
+      "pink",
+      "krem"
+    ],
+    "moods": [
+      "romantis",
+      "lembut",
+      "manis",
+      "anggun",
+      "elegan",
+      "cantik",
+      "romantic",
+      "soft",
+      "gentle",
+      "elegant"
+    ],
+    "kit": "Monogram frame arch in the hero; Ornament kind flourish between sections; FramedPhoto frame arch; Countdown, AddToCalendar, Timeline, MapLink and Guestbook for an invitation.",
+    "variants": [
+      {
+        "key": "sage",
+        "name": {
+          "id": "Hijau lembut",
+          "en": "Soft green"
+        },
+        "palette": {
+          "background": "#F5F7F2",
+          "surface": "#E6ECE2",
+          "foreground": "#1F261F",
+          "muted": "#5E685C",
+          "primary": "#4A6447",
+          "primary_foreground": "#F7FAF5",
+          "accent": "#7D6A3A",
+          "border": "#D7DFD2"
+        },
+        "tags": [
+          "hijau",
+          "krem"
+        ]
+      },
+      {
+        "key": "dusty-blue",
+        "name": {
+          "id": "Biru pudar",
+          "en": "Dusty blue"
+        },
+        "palette": {
+          "background": "#F5F7FA",
+          "surface": "#E4EAF1",
+          "foreground": "#1D2430",
+          "muted": "#5B6575",
+          "primary": "#3F5876",
+          "primary_foreground": "#F7F9FC",
+          "accent": "#8C6D4A",
+          "border": "#D5DDE7"
+        },
+        "tags": [
+          "biru",
+          "putih"
+        ]
+      }
+    ]
+  },
+  {
+    "key": "festive-warm",
+    "name": {
+      "id": "Meriah dan hangat",
+      "en": "Festive and warm"
+    },
+    "description": {
+      "id": "Merah marun dan emas di atas krem. Tegas dan meriah, cocok untuk pesta dan acara keluarga.",
+      "en": "Maroon and gold on cream. Bold and festive, made for celebrations and family events."
+    },
+    "fits": [
+      "wedding",
+      "event",
+      "community",
+      "celebration",
+      "culture",
+      "religious"
+    ],
+    "heading": {
+      "package": "@fontsource/dm-serif-display",
+      "family": "DM Serif Display",
+      "fallback": "Georgia, serif"
+    },
+    "body": {
+      "package": "@fontsource-variable/plus-jakarta-sans",
+      "family": "Plus Jakarta Sans Variable",
+      "fallback": "system-ui, sans-serif"
+    },
+    "palette": {
+      "background": "#FFF9F0",
+      "surface": "#F7E9D4",
+      "foreground": "#2B1A12",
+      "muted": "#6B5242",
+      "primary": "#7A1F2B",
+      "primary_foreground": "#FFF6EA",
+      "accent": "#9A6A17",
+      "border": "#EAD7B9"
+    },
+    "radius": {
+      "sm": "2px",
+      "md": "4px",
+      "lg": "8px",
+      "xl": "12px"
+    },
+    "shape": "Crisp corners, a double rule in the accent colour under the header, bands of colour instead of shadows, comfortable spacing (py-16 to py-24 sections).",
+    "composition": [
+      "Header: the name in the heading font on the left, navigation on the right in small uppercase; a double rule in the accent colour under it (border-b-4 border-double border-accent).",
+      "Hero: a full-width band in bg-primary text-primary-foreground: a small label in text-accent, the names large in the heading font, the date, an Ornament of kind diamond in the accent colour, the Countdown (boxes with className using bg-primary-foreground/10 and border-primary-foreground/20) and the AddToCalendar button.",
+      "Sections alternate bg-background and bg-surface bands. Headings are left-aligned with a short thick rule in the accent colour above them.",
+      "The schedule as a Timeline in one column, the place with its address and a MapLink in the other.",
+      "Photos: a FramedPhoto with the offset frame as the feature, then the PhotoGallery; without photos, a band with a large quote in the heading font.",
+      "Wishes: the form and the Guestbook on a bg-surface band.",
+      "Footer: a bg-primary band with the names and the date centred and a line of thanks."
+    ],
+    "voice": {
+      "id": "Hangat, meriah, penuh hormat kepada keluarga dan tamu.",
+      "en": "Warm, festive and respectful to family and guests."
+    },
+    "tags": [
+      "maroon",
+      "merah",
+      "emas",
+      "krem"
+    ],
+    "moods": [
+      "meriah",
+      "hangat",
+      "ceria",
+      "adat",
+      "tradisional",
+      "budaya",
+      "megah",
+      "festive",
+      "joyful",
+      "traditional"
+    ],
+    "kit": "Ornament kind diamond in the hero and between bands; FramedPhoto frame offset; Countdown, AddToCalendar, Timeline, MapLink and Guestbook for an invitation or event.",
+    "variants": [
+      {
+        "key": "emerald",
+        "name": {
+          "id": "Hijau zamrud",
+          "en": "Emerald green"
+        },
+        "palette": {
+          "background": "#FBFAF3",
+          "surface": "#ECEBD9",
+          "foreground": "#17241E",
+          "muted": "#55625A",
+          "primary": "#1F5A45",
+          "primary_foreground": "#F6FBF8",
+          "accent": "#8E6A1C",
+          "border": "#DCDCC4"
+        },
+        "tags": [
+          "hijau",
+          "emas"
+        ]
+      },
+      {
+        "key": "navy",
+        "name": {
+          "id": "Biru tua",
+          "en": "Navy blue"
+        },
+        "palette": {
+          "background": "#FAF8F3",
+          "surface": "#ECE8DD",
+          "foreground": "#161C2B",
+          "muted": "#555C6B",
+          "primary": "#1F2F57",
+          "primary_foreground": "#F6F8FD",
+          "accent": "#93702A",
+          "border": "#DDD8CA"
+        },
+        "tags": [
+          "biru",
+          "emas"
+        ]
+      }
+    ]
+  }
+]

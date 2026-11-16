@@ -1,0 +1,20 @@
+/* Written by the builder from the design direction. The agent cannot change it. */
+@import 'tailwindcss';
+
+@theme {
+  --color-*: initial;
+  --font-*: initial;
+  --color-background: #ffffff;
+  --color-surface: #f4f4f4;
+  --color-foreground: #111111;
+  --color-muted: #666666;
+  --color-primary: #111111;
+  --color-primary-foreground: #ffffff;
+  --color-accent: #888888;
+  --color-border: #dddddd;
+  --color-white: #ffffff;
+  --color-black: #000000;
+  --color-transparent: transparent;
+  --font-heading: ui-sans-serif, system-ui, sans-serif;
+  --font-body: ui-sans-serif, system-ui, sans-serif;
+}

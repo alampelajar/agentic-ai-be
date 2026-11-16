@@ -58,8 +58,11 @@ func CleanRelative(raw string) (string, error) {
 // hand, so they stay out of the file tree, change list, export and storage
 // quota, are not readable or writable through the file API, and are not
 // extracted from an uploaded archive. Test and build jobs still see them.
+//
+// .output is where a Website Builder build writes the finished site; it is made by
+// the build job and replaced on every build.
 func IsGeneratedDir(name string) bool {
-	return name == "node_modules" || name == jobspec.DependencyDir
+	return name == "node_modules" || name == jobspec.DependencyDir || name == ".output"
 }
 
 // IsGeneratedPath is true when any part of a relative path is a generated folder.

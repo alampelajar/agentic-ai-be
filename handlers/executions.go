@@ -38,7 +38,7 @@ func installEnabled() bool {
 
 func executionImages() jobspec.Images {
 	images := jobspec.DefaultImages()
-	for name, target := range map[string]*string{"CLOUD_EXEC_IMAGE_GO": &images.Go, "CLOUD_EXEC_IMAGE_NODE": &images.Node, "CLOUD_EXEC_IMAGE_PYTHON": &images.Python} {
+	for name, target := range map[string]*string{"CLOUD_EXEC_IMAGE_GO": &images.Go, "CLOUD_EXEC_IMAGE_NODE": &images.Node, "CLOUD_EXEC_IMAGE_PYTHON": &images.Python, "CLOUD_EXEC_IMAGE_SITE": &images.Site} {
 		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
 			*target = value
 		}
@@ -61,6 +61,9 @@ func queueJob(handle *workspaceHandle, jobType string, timeoutSeconds int, taskI
 	}
 	if err := handle.requireReady(); err != nil {
 		return nil, &queueError{http.StatusConflict, "Workspace belum siap."}
+	}
+	if jobspec.IsInternal(strings.TrimSpace(jobType)) {
+		return nil, &queueError{http.StatusBadRequest, "Jenis job ini hanya dijalankan oleh Website Builder."}
 	}
 	spec, err := jobspec.Resolve(strings.TrimSpace(jobType), executionImages(), handle.FilesDir)
 	if err != nil {
