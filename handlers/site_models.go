@@ -17,12 +17,46 @@ import (
 	"agentic-ai-backend/services"
 )
 
-// BuilderModels lets the Website Builder call the person's usable models: the
-// system models (within the daily system quota) and their own. Models are ranked
-// like the chat's Auto choice; when one fails, the next is tried.
+// BuilderModels lets the Website Builder call the active system models, within the
+// person's daily system quota. Models are ranked like the chat's Auto choice; when one
+// fails, the next is tried.
 type BuilderModels struct{}
 
+// builderModelTries is how many models a step really tries. A model refused at once for its
+// key or its credit (401, 402, 403) does not count: it costs no time, and the next may work.
 const builderModelTries = 3
+
+// How long one model call may take. Some models answer slowly (about 24 tokens a second on
+// NVIDIA's free endpoint), so a full page of 16000 tokens needs about 11 minutes. Questions
+// and summaries are short and the person waits for them on screen.
+const (
+	builderCodingTimeout = 12 * time.Minute
+	builderFastTimeout   = 3 * time.Minute
+)
+
+// estimateTokens guesses the tokens of a call from its text, about four characters each.
+func estimateTokens(messages []chatMessage, answer string) int {
+	characters := len(answer)
+	for _, message := range messages {
+		if text, ok := message.Content.(string); ok {
+			characters += len(text)
+		}
+	}
+	return characters/4 + 1
+}
+
+// refusedAtOnce says whether the provider turned the call down for the account, not the request.
+func refusedAtOnce(err error) bool {
+	var httpErr *services.ProviderHTTPError
+	if !errors.As(err, &httpErr) {
+		return false
+	}
+	switch httpErr.Status {
+	case http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden:
+		return true
+	}
+	return false
+}
 
 // A rate-limited model is asked again after the wait it names, a few times: a site
 // is built in the background, so waiting beats falling back to a slower model.
@@ -80,11 +114,29 @@ func builderCandidates(userID uint, need sitebuilder.Need) ([]models.AIModel, er
 	query := config.DB.Model(&models.AIModel{}).Select("ai_models.*").Preload("Provider").
 		Joins("INNER JOIN a_iproviders ON a_iproviders.id = ai_models.provider_id").
 		Where("ai_models.is_active = ? AND a_iproviders.is_active = ?", true, true).
-		Where("(ai_models.is_system = ? OR ai_models.user_id = ?)", true, userID).
-		Order("ai_models.is_system DESC").Order("ai_models.id ASC")
+		// Only the system models: the admin decides which models build websites by turning
+		// them on or off in the admin console. People's own models, left from before the
+		// app became a website builder, cannot be managed any more and are not used.
+		// A system model on someone's own provider cannot use that person's key for
+		// everyone, so it would only fail; it is skipped.
+		Where("ai_models.is_system = ? AND a_iproviders.is_system = ?", true, true).
+		Order("ai_models.id ASC")
 	var found []models.AIModel
 	if err := query.Find(&found).Error; err != nil {
 		return nil, err
+	}
+	// Without a premium account only the builder's default model(s) are used. When the admin
+	// has marked none, every active system model is used, so the builder keeps working.
+	if !isPremiumUser(userID) {
+		defaults := make([]models.AIModel, 0, len(found))
+		for _, model := range found {
+			if model.IsBuilderDefault {
+				defaults = append(defaults, model)
+			}
+		}
+		if len(defaults) > 0 {
+			found = defaults
+		}
 	}
 	overQuota := systemCallsToday(userID) >= int64(comboSystemDaily())
 	failRates := recentFailRates(userID, 6*time.Hour)
@@ -105,11 +157,8 @@ func builderCandidates(userID uint, need sitebuilder.Need) ([]models.AIModel, er
 		routeNeed = services.NeedFast
 	}
 	ranked := services.RankModels(candidates, routeNeed)
-	chosen := make([]models.AIModel, 0, builderModelTries)
+	chosen := make([]models.AIModel, 0, len(ranked))
 	for _, choice := range ranked {
-		if len(chosen) == builderModelTries {
-			break
-		}
 		chosen = append(chosen, byID[choice.ModelDBID])
 	}
 	if len(chosen) == 0 {
@@ -121,19 +170,26 @@ func builderCandidates(userID uint, need sitebuilder.Need) ([]models.AIModel, er
 // Complete asks the best model and falls back to the next ones on failure. Every
 // attempt is logged, so it counts toward the daily system quota and model health.
 func (BuilderModels) Complete(ctx context.Context, userID uint, need sitebuilder.Need, messages []sitebuilder.Message) (string, string, error) {
+	if builderPlanFor(userID).OutOfTokens() {
+		return "", "", sitebuilder.ErrTokenLimit
+	}
 	chosen, err := builderCandidates(userID, need)
 	if err != nil {
 		return "", "", err
 	}
-	request := chatRequest{Temperature: 0.4, MaxTokens: 16000, Timeout: 4 * time.Minute}
+	request := chatRequest{Temperature: 0.4, MaxTokens: 16000, Timeout: builderCodingTimeout}
 	if need == sitebuilder.NeedFast {
-		request.MaxTokens, request.Timeout = 4096, 90*time.Second
+		request.MaxTokens, request.Timeout = 4096, builderFastTimeout
 	}
 	for _, message := range messages {
 		request.Messages = append(request.Messages, chatMessage{Role: message.Role, Content: message.Content})
 	}
 	var failures []string
+	tried := 0
 	for index, model := range chosen {
+		if tried == builderModelTries {
+			break
+		}
 		if ctx.Err() != nil {
 			return "", "", ctx.Err()
 		}
@@ -148,6 +204,8 @@ func (BuilderModels) Complete(ctx context.Context, userID uint, need sitebuilder
 			attempt.ReasoningEffort = "low" // its thinking counts against the answer limit
 		}
 		started := time.Now()
+		var usage providerUsage
+		attempt.usage = &usage
 		answer, callErr := callAIProviderWithRepair(key, model.Provider.BaseURL, attempt)
 		for try := 1; try < builderRateLimitTries && callErr != nil; try++ {
 			if smaller := smallerAnswer(callErr, attempt.MaxTokens); smaller > 0 {
@@ -168,9 +226,17 @@ func (BuilderModels) Complete(ctx context.Context, userID uint, need sitebuilder
 			}
 			answer, callErr = callAIProviderWithRepair(key, model.Provider.BaseURL, attempt)
 		}
-		entry := models.AIModelCallLog{UserID: userID, AIModelID: model.ID, IsSystem: model.IsSystem, Attempt: index + 1, Status: "ok", LatencyMS: time.Since(started).Milliseconds()}
+		entry := models.AIModelCallLog{UserID: userID, AIModelID: model.ID, IsSystem: model.IsSystem, Attempt: index + 1, Status: "ok", LatencyMS: time.Since(started).Milliseconds(), Tokens: usage.total()}
 		if callErr == nil && strings.TrimSpace(answer) == "" {
 			callErr = errors.New("empty answer")
+		}
+		if callErr == nil && entry.Tokens == 0 {
+			// The provider reported no usage: count about four characters per token, so the
+			// monthly limit still holds.
+			entry.Tokens = estimateTokens(attempt.Messages, answer)
+		}
+		if callErr == nil || !refusedAtOnce(callErr) {
+			tried++
 		}
 		if callErr != nil {
 			entry.Status, entry.ErrorClass = "failed", string(services.ClassifyProviderError(callErr))

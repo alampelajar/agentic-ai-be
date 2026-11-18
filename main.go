@@ -406,6 +406,11 @@ func main() {
 		)
 
 		// FEEDBACK MANAGEMENT
+		// WEBSITE BUILDER: who is building now, and every website made
+		admin.GET("/site-runs/active", handlers.AdminGetActiveSiteRuns)
+		admin.GET("/sites", handlers.AdminGetSites)
+		admin.POST("/sites/:id/preview", handlers.AdminSitePreview)
+
 		admin.GET("/feedback", handlers.AdminGetFeedback)
 		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
 		admin.POST("/feedback/:id/replies", handlers.AdminReplyFeedback)
@@ -460,6 +465,7 @@ func main() {
 			"/users/:id",
 			handlers.AdminDeleteUser,
 		)
+		admin.PATCH("/users/:id/premium", handlers.AdminSetUserPremium)
 
 		// ========================================================
 		// MAINTENANCE MODE

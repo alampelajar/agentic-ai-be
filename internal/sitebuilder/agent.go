@@ -370,6 +370,10 @@ func (j *job) ask(messages []Message, need Need) (string, string, error) {
 	j.calls++
 	j.w.DB.Model(j.run).UpdateColumn("model_calls", j.calls)
 	answer, model, err := j.w.Models.Complete(j.ctx, j.site.UserID, need, messages)
+	if errors.Is(err, ErrTokenLimit) {
+		// Waiting does not help: the allowance starts again next month.
+		return "", model, &userError{say(j.lang, "tokenLimit"), err.Error()}
+	}
 	if err != nil && j.ctx.Err() == nil {
 		// Every model failed: wait and ask again for a while before giving up.
 		var waiting *models.AgentRunStep
@@ -443,7 +447,7 @@ func (j *job) writeGenerated(theme bool) error {
 		"site.json":          SiteJSON(j.brief, j.direction.Key),
 	}
 	if theme {
-		files["web/src/theme.css"] = ThemeCSS(j.direction, j.variant)
+		files["web/src/theme.css"] = ThemeCSS(j.direction, j.variant, j.brief.Colours)
 	}
 	for rel, content := range files {
 		if err := WriteSiteFile(j.filesDir, rel, content); err != nil {
@@ -456,6 +460,10 @@ func (j *job) writeGenerated(theme bool) error {
 func (j *job) perform() error {
 	restyle := j.run.Direction != "" && (j.run.Direction != j.site.DesignDirection || j.run.Variant != j.site.DesignVariant)
 	first := j.run.Kind == models.AgentRunCreate
+	if restyle {
+		// Another look brings its own colours; the owner's earlier ones belonged to the old look.
+		j.brief.Colours = nil
+	}
 
 	step := j.step(models.StepInfo, say(j.lang, "prepare"))
 	if err := j.writeGenerated(first || restyle); err != nil {
@@ -579,9 +587,11 @@ func (j *job) revise(restyle bool) error {
 		summary = say(j.lang, "restyle")
 	}
 	step := j.step(models.StepModel, summary)
-	prompt := RevisePrompt(j.brief, j.direction, j.run.Request, AgentFiles(j.filesDir), restyle)
+	palette := ThemePalette(j.direction, j.variant, j.brief.Colours)
+	prompt := RevisePrompt(j.brief, j.direction, palette, j.run.Request, AgentFiles(j.filesDir), restyle)
 	answer, model, err := j.ask(prompt, NeedCoding)
-	if err == nil && (len(ParseFiles(answer)) == 0 || allPartial(answer)) {
+	onlyColours := len(ParseFiles(answer)) == 0 && ParseColours(answer) != nil
+	if err == nil && !onlyColours && (len(ParseFiles(answer)) == 0 || allPartial(answer)) {
 		// No usable file: ask once more, insisting on complete files.
 		retry := append(append([]Message(nil), prompt...), Message{Role: "assistant", Content: clip(answer, 2000)}, Message{Role: "user", Content: "Return every changed file complete, in <file path=\"...\"> blocks, with no part left out or replaced by \"...\"."})
 		answer, model, err = j.ask(retry, NeedCoding)
@@ -610,8 +620,16 @@ func (j *job) revise(restyle bool) error {
 		j.run.Summary = clip(text, 500)
 	}
 	j.done(step, models.StepDone, describe(model, written, refused))
-	if pagesChanged {
-		if err := j.writeGenerated(false); err != nil {
+	// Colours the owner asked for go into the theme tokens, kept readable.
+	coloursChanged := false
+	if asked := ParseColours(answer); asked != nil {
+		j.brief.Colours = MergeColours(j.direction.PaletteFor(j.variant), j.brief.Colours, asked)
+		coloursChanged = true
+		colourStep := j.step(models.StepInfo, say(j.lang, "colours"))
+		j.done(colourStep, models.StepDone, coloursText(ThemePalette(j.direction, j.variant, j.brief.Colours)))
+	}
+	if pagesChanged || coloursChanged {
+		if err := j.writeGenerated(coloursChanged); err != nil {
 			return err
 		}
 	}

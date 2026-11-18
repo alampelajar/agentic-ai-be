@@ -104,7 +104,7 @@ func TestBriefNormalizeAndGeneratedFiles(t *testing.T) {
 
 func TestThemeHasOnlyTokens(t *testing.T) {
 	for _, direction := range Directions() {
-		css := ThemeCSS(direction, "")
+		css := ThemeCSS(direction, "", nil)
 		for _, want := range []string{"--color-*: initial", "--color-primary:", "--font-heading:", direction.Heading.Package} {
 			if !strings.Contains(css, want) {
 				t.Errorf("%s: theme lacks %q", direction.Key, want)
@@ -145,7 +145,7 @@ func TestAColourWishIsHonoured(t *testing.T) {
 			}
 		}
 	}
-	if css := ThemeCSS(mustDirection(t, "warm-editorial"), "garden"); !strings.Contains(css, "#3F6B3A") {
+	if css := ThemeCSS(mustDirection(t, "warm-editorial"), "garden", nil); !strings.Contains(css, "#3F6B3A") {
 		t.Fatal("the variant palette is not in the theme")
 	}
 }
