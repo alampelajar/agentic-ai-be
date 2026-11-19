@@ -297,6 +297,7 @@ func main() {
 		protected.GET("/sites", handlers.GetSites)
 		protected.POST("/sites", importLimit, handlers.CreateSite)
 		protected.GET("/sites/slug-available", handlers.SiteSlugAvailable)
+		protected.GET("/sites/showcase", handlers.GetSiteShowcase)
 		protected.GET("/sites/:id", handlers.GetSite)
 		protected.PATCH("/sites/:id", handlers.UpdateSite)
 		protected.DELETE("/sites/:id", handlers.DeleteSite)
@@ -412,6 +413,7 @@ func main() {
 		admin.GET("/site-runs/active", handlers.AdminGetActiveSiteRuns)
 		admin.GET("/sites", handlers.AdminGetSites)
 		admin.POST("/sites/:id/preview", handlers.AdminSitePreview)
+		admin.PATCH("/sites/:id/showcase", handlers.AdminSetSiteShowcase)
 
 		admin.GET("/feedback", handlers.AdminGetFeedback)
 		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
