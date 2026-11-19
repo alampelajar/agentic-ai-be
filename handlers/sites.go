@@ -1057,3 +1057,73 @@ func UnpublishSite(c *gin.Context) {
 	recordAudit(c, "site.unpublish", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, "Website tidak lagi diterbitkan")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
+
+// loadOwnedVersion finds a version of an owned site by the :number parameter, and the
+// directory of the version before it ("" when there is none).
+func loadOwnedVersion(c *gin.Context) (dir, previousDir string, ok bool) {
+	site, _, ok := loadOwnedSite(c)
+	if !ok {
+		return "", "", false
+	}
+	number, _ := strconv.Atoi(c.Param("number"))
+	var version models.SiteVersion
+	if config.DB.Where("site_id = ? AND number = ?", site.ID, number).First(&version).Error != nil {
+		siteError(c, http.StatusNotFound, "not_found", "Versi tidak ditemukan.")
+		return "", "", false
+	}
+	settings := sitebuilder.LoadSettings()
+	var previous models.SiteVersion
+	if config.DB.Where("site_id = ? AND number < ?", site.ID, number).Order("number DESC").First(&previous).Error == nil {
+		previousDir = settings.VersionDir(site.ID, previous.Number)
+	}
+	return settings.VersionDir(site.ID, version.Number), previousDir, true
+}
+
+// SiteVersionFiles lists the readable files of a version, marked against the version
+// before it, for the builder's code and changes views.
+func SiteVersionFiles(c *gin.Context) {
+	dir, previousDir, ok := loadOwnedVersion(c)
+	if !ok {
+		return
+	}
+	files, err := sitebuilder.CompareVersions(dir, previousDir)
+	if err != nil {
+		log.Printf("[SITES] list version files %s: %v", dir, err)
+		siteError(c, http.StatusInternalServerError, "files_failed", "Isi website gagal dibaca.")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "files": files, "has_previous": previousDir != ""})
+}
+
+// SiteVersionFile returns one readable file of a version and, when the version before
+// it has the same file, that file too, so the change can be shown.
+func SiteVersionFile(c *gin.Context) {
+	dir, previousDir, ok := loadOwnedVersion(c)
+	if !ok {
+		return
+	}
+	rel := c.Query("path")
+	content, found, err := sitebuilder.ReadVersionFile(dir, rel)
+	if errors.Is(err, sitebuilder.ErrNotReadable) {
+		siteError(c, http.StatusBadRequest, "file_not_readable", "File ini tidak bisa dibuka.")
+		return
+	}
+	if err != nil {
+		log.Printf("[SITES] read version file %s %q: %v", dir, rel, err)
+		siteError(c, http.StatusInternalServerError, "files_failed", "Isi website gagal dibaca.")
+		return
+	}
+	previous, previousFound := "", false
+	if previousDir != "" {
+		previous, previousFound, _ = sitebuilder.ReadVersionFile(previousDir, rel)
+	}
+	if !found && !previousFound {
+		siteError(c, http.StatusNotFound, "not_found", "File tidak ditemukan.")
+		return
+	}
+	view := gin.H{"ok": true, "path": rel, "exists": found, "content": content}
+	if previousFound {
+		view["previous_content"] = previous
+	}
+	c.JSON(http.StatusOK, view)
+}
