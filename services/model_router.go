@@ -38,7 +38,7 @@ type RouteChoice struct {
 
 var (
 	visionMarkers = []string{"vision", "-vl", "_vl", "vl-", "omni", "gemini", "gpt-4o", "gpt-4.1", "gpt-5", "claude", "pixtral", "llava", "llama-4", "gemma-3", "gemma-4", "inkling", "grok-4", "multimodal"}
-	codingMarkers = []string{"coder", "code", "gpt-oss", "ultra", "ernie", "deepseek", "qwen3", "kimi", "glm", "sonnet", "opus", "gpt-5", "devstral", "codestral"}
+	codingMarkers = []string{"coder", "code", "gpt-oss", "ultra", "ernie", "deepseek", "qwen3", "kimi", "glm", "sonnet", "opus", "gpt-5", "devstral", "codestral", "minimax"}
 	strongMarkers = []string{"ultra", "pro", "opus", "sonnet", "gpt-5", "405b", "235b", "550b", "120b", "70b", "large"}
 	fastMarkers   = []string{"flash", "lightning", "mini", "nano", "small", "lite", "instant", "haiku", "turbo"}
 	tinyMarkers   = []string{"1.7b", "2.6b", "3b-", "1b-", "-1b", "-3b"}

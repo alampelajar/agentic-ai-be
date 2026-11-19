@@ -34,7 +34,12 @@ type UserResponse struct {
 	Email     string         `json:"email"`
 	Avatar    string         `json:"avatar"`
 	Role      string         `json:"role"`
-	Agents    []AgentSummary `json:"agents"`
+	IsPremium bool           `json:"is_premium"`
+	// PremiumUntil is when the premium account ends (nil: no end); PremiumActive is false
+	// once that moment has passed.
+	PremiumUntil  *time.Time     `json:"premium_until"`
+	PremiumActive bool           `json:"premium_active"`
+	Agents        []AgentSummary `json:"agents"`
 	CreatedAt string         `json:"created_at"`
 	UpdatedAt string         `json:"updated_at"`
 }
@@ -117,7 +122,10 @@ func AdminGetUsers(c *gin.Context) {
 			Email:     user.Email,
 			Avatar:    user.Avatar,
 			Role:      user.Role,
-			Agents:    agents,
+			IsPremium:     user.IsPremium,
+			PremiumUntil:  user.PremiumUntil,
+			PremiumActive: premiumActive(user, time.Now()),
+			Agents:        agents,
 			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),
 		})

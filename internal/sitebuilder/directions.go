@@ -287,11 +287,27 @@ func PickDirections(kind, lastUsed string, colours, moods []string, rng *rand.Ra
 	return picked
 }
 
+// ThemePalette is the site's colours: the variant's palette with the owner's colours over it.
+func ThemePalette(d Direction, variant string, owner map[string]string) map[string]string {
+	palette := map[string]string{}
+	for key, value := range d.PaletteFor(variant) {
+		palette[key] = value
+	}
+	for key, value := range owner {
+		if isPaletteKey(key) && hexColour.MatchString(value) {
+			palette[key] = value
+		}
+	}
+	return palette
+}
+
 // ThemeCSS is web/src/theme.css for a direction. Tailwind's own colours and fonts
 // are switched off (--color-*: initial), so the only colours a page can use are the
-// direction's tokens: a palette class like bg-blue-500 produces nothing.
-func ThemeCSS(d Direction, variant string) string {
-	palette := d.PaletteFor(variant)
+// direction's tokens: a palette class like bg-blue-500 produces nothing. owner holds
+// the colours the owner asked for in a change (MergeColours); they replace the
+// direction's colours of the same tokens.
+func ThemeCSS(d Direction, variant string, owner map[string]string) string {
+	palette := ThemePalette(d, variant, owner)
 	var b strings.Builder
 	b.WriteString("/* Written by the builder from the design direction \"" + d.Key + "\" " + variant + ". The agent cannot change it. */\n")
 	b.WriteString("@import 'tailwindcss';\n")

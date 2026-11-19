@@ -55,7 +55,18 @@ type providerToolCall struct {
 	} `json:"function"`
 }
 type providerUsage struct {
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
 	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
+}
+
+// total is the tokens of the call, from total_tokens or, when a provider leaves it out,
+// the sum of its parts.
+func (u providerUsage) total() int {
+	if u.TotalTokens > 0 {
+		return u.TotalTokens
+	}
+	return u.PromptTokens + u.CompletionTokens
 }
 
 type providerError struct {
@@ -78,6 +89,8 @@ type chatRequest struct {
 	Stream bool `json:"stream,omitempty"`
 	// Timeout limits this one call (0: the default). Not sent to the provider.
 	Timeout time.Duration `json:"-"`
+	// usage, when set, receives the tokens the provider reports for a successful call.
+	usage *providerUsage
 }
 
 // chatMaxTokens is the longest answer a chat call may produce. Tool calls can carry whole
@@ -1015,8 +1028,10 @@ func callAIProvider(
 	// CLIENT
 	// ------------------------------------------------------------
 
+	// A call may set its own limit, shorter or longer than the default: the Website
+	// Builder gives slow models more time for a whole page.
 	timeout := providerCallTimeout
-	if requestBody.Timeout > 0 && requestBody.Timeout < timeout {
+	if requestBody.Timeout > 0 {
 		timeout = requestBody.Timeout
 	}
 	client := providerHTTPClient(timeout)
@@ -1124,6 +1139,11 @@ func callAIProvider(
 
 	if aiResponse.Error != nil {
 		return "", fmt.Errorf("provider response error: %s", formatProviderError(*aiResponse.Error))
+	}
+	if requestBody.usage != nil {
+		requestBody.usage.PromptTokens += aiResponse.Usage.PromptTokens
+		requestBody.usage.CompletionTokens += aiResponse.Usage.CompletionTokens
+		requestBody.usage.TotalTokens += aiResponse.Usage.total()
 	}
 	if len(aiResponse.Choices) == 0 {
 		return "", fmt.Errorf("provider response tidak memiliki choices (id=%s model=%s body=%s)", aiResponse.ID, aiResponse.Model, sanitizeProviderBody(responseBody))

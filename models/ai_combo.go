@@ -57,5 +57,8 @@ type AIModelCallLog struct {
 	// HTTPStatus is the provider's status on a failure (503 busy, 429 limited…), 0 when unknown.
 	HTTPStatus int `json:"http_status,omitempty"`
 	LatencyMS  int64     `json:"latency_ms"`
-	CreatedAt  time.Time `json:"created_at" gorm:"index:idx_call_log_user_day"`
+	// Tokens is what the provider reported for a successful call (prompt and answer), 0 when
+	// it reported nothing. The Website Builder's monthly limit adds these up.
+	Tokens    int       `json:"tokens"`
+	CreatedAt time.Time `json:"created_at" gorm:"index:idx_call_log_user_day"`
 }

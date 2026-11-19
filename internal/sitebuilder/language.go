@@ -95,7 +95,7 @@ var colourWords = map[string]string{
 	"hitam": "hitam", "black": "hitam", "gelap": "gelap", "dark": "gelap",
 	"putih": "putih", "white": "putih", "krem": "krem", "cream": "krem", "gading": "krem", "ivory": "krem",
 	"abu": "abu", "abu-abu": "abu", "grey": "abu", "gray": "abu",
-	"tosca": "tosca", "toska": "tosca", "teal": "tosca", "turquoise": "tosca",
+	"tosca": "tosca", "toska": "tosca", "teal": "tosca", "turquoise": "tosca", "cyan": "tosca", "sian": "tosca",
 }
 
 var colourPhrase = regexp.MustCompile(`merah muda|abu-abu|[a-z]+`)

@@ -31,7 +31,6 @@ import (
 // Errors carry a code the interface translates; the message is a fallback.
 
 const (
-	maxSitesPerUser      = 10
 	maxSiteImages        = 8
 	maxSiteImageBytes    = 3 << 20
 	maxActiveRunsPerUser = 2
@@ -179,7 +178,17 @@ func GetSites(c *gin.Context) {
 	for index := range sites {
 		list = append(list, siteView(&sites[index]))
 	}
-	c.JSON(http.StatusOK, gin.H{"ok": true, "sites": list})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "sites": list, "plan": builderPlanFor(userID)})
+}
+
+// refuseWhenOutOfTokens answers 429 token_limit when the person's monthly allowance is
+// used up, and reports whether it did.
+func refuseWhenOutOfTokens(c *gin.Context, userID uint) bool {
+	if !builderPlanFor(userID).OutOfTokens() {
+		return false
+	}
+	siteError(c, http.StatusTooManyRequests, "token_limit", "Jatah AI Anda bulan ini sudah habis.")
+	return true
 }
 
 // CreateSite starts a site from a description: a workspace with the template and a draft.
@@ -202,12 +211,16 @@ func CreateSite(c *gin.Context) {
 		siteError(c, http.StatusBadRequest, "description_length", "Ceritakan website Anda dalam 10 sampai 2000 karakter.")
 		return
 	}
-	var count int64
-	config.DB.Model(&models.Site{}).Where("user_id = ?", userID).Count(&count)
-	if count >= maxSitesPerUser {
+	plan := builderPlanFor(userID)
+	if plan.AtSiteLimit() {
 		siteError(c, http.StatusConflict, "site_limit", "Jumlah website sudah mencapai batas. Hapus website yang tidak dipakai.")
 		return
 	}
+	if plan.OutOfTokens() {
+		siteError(c, http.StatusTooManyRequests, "token_limit", "Jatah AI Anda bulan ini sudah habis.")
+		return
+	}
+	var count int64
 	storage, limits, err := workspaceStorage()
 	if err != nil {
 		siteError(c, http.StatusInternalServerError, "storage", "Penyimpanan tidak tersedia.")
@@ -276,7 +289,7 @@ func clipRunes(text string, limit int) string {
 
 // GetSite returns one site with what the builder screen needs.
 func GetSite(c *gin.Context) {
-	site, _, ok := loadOwnedSite(c)
+	site, userID, ok := loadOwnedSite(c)
 	if !ok {
 		return
 	}
@@ -324,6 +337,7 @@ func GetSite(c *gin.Context) {
 		view["last_run"] = last
 	}
 	view["suggested_slug"] = sitebuilder.SuggestSlug(site.Name)
+	view["plan"] = builderPlanFor(userID)
 	c.JSON(http.StatusOK, gin.H{"ok": true, "site": view})
 }
 
@@ -410,7 +424,10 @@ func SiteQuestions(c *gin.Context) {
 	if site.QuestionsJSON != "" && c.Query("refresh") != "1" {
 		_ = json.Unmarshal([]byte(site.QuestionsJSON), &set)
 	} else {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 100*time.Second)
+		if refuseWhenOutOfTokens(c, userID) {
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.Request.Context(), builderFastTimeout+20*time.Second)
 		defer cancel()
 		answer, _, err := builderModels.Complete(ctx, userID, sitebuilder.NeedFast, sitebuilder.QuestionsPrompt(site.Description, uiLanguageOf(site)))
 		decoded := err == nil && sitebuilder.DecodeJSON(answer, &set) == nil
@@ -551,6 +568,9 @@ func SiteBrief(c *gin.Context) {
 		siteError(c, http.StatusConflict, "run_active", "Website sedang dikerjakan.")
 		return
 	}
+	if refuseWhenOutOfTokens(c, userID) {
+		return
+	}
 	var req struct {
 		Name      string              `json:"name"`
 		Answers   map[string][]string `json:"answers"`
@@ -596,7 +616,7 @@ func SiteBrief(c *gin.Context) {
 		answers["_extra"] = []string{extra}
 	}
 
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 110*time.Second)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), builderFastTimeout+20*time.Second)
 	defer cancel()
 	input := sitebuilder.BriefInput{Description: site.Description, Language: language, UILanguage: uiLanguageOf(site), Kind: site.Kind, Name: name,
 		Understood: set.Understood, LookWish: set.LookWish, Questions: set.Questions, Answers: answers, Contact: contact, Images: siteImages(site), Direction: direction}
@@ -741,6 +761,9 @@ func StartSiteRun(c *gin.Context) {
 	config.DB.Model(&models.AgentRun{}).Where("user_id = ? AND status IN ?", userID, []string{models.RunQueued, models.RunRunning}).Count(&active)
 	if active >= maxActiveRunsPerUser {
 		siteError(c, http.StatusTooManyRequests, "run_limit", "Tunggu sampai website lain selesai dikerjakan.")
+		return
+	}
+	if refuseWhenOutOfTokens(c, userID) {
 		return
 	}
 	run := models.AgentRun{SiteID: site.ID, UserID: userID, Status: models.RunQueued}

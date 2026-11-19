@@ -29,6 +29,10 @@ type AIModel struct {
 
 	IsActive bool `json:"is_active" gorm:"not null;default:true"`
 
+	// IsBuilderDefault marks the model the Website Builder uses for people without a
+	// premium account. Admins set it on one or more system models.
+	IsBuilderDefault bool `json:"is_builder_default" gorm:"not null;default:false"`
+
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`

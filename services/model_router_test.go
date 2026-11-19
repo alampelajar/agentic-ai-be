@@ -35,6 +35,16 @@ func TestAPhotoGoesOnlyToModelsThatReadImages(t *testing.T) {
 	}
 }
 
+func TestMiniMaxCountsAsACodingModel(t *testing.T) {
+	ranked := RankModels([]RouteCandidate{
+		{ModelDBID: 1, ModelID: "agnes-2.5-flash", Name: "Agnes 2.5 Flash", Provider: "NaraRouter"},
+		{ModelDBID: 2, ModelID: "minimaxai/minimax-m3.1-flash", Name: "MiniMax M3.1 Flash", Provider: "NVIDIA"},
+	}, NeedCoding)
+	if ranked[0].ModelDBID != 2 {
+		t.Errorf("MiniMax should come first for coding, got %v", ids(ranked))
+	}
+}
+
 func TestEachNeedPutsTheFittingModelFirst(t *testing.T) {
 	if first := RankModels(routeCandidates, NeedCoding)[0]; first.ModelDBID != 4 && first.ModelDBID != 2 {
 		t.Errorf("coding should start with a coding model, got %s", first.ModelID)

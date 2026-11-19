@@ -32,7 +32,9 @@ type updateSystemAIModelRequest struct {
 	ModelID     *string `json:"model_id"`
 	Description *string `json:"description"`
 	IsActive    *bool   `json:"is_active"`
-	AgentID     *uint   `json:"agent_id"`
+	// IsBuilderDefault marks the model the Website Builder uses for people without premium.
+	IsBuilderDefault *bool `json:"is_builder_default"`
+	AgentID          *uint `json:"agent_id"`
 	AllAgents   bool    `json:"all_agents"`
 }
 
@@ -349,6 +351,9 @@ func AdminUpdateSystemAIModel(c *gin.Context) {
 	}
 	if req.IsActive != nil {
 		updates["is_active"] = *req.IsActive
+	}
+	if req.IsBuilderDefault != nil {
+		updates["is_builder_default"] = *req.IsBuilderDefault
 	}
 
 	if len(updates) == 0 && req.AgentID == nil && !req.AllAgents {

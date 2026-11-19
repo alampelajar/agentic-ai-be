@@ -3,6 +3,7 @@ package sitebuilder
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -28,6 +29,11 @@ const (
 type ModelCaller interface {
 	Complete(ctx context.Context, userID uint, need Need, messages []Message) (answer, model string, err error)
 }
+
+// ErrTokenLimit is returned by a ModelCaller when the person has used their monthly
+// allowance of tokens. A run stops at once with a plain message; its finished parts are
+// kept for "Continue" when the allowance starts again.
+var ErrTokenLimit = errors.New("monthly token allowance used up")
 
 func languageName(language string) string {
 	if language == "en" {
@@ -197,7 +203,20 @@ func hasLogo(images []Image) bool {
 // ---------------------------------------------------------------------------
 // Coding
 
-const neverList = `Never, unless the design direction says so:
+// ownerRequestsRule tells a model that what the owner asked for in a change wins over the
+// look: a reviewer once removed a rainbow the owner had asked for, because the look was
+// plain. Empty when the owner has asked for nothing yet.
+func ownerRequestsRule(b Brief) string {
+	if len(b.ChangesAsked) == 0 {
+		return ""
+	}
+	return fmt.Sprintf(`THE OWNER'S REQUESTS COME FIRST
+The owner asked for these changes, newest last:
+- %s
+What they asked for wins over the design direction, its shape and composition, and the "never" list. Something on a page that carries out one of these requests (a colour, a decoration, a section, a word) is not a problem, even when the direction or the "never" list would forbid it: keep it, and never ask to remove, tone down or replace it.`, strings.Join(b.ChangesAsked, "\n- "))
+}
+
+const neverList = `Never, unless the design direction or the owner's requests say so:
 - a gradient as background or on buttons;
 - every section centred, or the same card grid repeated down the page;
 - emoji in headings or used as icons;
@@ -251,7 +270,7 @@ Finished pieces this look uses (from '../kit/'): %s
 
 CONTENT
 - Write all visible text in %s, for this business specifically, using the brief. Real sentences a visitor would find useful.
-- The brief's "changes_asked" are the owner's later requests, newest last: keep what they asked for.
+- The brief's "changes_asked" are the owner's later requests, newest last: keep what they asked for, even where the design direction or the "never" list says otherwise.
 - Use only the facts in the brief and in site (name, contact details). Never invent prices, awards, years, numbers of customers, testimonials, names, or claims about ingredients, materials, guarantees or certifications (such as "no preservatives" or "halal") that the brief does not state. Show a contact detail only when it is not empty (check the value).
 - Pictures: use only site.logo and site.images (uploaded by the owner), with their alt text. When there are none, design with type, colour blocks, borders, ornaments and icons. Never use pictures from the internet.
 - Never show an empty frame, an empty box where a picture would go, or a gallery without photos: use PhotoGallery (it shows nothing without photos) or leave the section out. Never write text that tells visitors something will be added later or that the owner will write it.
@@ -389,13 +408,15 @@ Voice: %s
 
 The brief's "changes_asked" are the owner's own later requests, newest last. They are part of the brief and win over the first plan: never ask to remove or undo what they asked for.
 
+%s
+
 Also check: no empty frame, empty picture box or gallery without photos is shown, and no text tells visitors that content will come later; a page only promises that answers appear when the form is a guestbook shown with Guestbook; an invitation or event page uses the finished pieces the look names (%s);
 the composition is followed (not a generic layout); text is specific to the business, in %s, and uses only facts from the brief; contact details are only shown when present; each page has one h1; the phone layout has no horizontal scroll and the menu works on phones; nothing references pictures from the internet.
 
 Reply with one JSON object and nothing else:
 {"pass": <true when nothing important is wrong>, "fixes": [{"file": "<path>", "problem": "<what to change, concretely>"}]}
 At most 6 fixes, most important first. Do not list matters of taste.`,
-		languageName(b.Language), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], neverList, kitLine(d), languageName(b.Language))
+		languageName(b.Language), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], neverList, ownerRequestsRule(b), kitLine(d), languageName(b.Language))
 	return []Message{
 		{Role: "system", Content: system},
 		{Role: "user", Content: fmt.Sprintf("Brief:\n%s\n\nFiles:\n\n%s", briefText(b), filesText(files, func(path string) bool { return strings.HasSuffix(path, ".tsx") }))},
@@ -415,12 +436,16 @@ func FixPrompt(b Brief, d Direction, file, content string, problems []string) []
 A reviewer found these problems in this file:
 - %s
 
-Return the corrected file, complete.`, briefText(b), file, content, strings.Join(problems, "\n- "))},
+%s
+If a problem above asks to remove, tone down or replace something the owner asked for, ignore that problem and keep it.
+
+Return the corrected file, complete.`, briefText(b), file, content, strings.Join(problems, "\n- "), ownerRequestsRule(b))},
 	}
 }
 
-// RevisePrompt carries out a change the person asked for.
-func RevisePrompt(b Brief, d Direction, request string, files map[string]string, directionChanged bool) []Message {
+// RevisePrompt carries out a change the person asked for. palette is the site's colours
+// now (the look's palette with the owner's earlier colours over it).
+func RevisePrompt(b Brief, d Direction, palette map[string]string, request string, files map[string]string, directionChanged bool) []Message {
 	task := fmt.Sprintf(`The owner asks for this change, in their own words:
 "%s"
 
@@ -446,6 +471,11 @@ To add, remove, rename or reorder pages, also return the complete new list of pa
 and return the file of every new page (web/src/pages/<Name>.tsx, where Name is the slug in PascalCase, Home for the first page).
 To keep data on the server, you may add server/routes/<name>.js exporting a register function (api, db) with Hono routes under the api (it is mounted at /api) and call it from server/routes/index.js; tables go in server/schema.sql with CREATE TABLE IF NOT EXISTS. db is a node:sqlite DatabaseSync.
 
-End with one sentence for the owner, in %s, saying what you changed, as <summary>...</summary>.`, briefText(b), filesText(files, nil), task, languageName(b.Language))},
+The site's colours now are: %s.
+When the owner asks for other colours (a background, buttons, text, a colour they name), do it by changing the theme tokens, not by writing colours in the pages: return the tokens to change with their new value as #RRGGBB, for example
+<colours>{"background": "#E0FFFF", "primary": "#0891B2"}</colours>
+Pick the shade that fits the request (a soft tint for a page background, a stronger one for buttons). Use only these token names: %s. Text tokens are kept readable automatically. Pages keep using the token classes (bg-background, bg-primary...), so they change with the theme. Leave out the block when the colours do not change.
+
+End with one sentence for the owner, in %s, saying what you changed, as <summary>...</summary>.`, briefText(b), filesText(files, nil), task, coloursText(palette), strings.Join(PaletteKeys, ", "), languageName(b.Language))},
 	}
 }

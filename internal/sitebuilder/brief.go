@@ -60,6 +60,9 @@ type Brief struct {
 	// ChangesAsked are the owner's own later requests, newest last. They are part of
 	// the brief and win over the first plan, so a review never undoes them.
 	ChangesAsked []string `json:"changes_asked,omitempty"`
+	// Colours are theme tokens the owner changed in a change ("a cyan background"),
+	// over the look's palette. Choosing another look clears them.
+	Colours map[string]string `json:"colours,omitempty"`
 }
 
 // maxChangesKept bounds how many of the owner's requests the brief carries.
