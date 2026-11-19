@@ -485,3 +485,84 @@ func TestBriefPromptCopiesPages(t *testing.T) {
 		t.Fatalf("copied brief prompt = %q / %q", copied[0].Content, copied[1].Content)
 	}
 }
+
+// Every look has a motion level, the theme carries its tokens and the CSS behind the
+// motion pieces, and visitors who turned movement off see everything at once.
+func TestLooksMove(t *testing.T) {
+	levels := map[string]int{}
+	for _, d := range Directions() {
+		style, found := MotionStyles[d.Motion]
+		if !found {
+			t.Fatalf("%s has no motion level", d.Key)
+		}
+		levels[d.Motion]++
+		css := ThemeCSS(d, "", nil)
+		for _, want := range []string{"--motion-distance: " + style.Distance, "@utility lift", "@utility float", "[data-reveal='up']:not([data-shown])", ".marquee-track [data-copy] { display: none; }"} {
+			if !strings.Contains(css, want) {
+				t.Errorf("%s theme lacks %q", d.Key, want)
+			}
+		}
+		if strings.Contains(css, "%!") {
+			t.Errorf("%s theme has a formatting mistake", d.Key)
+		}
+		prompt := CodingSystem(Brief{Language: "id"}, d)
+		if !strings.Contains(prompt, style.Guide) || !strings.Contains(prompt, "Reveal {") {
+			t.Errorf("%s coding prompt lacks its motion guide", d.Key)
+		}
+	}
+	for _, level := range []string{"calm", "lively", "playful"} {
+		if levels[level] == 0 {
+			t.Errorf("no look moves in a %s way", level)
+		}
+	}
+}
+
+// Pages animate only through the kit: their own animation code is sent back.
+func TestOwnAnimationIsRefused(t *testing.T) {
+	for _, line := range []string{
+		`<div className="animate-bounce">`,
+		`requestAnimationFrame(step)`,
+		`const css = "@keyframes spin {}"`,
+	} {
+		if len(CheckTokens("web/src/pages/Home.tsx", line)) == 0 {
+			t.Errorf("not refused: %s", line)
+		}
+	}
+	for _, line := range []string{
+		`<Reveal from="up"><h2 className="font-heading">Menu</h2></Reveal>`,
+		`<article className="lift rounded-lg border border-border">`,
+		`<Loader2 className="animate-spin" />`,
+	} {
+		if problems := CheckTokens("web/src/pages/Home.tsx", line); len(problems) != 0 {
+			t.Errorf("refused %s: %v", line, problems)
+		}
+	}
+}
+
+// A counting number is a fact: only numbers written in the brief may count up.
+func TestCountUpShowsOnlyNumbersTheOwnerGave(t *testing.T) {
+	known := KnownNumbers(`{"content_notes": "12 rasa gelato buatan sendiri, buka sejak 2019, harga mulai Rp 25.000"}`)
+	for _, line := range []string{`<CountUp to={12} suffix=" rasa" />`, `<CountUp to={2019} />`, `<CountUp to={25000} prefix="Rp " />`} {
+		if problems := CheckCountUp("web/src/pages/Home.tsx", line, known); len(problems) != 0 {
+			t.Errorf("refused %s: %v", line, problems)
+		}
+	}
+	for _, line := range []string{`<CountUp to={40000} prefix="Rp " />`, `<CountUp to={stat.value} />`, `<CountUp to={500} suffix="+ pelanggan" />`} {
+		if len(CheckCountUp("web/src/pages/Home.tsx", line, known)) == 0 {
+			t.Errorf("not refused: %s", line)
+		}
+	}
+}
+
+// Build errors keep the file, line and message, without TypeScript's long type shapes.
+func TestShortenErrors(t *testing.T) {
+	long := "web/src/components/Layout.tsx:91:19 Property 'address' does not exist on type '{ name: string; tagline: string; language: \"id\" | \"en\"; pages: SitePage[]; contact: { phone: string; whatsapp: string; email: string; address: string; hours: string; }; social: Record<string, string>; logo: string; }'."
+	got := ShortenErrors(long)
+	if got != "web/src/components/Layout.tsx:91:19 Property 'address' does not exist on type '{...}'." {
+		t.Fatalf("got %q", got)
+	}
+	short := "web/src/pages/Home.tsx:3:1 Cannot find name 'Foo'."
+	if ShortenErrors(short) != short {
+		t.Fatal("a short error changed")
+	}
+}

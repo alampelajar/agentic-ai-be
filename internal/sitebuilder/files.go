@@ -247,6 +247,7 @@ var tokenRules = []struct {
 	{regexp.MustCompile(`font-\[|fontFamily|font-family`), "a font set in the code; use font-heading or font-body"},
 	{regexp.MustCompile(`\bbg-(linear|gradient|radial|conic)-`), "a gradient; the design direction uses flat colour"},
 	{regexp.MustCompile(`(?i)lorem ipsum`), "placeholder text"},
+	{regexp.MustCompile(`\banimate-(bounce|ping|pulse)\b|requestAnimationFrame|@keyframes`), "own animation code: use the kit's motion pieces (Reveal, Stagger, CountUp, Marquee, RotatingWords, Parallax) and the lift and float classes instead"},
 	{regexp.MustCompile(`(?i)https?://(images\.unsplash|source\.unsplash|picsum\.photos|placehold|via\.placeholder|placekitten|dummyimage)`), "a picture from the internet; use only site.images and site.logo"},
 }
 
@@ -359,4 +360,41 @@ func copyTree(source, target string) error {
 		}
 		return nil
 	})
+}
+
+var (
+	countUpTag   = regexp.MustCompile(`<CountUp\b[^>]*>`)
+	countUpTo    = regexp.MustCompile(`\bto=\{\s*([0-9][0-9_.,]*)\s*\}`)
+	writtenValue = regexp.MustCompile(`[0-9][0-9.,]*[0-9]|[0-9]`)
+)
+
+// KnownNumbers are the numbers written in a text (the brief), without separators:
+// "25.000" and "25,000" both give "25000".
+func KnownNumbers(text string) map[string]bool {
+	known := map[string]bool{}
+	for _, number := range writtenValue.FindAllString(text, -1) {
+		known[strings.NewReplacer(".", "", ",", "", "_", "").Replace(number)] = true
+	}
+	return known
+}
+
+// CheckCountUp refuses a CountUp whose number the owner never gave: a counting number
+// on a page reads as a fact (a price, a number of customers), and the brief is the
+// only source of facts. The number must be written directly, so it can be checked.
+func CheckCountUp(rel, content string, known map[string]bool) []string {
+	var problems []string
+	for number, line := range strings.Split(content, "\n") {
+		for _, tag := range countUpTag.FindAllString(line, -1) {
+			match := countUpTo.FindStringSubmatch(tag)
+			if match == nil {
+				problems = append(problems, fmt.Sprintf("%s:%d CountUp must have its number written directly, as to={12}, and only a number the brief gives", rel, number+1))
+				continue
+			}
+			value := strings.NewReplacer(".", "", ",", "", "_", "").Replace(match[1])
+			if !known[value] {
+				problems = append(problems, fmt.Sprintf("%s:%d CountUp shows %s, a number the owner never gave: remove it or show a number from the brief", rel, number+1, match[1]))
+			}
+		}
+	}
+	return problems
 }

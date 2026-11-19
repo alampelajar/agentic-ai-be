@@ -41,6 +41,34 @@ type Direction struct {
 	Moods []string `json:"moods"`
 	// Kit names the template's finished pieces this look uses and how (kit/*.tsx).
 	Kit string `json:"kit"`
+	// Motion is how much the look moves: "calm", "lively" or "playful". It sets the
+	// theme's --motion-* tokens and how many motion pieces the agent uses.
+	Motion string `json:"motion"`
+}
+
+// MotionStyle is one motion level: the tokens written into theme.css and what the
+// agent is told to use.
+type MotionStyle struct {
+	Duration, Fast, Ease, Distance, Stagger string
+	Guide                                   string
+}
+
+// MotionStyles are the three levels a look can have.
+var MotionStyles = map[string]MotionStyle{
+	"calm": {Duration: "700ms", Fast: "200ms", Ease: "cubic-bezier(0.22, 1, 0.36, 1)", Distance: "14px", Stagger: "90ms",
+		Guide: "Quiet: Reveal (from 'fade' or 'up') on the heading and content of each section, Stagger for groups of cards or steps, lift on cards. No Marquee, no RotatingWords, no float, no Parallax."},
+	"lively": {Duration: "550ms", Fast: "180ms", Ease: "cubic-bezier(0.16, 1, 0.3, 1)", Distance: "28px", Stagger: "70ms",
+		Guide: "Clear and confident: Reveal on every section (from 'up', or 'left' and 'right' for the two halves of a two-column section), Stagger for cards, steps and lists, lift on cards and buttons, CountUp for numbers the brief gives, one Marquee on the home page when the site has many services or products, Parallax on one picture when there are photos. RotatingWords only when it fits the hero naturally."},
+	"playful": {Duration: "650ms", Fast: "220ms", Ease: "cubic-bezier(0.34, 1.56, 0.64, 1)", Distance: "36px", Stagger: "90ms",
+		Guide: "Lively and fun: Reveal (from 'zoom' or 'up') on every section, Stagger wherever there is a group, lift on cards and buttons, float on one or two decorative shapes (never on text), RotatingWords in the home hero, one Marquee on the home page, CountUp for numbers the brief gives, Parallax on one picture or decoration."},
+}
+
+// MotionOf returns a look's motion level, "calm" when it has none.
+func (d Direction) MotionOf() MotionStyle {
+	if style, found := MotionStyles[d.Motion]; found {
+		return style
+	}
+	return MotionStyles["calm"]
 }
 
 // Variant is one curated palette of a direction.
@@ -135,6 +163,9 @@ func (d Direction) validate() error {
 		if !cssLength.MatchString(d.Radius[key]) {
 			return fmt.Errorf("invalid radius %s", key)
 		}
+	}
+	if _, found := MotionStyles[d.Motion]; !found {
+		return fmt.Errorf("invalid motion %q", d.Motion)
 	}
 	return nil
 }
@@ -301,6 +332,68 @@ func ThemePalette(d Direction, variant string, owner map[string]string) map[stri
 	return palette
 }
 
+// motionCSS is the movement part of theme.css: the look's motion tokens, and the
+// rules behind the kit's motion pieces (Reveal, Stagger, Marquee, RotatingWords) and
+// the lift and float classes. Visitors who turned movement off see everything at once.
+func motionCSS(m MotionStyle) string {
+	return fmt.Sprintf(`
+:root {
+  --motion-duration: %s;
+  --motion-fast: %s;
+  --motion-ease: %s;
+  --motion-distance: %s;
+  --motion-stagger: %s;
+}
+
+@utility lift {
+  transition: transform var(--motion-fast) var(--motion-ease);
+  &:hover { transform: translateY(calc(var(--motion-distance) * -0.2)); }
+}
+
+@utility float {
+  animation: site-float 6s ease-in-out infinite alternate;
+}
+
+@keyframes site-float {
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(var(--motion-distance) * -0.5)); }
+}
+
+@keyframes site-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-50%% - 1rem)); }
+}
+
+@keyframes site-word {
+  from { opacity: 0; transform: translateY(0.35em); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.marquee-track { animation: site-marquee var(--marquee-duration, 40s) linear infinite; }
+.marquee-track:hover { animation-play-state: paused; }
+.word-swap { animation: site-word var(--motion-duration) var(--motion-ease) both; }
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    transition: opacity var(--motion-duration) var(--motion-ease), transform var(--motion-duration) var(--motion-ease);
+  }
+  [data-reveal]:not([data-shown]) { opacity: 0; }
+  [data-reveal='up']:not([data-shown]) { transform: translateY(var(--motion-distance)); }
+  [data-reveal='down']:not([data-shown]) { transform: translateY(calc(var(--motion-distance) * -1)); }
+  [data-reveal='left']:not([data-shown]) { transform: translateX(calc(var(--motion-distance) * -1)); }
+  [data-reveal='right']:not([data-shown]) { transform: translateX(var(--motion-distance)); }
+  [data-reveal='zoom']:not([data-shown]) { transform: scale(0.94); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track, .float, .word-swap { animation: none !important; }
+  .marquee-track { flex-wrap: wrap; width: auto; justify-content: center; }
+  .marquee-track [data-copy] { display: none; }
+  .lift:hover { transform: none; }
+}
+`, m.Duration, m.Fast, m.Ease, m.Distance, m.Stagger)
+}
+
 // ThemeCSS is web/src/theme.css for a direction. Tailwind's own colours and fonts
 // are switched off (--color-*: initial), so the only colours a page can use are the
 // direction's tokens: a palette class like bg-blue-500 produces nothing. owner holds
@@ -327,5 +420,6 @@ func ThemeCSS(d Direction, variant string, owner map[string]string) string {
 	}
 	fmt.Fprintf(&b, "  --radius-2xl: calc(%s * 1.5);\n  --radius-3xl: calc(%s * 2);\n", d.Radius["xl"], d.Radius["xl"])
 	b.WriteString("}\n\n@layer base {\n  html {\n    font-family: var(--font-body);\n    background-color: var(--color-background);\n    color: var(--color-foreground);\n    -webkit-font-smoothing: antialiased;\n  }\n  h1, h2, h3, h4 {\n    font-family: var(--font-heading);\n  }\n  :focus-visible {\n    outline: 2px solid var(--color-primary);\n    outline-offset: 2px;\n  }\n}\n\n@media (prefers-reduced-motion: reduce) {\n  *, *::before, *::after {\n    animation-duration: 0.01ms !important;\n    transition-duration: 0.01ms !important;\n    scroll-behavior: auto !important;\n  }\n}\n")
+	b.WriteString(motionCSS(d.MotionOf()))
 	return b.String()
 }

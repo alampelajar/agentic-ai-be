@@ -228,7 +228,7 @@ const neverList = `Never, unless the design direction or the owner's requests sa
 - emoji in headings or used as icons;
 - vague hero text that could belong to any business ("Welcome to our website", "Quality you can trust");
 - heavy shadows, or corners rounder than the direction's shape;
-- animation scattered over the page (at most one purposeful moment, and only with motion-safe:);
+- movement that does not come from the motion pieces (Reveal, Stagger, CountUp, Marquee, RotatingWords, Parallax, lift, float), more movement than the look's motion level asks for, or movement that hides or delays the main text;
 - placeholder text or pictures.`
 
 // CodingSystem is the system prompt for every model call that writes site code.
@@ -242,7 +242,7 @@ func CodingSystem(b Brief, d Direction) string {
 STACK (fixed, nothing else exists)
 - React 19 + TypeScript function components, Tailwind CSS v4 classes, lucide-react icons. No other package: do not import anything else.
 - Pages are web/src/pages/<Name>.tsx with a default export. App already shows every page inside Layout, so a page never renders Layout, a header or a footer. Shared pieces go in web/src/components/<Name>.tsx (named or default export).
-- Allowed imports: 'react', 'lucide-react', '../site', '../router', '../components/<Name>', '../kit/<Name>', './<Name>' inside components.
+- Allowed imports: 'react', 'lucide-react', '../site', '../router', '../components/<Name>', '../kit/<Name>' (or several at once from '../kit'), './<Name>' inside components.
 - '../site' exports: site = { name: string, tagline: string, language: 'id' | 'en', pages: {path, label}[], contact: {phone, whatsapp, email, address, hours} (all strings, '' when not given), social: Record<string, string>, images: {src, alt}[], logo: string (a picture path, '' when there is no logo) } and whatsappLink(message?: string): string, which returns '' when there is no WhatsApp number.
 - '../router' exports: Link (props: to, className, children... use it for every link to a page of this site), navigate(path), usePath().
 - '../components/SiteForm' exports: SiteForm with props { name: string; fields: {name, label, type?: 'text'|'email'|'tel'|'textarea'|'select'|'date'|'number', required?, placeholder?, options?}[]; submitLabel?; successMessage?; className? }. Use it for every form; it stores answers on the site's server, where only the owner reads them. A form marked guestbook in the brief must have a field named exactly "name" (the visitor's name) and one named exactly "message" (the wish or message); it may have more, private fields.
@@ -256,6 +256,7 @@ STACK (fixed, nothing else exists)
   Monogram { letters, frame?: 'circle'|'arch'|'square' } initials in a frame.
   FramedPhoto { src, alt, frame?: 'thin'|'arch'|'offset' } one of site.images in a frame.
   PhotoGallery { limit? } the owner's photos in a grid; it shows nothing when there are none.
+  Motion pieces (see MOTION): Reveal { from?: 'up'|'down'|'left'|'right'|'fade'|'zoom', delay?: ms, as? } fades a block in when scrolled into view; Stagger { from?, as?, itemAs?, className, itemClassName } shows its children one after another (grid classes go on Stagger); CountUp { to, prefix?, suffix? } counts up to a number written directly (to={12}) that the brief states, never a price or count it does not give (checked); Marquee { items: string[], speed? } slides short words across; RotatingWords { words: string[] } swaps one word inside a headline; Parallax { speed?: 0.05-0.3 } moves a picture slower than the page.
   Each accepts className to replace its default classes.
 - Icons: import only names from this list, which exist in the installed lucide-react: %s. There are no brand logos (Instagram, Facebook, WhatsApp): use AtSign or MessageCircle.
 - Do not touch window, document or localStorage while rendering; only inside useEffect or event handlers.
@@ -271,6 +272,8 @@ Composition (follow it, it is what makes this site look different from others):
 - %s
 Voice of the text: %s
 Finished pieces this look uses (from '../kit/'): %s
+
+MOTION (this look moves in a "%s" way): %s Classes: lift (rises on hover), float (a decoration bobs; never text). Never write your own animation (@keyframes, animate-bounce/ping/pulse, requestAnimationFrame). The hero text shows at once or with a delay of at most 300.
 
 %s
 
@@ -293,7 +296,7 @@ Reply with complete files only, each in this exact form, and nothing outside the
 <file path="web/src/pages/Example.tsx">
 ...the whole file...
 </file>`,
-		knownIcons, strings.Join(palette, ", "), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], kitLine(d), neverList, languageName(b.Language))
+		knownIcons, strings.Join(palette, ", "), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], kitLine(d), d.Motion, d.MotionOf().Guide, neverList, languageName(b.Language))
 }
 
 // kitLine names the finished pieces a look uses.
@@ -417,12 +420,13 @@ The brief's "changes_asked" are the owner's own later requests, newest last. The
 %s
 
 Also check: no empty frame, empty picture box or gallery without photos is shown, and no text tells visitors that content will come later; a page only promises that answers appear when the form is a guestbook shown with Guestbook; an invitation or event page uses the finished pieces the look names (%s);
+the movement fits the look's motion level ("%s": %s) and uses only the motion pieces;
 the composition is followed (not a generic layout); text is specific to the business, in %s, and uses only facts from the brief; contact details are only shown when present; each page has one h1; the phone layout has no horizontal scroll and the menu works on phones; nothing references pictures from the internet.
 
 Reply with one JSON object and nothing else:
 {"pass": <true when nothing important is wrong>, "fixes": [{"file": "<path>", "problem": "<what to change, concretely>"}]}
 At most 6 fixes, most important first. Do not list matters of taste.`,
-		languageName(b.Language), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], neverList, ownerRequestsRule(b), kitLine(d), languageName(b.Language))
+		languageName(b.Language), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], neverList, ownerRequestsRule(b), kitLine(d), d.Motion, d.MotionOf().Guide, languageName(b.Language))
 	return []Message{
 		{Role: "system", Content: system},
 		{Role: "user", Content: fmt.Sprintf("Brief:\n%s\n\nFiles:\n\n%s", briefText(b), filesText(files, func(path string) bool { return strings.HasSuffix(path, ".tsx") }))},
