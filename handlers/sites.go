@@ -201,6 +201,8 @@ func CreateSite(c *gin.Context) {
 	var req struct {
 		Description string `json:"description"`
 		Language    string `json:"language"`
+		// RemixOf is a gallery website whose look and page list the new one copies.
+		RemixOf *uint `json:"remix_of"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		siteError(c, http.StatusBadRequest, "invalid", "Format permintaan tidak valid.")
@@ -210,6 +212,12 @@ func CreateSite(c *gin.Context) {
 	if length := utf8.RuneCountInString(description); length < 10 || length > 2000 {
 		siteError(c, http.StatusBadRequest, "description_length", "Ceritakan website Anda dalam 10 sampai 2000 karakter.")
 		return
+	}
+	if req.RemixOf != nil {
+		if _, found := showcasedSite(*req.RemixOf); !found {
+			siteError(c, http.StatusNotFound, "not_found", "Website contoh ini tidak lagi ada di galeri.")
+			return
+		}
 	}
 	plan := builderPlanFor(userID)
 	if plan.AtSiteLimit() {
@@ -260,7 +268,7 @@ func CreateSite(c *gin.Context) {
 		if err := tx.Create(&workspace).Error; err != nil {
 			return err
 		}
-		site = models.Site{UserID: userID, WorkspaceID: workspace.ID, Name: clipRunes(name, 100), Description: description, Language: language, UILanguage: uiLanguage, Status: models.SiteStatusDraft}
+		site = models.Site{UserID: userID, WorkspaceID: workspace.ID, Name: clipRunes(name, 100), Description: description, Language: language, UILanguage: uiLanguage, Status: models.SiteStatusDraft, RemixOf: req.RemixOf}
 		return tx.Create(&site).Error
 	})
 	if err != nil {
@@ -470,8 +478,22 @@ func SiteQuestions(c *gin.Context) {
 	config.DB.Model(&models.Site{}).Where("user_id = ? AND id <> ? AND design_direction <> ''", userID, site.ID).Order("updated_at DESC").Limit(1).Pluck("design_direction", &last)
 	moods := sitebuilder.MoodTags(site.Description, set.LookWish)
 	picked := sitebuilder.PickDirections(site.Kind, last, colours, moods, mathrand.New(mathrand.NewPCG(uint64(time.Now().UnixNano()), uint64(site.ID))))
-	directions := make([]directionView, 0, len(picked))
+	directions := make([]directionView, 0, len(picked)+1)
+	// A copied website offers the look of the website it copies first.
+	var remix gin.H
+	if source := remixSource(site); source != nil {
+		if direction, found := sitebuilder.DirectionByKey(source.DesignDirection); found && direction.HasVariant(source.DesignVariant) {
+			directions = append(directions, viewDirection(direction, source.DesignVariant, language))
+			remix = gin.H{"name": source.Name, "direction": direction.Key, "variant": source.DesignVariant}
+		}
+	}
 	for _, pick := range picked {
+		if len(directions) >= len(picked) {
+			break
+		}
+		if remix != nil && pick.Direction.Key == remix["direction"] {
+			continue
+		}
 		directions = append(directions, viewDirection(pick.Direction, pick.Variant, language))
 	}
 	all := make([]directionView, 0)
@@ -481,8 +503,21 @@ func SiteQuestions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"ok": true, "questions": set.Questions, "kind": set.Kind, "suggested_name": set.SuggestedName,
 		"language": site.Language, "understood": set.Understood, "known_contact": set.KnownContact, "look_wish": set.LookWish,
-		"colours": colours, "directions": directions, "all_directions": all,
+		"colours": colours, "directions": directions, "all_directions": all, "remix": remix,
 	})
+}
+
+// remixSource is the website a copied website copies, when it still exists. Only its
+// look and the names of its pages are used.
+func remixSource(site *models.Site) *models.Site {
+	if site.RemixOf == nil {
+		return nil
+	}
+	var source models.Site
+	if config.DB.First(&source, *site.RemixOf).Error != nil {
+		return nil
+	}
+	return &source
 }
 
 // usableQuestions accepts no question at all (a detailed description), but not a
@@ -620,6 +655,9 @@ func SiteBrief(c *gin.Context) {
 	defer cancel()
 	input := sitebuilder.BriefInput{Description: site.Description, Language: language, UILanguage: uiLanguageOf(site), Kind: site.Kind, Name: name,
 		Understood: set.Understood, LookWish: set.LookWish, Questions: set.Questions, Answers: answers, Contact: contact, Images: siteImages(site), Direction: direction}
+	if source := remixSource(site); source != nil {
+		input.PageTitles = briefPageTitles(source)
+	}
 	answer, _, err := builderModels.Complete(ctx, userID, sitebuilder.NeedFast, sitebuilder.BriefPrompt(input))
 	var brief sitebuilder.Brief
 	if err == nil {

@@ -141,7 +141,7 @@ func AdminGetSites(c *gin.Context) {
 			"id": s.ID, "name": s.Name, "description": s.Description, "status": s.Status,
 			"kind": s.Kind, "design_direction": s.DesignDirection,
 			"has_version": s.CurrentVersionID != nil, "versions": versions[s.ID],
-			"published": liveURL != "", "live_url": liveURL,
+			"published": liveURL != "", "live_url": liveURL, "showcased": s.ShowcasedAt != nil,
 			"created_at": s.CreatedAt, "updated_at": s.UpdatedAt, "user": owners[s.UserID],
 		})
 	}

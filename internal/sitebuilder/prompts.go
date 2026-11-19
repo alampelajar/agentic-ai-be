@@ -135,6 +135,8 @@ type BriefInput struct {
 	Contact     Contact
 	Images      []Image
 	Direction   Direction
+	// PageTitles are the pages of a gallery website the person chose to copy, in order.
+	PageTitles []string
 }
 
 func BriefPrompt(in BriefInput) []Message {
@@ -178,6 +180,10 @@ Rules:
 	c := in.Contact
 	fmt.Fprintf(&user, "Contact details given: phone=%q whatsapp=%q email=%q address=%q hours=%q\n", c.Phone, c.WhatsApp, c.Email, c.Address, c.Hours)
 	fmt.Fprintf(&user, "Photos uploaded: %d, logo: %t\n", photoCount(in.Images), hasLogo(in.Images))
+	if len(in.PageTitles) > 0 {
+		system += "\n- The person chose to copy the page list of an example website. Plan the same pages in the same order, with their titles in the website's language. Only the structure is copied: write every page for this person's own description and facts, and still leave out a page that needs photos or a story the person did not give."
+		fmt.Fprintf(&user, "Pages of the example website to copy: %s\n", strings.Join(in.PageTitles, " | "))
+	}
 	return []Message{{Role: "system", Content: system}, {Role: "user", Content: user.String()}}
 }
 

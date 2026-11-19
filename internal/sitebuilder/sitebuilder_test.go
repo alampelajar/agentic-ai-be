@@ -472,3 +472,16 @@ func TestGuestbookFormSurvivesTheBrief(t *testing.T) {
 		t.Fatal("site.json must mark the guest book for the server")
 	}
 }
+
+// A copied website's brief keeps the example's pages; other briefs say nothing of it.
+func TestBriefPromptCopiesPages(t *testing.T) {
+	direction := Directions()[0]
+	plain := BriefPrompt(BriefInput{Description: "Toko roti", Language: "id", UILanguage: "id", Direction: direction})
+	if strings.Contains(plain[1].Content, "example website") {
+		t.Fatal("a brief without a copied website mentions one")
+	}
+	copied := BriefPrompt(BriefInput{Description: "Toko roti", Language: "id", UILanguage: "id", Direction: direction, PageTitles: []string{"Beranda", "Menu"}})
+	if !strings.Contains(copied[1].Content, "Beranda | Menu") || !strings.Contains(copied[0].Content, "same pages in the same order") {
+		t.Fatalf("copied brief prompt = %q / %q", copied[0].Content, copied[1].Content)
+	}
+}

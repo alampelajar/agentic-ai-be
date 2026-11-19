@@ -42,8 +42,13 @@ type Site struct {
 	CurrentVersionID   *uint      `json:"current_version_id"`
 	PublishedReleaseID *uint      `json:"published_release_id"`
 	PreviewRequestedAt *time.Time `json:"-"`
-	CreatedAt          time.Time  `json:"created_at"`
-	UpdatedAt          time.Time  `json:"updated_at"`
+	// ShowcasedAt is set when an admin puts the published website in the gallery that
+	// every person sees in the builder; nil when it is not shown there.
+	ShowcasedAt *time.Time `json:"-" gorm:"index"`
+	// RemixOf is the gallery website whose look and page list this one copies.
+	RemixOf   *uint     `json:"-"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 const (
