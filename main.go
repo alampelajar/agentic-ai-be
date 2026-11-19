@@ -309,6 +309,8 @@ func main() {
 		protected.GET("/sites/:id/runs/:runId/events", handlers.SiteRunEvents)
 		protected.POST("/sites/:id/runs/:runId/cancel", handlers.CancelSiteRun)
 		protected.POST("/sites/:id/versions/:number/restore", handlers.RestoreSiteVersion)
+		protected.GET("/sites/:id/versions/:number/files", handlers.SiteVersionFiles)
+		protected.GET("/sites/:id/versions/:number/file", handlers.SiteVersionFile)
 		protected.GET("/sites/:id/preview", handlers.SitePreview)
 		protected.POST("/sites/:id/publish", handlers.PublishSite)
 		protected.POST("/sites/:id/unpublish", handlers.UnpublishSite)

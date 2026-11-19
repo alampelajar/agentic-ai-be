@@ -100,6 +100,8 @@ func TestSitesOwnershipAndFlow(t *testing.T) {
 		r.GET("/sites/:id/runs/:runId", GetSiteRun)
 		r.POST("/sites/:id/runs/:runId/cancel", CancelSiteRun)
 		r.POST("/sites/:id/versions/:number/restore", RestoreSiteVersion)
+		r.GET("/sites/:id/versions/:number/files", SiteVersionFiles)
+		r.GET("/sites/:id/versions/:number/file", SiteVersionFile)
 		r.GET("/sites/:id/preview", SitePreview)
 		r.POST("/sites/:id/publish", PublishSite)
 		r.POST("/sites/:id/unpublish", UnpublishSite)
@@ -128,7 +130,8 @@ func TestSitesOwnershipAndFlow(t *testing.T) {
 	for _, request := range [][3]string{
 		{"GET", path, ""}, {"PATCH", path, `{"name":"x"}`}, {"POST", path + "/questions", ""}, {"POST", path + "/brief", `{"direction":"warm-editorial"}`},
 		{"DELETE", path + "/images?src=/uploads/x.png", ""}, {"POST", path + "/runs", `{"kind":"create"}`}, {"GET", path + "/runs/1", ""},
-		{"POST", path + "/runs/1/cancel", ""}, {"POST", path + "/versions/1/restore", ""}, {"GET", path + "/preview", ""},
+		{"POST", path + "/runs/1/cancel", ""}, {"POST", path + "/versions/1/restore", ""}, {"GET", path + "/versions/1/files", ""},
+		{"GET", path + "/versions/1/file?path=site.json", ""}, {"GET", path + "/preview", ""},
 		{"POST", path + "/publish", `{"slug":"toko-roti"}`}, {"POST", path + "/unpublish", ""}, {"DELETE", path, ""},
 	} {
 		if code, _ := send(other.ID, request[0], request[1], request[2]); code != http.StatusNotFound {
