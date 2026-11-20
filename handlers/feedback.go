@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
@@ -318,12 +319,25 @@ func AdminGetFeedback(c *gin.Context) {
 		Select("feedbacks.*").Order("feedbacks.created_at DESC").Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal mengambil feedback"}); return
 	}
-	type row struct { models.Feedback; UserName string `json:"user_name"`; UserEmail string `json:"user_email"` }
+	type row struct {
+		models.Feedback
+		UserName  string `json:"user_name"`
+		UserEmail string `json:"user_email"`
+		// UserDeletesAt is set when the sender's account waits to be deleted: the admin
+		// console then offers to restore it next to the message.
+		UserDeletesAt *time.Time `json:"user_deletes_at"`
+	}
 	rows := make([]row,0,len(items))
 	for _, item := range items {
 		var user models.User
-		if err := config.DB.Select("id","name","email").First(&user,item.UserID).Error; err == nil {
-			rows = append(rows,row{Feedback:item,UserName:user.Name,UserEmail:user.Email})
+		// Unscoped: messages from accounts waiting to be deleted are the ones asking for them back.
+		if err := config.DB.Unscoped().Select("id","name","email","deleted_at").First(&user,item.UserID).Error; err == nil {
+			entry := row{Feedback:item,UserName:user.Name,UserEmail:user.Email}
+			if pendingDeletion(user) {
+				end := deletesAt(user)
+				entry.UserDeletesAt = &end
+			}
+			rows = append(rows,entry)
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"ok":true,"feedback":rows})

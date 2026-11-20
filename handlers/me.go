@@ -38,6 +38,9 @@ func Me(c *gin.Context) {
 			"name":   user.Name,
 			"email":  user.Email,
 			"avatar": user.Avatar,
+			// True when the account was restored once already: deleting it again removes
+			// it at once, without the 30 days.
+			"deletion_is_final": user.RestoredAt != nil,
 		},
 	})
 }

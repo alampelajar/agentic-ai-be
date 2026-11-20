@@ -121,13 +121,8 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	var existingUser models.User
-
-	result := config.DB.
-		Where("email = ?", req.Email).
-		First(&existingUser)
-
-	if result.Error == nil {
+	// An account waiting to be deleted still holds its address.
+	if taken, _ := emailTaken(config.DB, req.Email, 0); taken {
 		c.JSON(http.StatusConflict, gin.H{
 			"ok":      false,
 			"message": "Email sudah terdaftar",
@@ -205,13 +200,10 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	var user models.User
+	// Includes an account in deletion, so its owner learns that after a correct password.
+	user, lookupErr := findUserByEmailAny(req.Email)
 
-	result := config.DB.
-		Where("email = ?", req.Email).
-		First(&user)
-
-	if result.Error != nil {
+	if lookupErr != nil {
 		spendPasswordCheck(req.Password)
 		wrongCredentials(c, req.Email)
 		return
@@ -228,6 +220,11 @@ func Login(c *gin.Context) {
 	}
 
 	loginGuard.Success(req.Email, c.ClientIP())
+
+	if pendingDeletion(user) {
+		refusePendingDeletion(c, user)
+		return
+	}
 
 	if user.Role == "" {
 		user.Role = "user"

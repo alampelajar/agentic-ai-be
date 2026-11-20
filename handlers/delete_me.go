@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -78,8 +79,9 @@ func RequestDeleteAccountOTP(c *gin.Context) {
 	})
 }
 
-// DeleteMe permanently deletes only the authenticated user's account and private
-// resources. Shared system providers, models, and agents are preserved.
+// DeleteMe marks the authenticated user's account for deletion. It is removed for good,
+// with everything it owns, after accountDeletionGrace (see account_deletion.go); until
+// then it cannot be used and an admin may restore it.
 func DeleteMe(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
@@ -113,20 +115,22 @@ func DeleteMe(c *gin.Context) {
 		return
 	}
 
-	audit := newAuditLog(
-		c,
-		"user.account_deleted",
-		"user",
-		strconv.FormatUint(uint64(user.ID), 10),
-		user.Name,
-		"Pengguna menghapus akun miliknya sendiri (email: "+user.Email+").",
-	)
+	// An account gets one restore. Once it was restored, deleting it again is final at once.
+	final := user.RestoredAt != nil
+	detail := "Pengguna menghapus akun miliknya sendiri (email: " + user.Email + "). Akun dihapus permanen dalam 30 hari bila tidak dipulihkan."
+	if final {
+		detail = "Pengguna menghapus akun miliknya sendiri (email: " + user.Email + "). Akun pernah dipulihkan, jadi langsung dihapus permanen."
+	}
+	audit := newAuditLog(c, "user.account_deleted", "user", strconv.FormatUint(uint64(user.ID), 10), user.Name, detail)
 
-	workspaceRefs := userWorkspaceRefs(user.ID)
-
-	err := config.DB.Transaction(func(tx *gorm.DB) error {
-		return purgeUserAccount(tx, &user, &audit)
-	})
+	var err error
+	if final {
+		err = purgeAccountForGood(user, audit)
+	} else {
+		err = config.DB.Transaction(func(tx *gorm.DB) error {
+			return markAccountForDeletion(tx, &user, &audit)
+		})
+	}
 
 	if errors.Is(err, errCannotDeleteLastAdmin) {
 		c.JSON(http.StatusConflict, gin.H{"ok": false, "message": "Akun admin terakhir tidak dapat dihapus"})
@@ -138,10 +142,17 @@ func DeleteMe(c *gin.Context) {
 		return
 	}
 
-	removeWorkspaceFiles(user.ID, workspaceRefs)
-
 	setRefreshCookie(c, userRefresh, "", -1)
-	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Akun dan data pribadi terkait berhasil dihapus permanen"})
+	if final {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "final": true, "message": "Akun dan data Anda sudah dihapus permanen."})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"ok":         true,
+		"final":      false,
+		"message":    "Akun akan dihapus permanen dalam 30 hari.",
+		"deletes_at": time.Now().Add(accountDeletionGrace),
+	})
 }
 
 // confirmDeleteWithOTP checks the e-mailed code. It writes the error response itself and

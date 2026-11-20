@@ -111,6 +111,9 @@ func containerName(kind string, siteID uint) string {
 
 func networkName(siteID uint) string { return fmt.Sprintf("agentic-site-net-%d", siteID) }
 
+// ownerActive keeps only websites whose owner's account is not waiting to be deleted.
+const ownerActive = "JOIN users ON users.id = sites.user_id AND users.deleted_at IS NULL"
+
 // desired reads from the database what should run now.
 func (r *Runner) desired() (map[string]wanted, map[string]uint, error) {
 	want := map[string]wanted{}
@@ -120,8 +123,11 @@ func (r *Runner) desired() (map[string]wanted, map[string]uint, error) {
 		ID     uint
 		Number int
 	}
+	// Websites of an account waiting to be deleted stay offline (ownerActive); they come
+	// back by themselves when an admin restores the account.
 	err := r.DB.Table("sites").Select("sites.id, site_versions.number").
 		Joins("JOIN site_versions ON site_versions.id = sites.current_version_id").
+		Joins(ownerActive).
 		Where("sites.preview_requested_at > ?", time.Now().Add(-PreviewIdle)).Scan(&previews).Error
 	if err != nil {
 		return nil, nil, err
@@ -140,6 +146,7 @@ func (r *Runner) desired() (map[string]wanted, map[string]uint, error) {
 	err = r.DB.Table("sites").Select("sites.id, site_releases.slug, site_versions.number").
 		Joins("JOIN site_releases ON site_releases.id = sites.published_release_id").
 		Joins("JOIN site_versions ON site_versions.id = site_releases.site_version_id").
+		Joins(ownerActive).
 		Scan(&published).Error
 	if err != nil {
 		return nil, nil, err
