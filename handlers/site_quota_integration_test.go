@@ -58,6 +58,7 @@ func TestBuilderLimitsFollowThePlan(t *testing.T) {
 	}
 	ids := []uint{free.ID, premium.ID}
 	defer func() {
+		db.Where("actor_user_id IN ?", ids).Delete(&models.AuditLog{})
 		db.Where("user_id IN ?", ids).Delete(&models.AIModelCallLog{})
 		db.Unscoped().Where("user_id IN ?", ids).Delete(&models.Site{})
 		db.Unscoped().Where("user_id IN ?", ids).Delete(&models.CloudWorkspace{})

@@ -276,6 +276,7 @@ func CreateSite(c *gin.Context) {
 		siteError(c, http.StatusInternalServerError, "storage", "Gagal menyiapkan website.")
 		return
 	}
+	recordAudit(c, "site.create", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, "Website dibuat")
 	c.JSON(http.StatusCreated, gin.H{"ok": true, "site": siteView(&site)})
 }
 
@@ -369,10 +370,22 @@ func UpdateSite(c *gin.Context) {
 // DeleteSite removes a site, its workspace, versions and data. The site runner stops
 // its containers within seconds, because the site is no longer in the database.
 func DeleteSite(c *gin.Context) {
-	site, userID, ok := loadOwnedSite(c)
+	site, _, ok := loadOwnedSite(c)
 	if !ok {
 		return
 	}
+	if err := removeSite(site); err != nil {
+		siteError(c, http.StatusInternalServerError, "delete_failed", "Website gagal dihapus.")
+		return
+	}
+	recordAudit(c, "site.delete", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, "Website dihapus")
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// removeSite deletes a site with its runs, versions, releases and workspace, then its
+// folders in the background. Used by the owner and by admins.
+func removeSite(site *models.Site) error {
+	userID := site.UserID
 	config.DB.Model(&models.AgentRun{}).Where("site_id = ? AND status IN ?", site.ID, []string{models.RunQueued, models.RunRunning}).Update("cancel_requested", true)
 	var workspace models.CloudWorkspace
 	hasWorkspace := config.DB.Where("id = ? AND user_id = ?", site.WorkspaceID, userID).First(&workspace).Error == nil
@@ -392,10 +405,8 @@ func DeleteSite(c *gin.Context) {
 		return tx.Delete(site).Error
 	})
 	if err != nil {
-		siteError(c, http.StatusInternalServerError, "delete_failed", "Website gagal dihapus.")
-		return
+		return err
 	}
-	recordAudit(c, "site.delete", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, "Website dihapus")
 	siteDir := sitebuilder.LoadSettings().SiteDir(site.ID)
 	go func() {
 		// The runner needs a moment to stop the containers that use these folders.
@@ -411,7 +422,7 @@ func DeleteSite(c *gin.Context) {
 			}
 		}
 	}()
-	c.JSON(http.StatusOK, gin.H{"ok": true})
+	return nil
 }
 
 func uiLanguageOf(site *models.Site) string {
@@ -1059,10 +1070,21 @@ func PublishSite(c *gin.Context) {
 		siteError(c, http.StatusBadRequest, "invalid", "Format permintaan tidak valid.")
 		return
 	}
-	slug := strings.ToLower(strings.TrimSpace(req.Slug))
-	if problem := slugProblem(slug, site.ID); problem != "" {
+	release, url, problem := publishSiteVersion(site, req.Slug)
+	if problem != "" {
 		siteError(c, http.StatusConflict, problem, "Alamat ini tidak dapat dipakai.")
 		return
+	}
+	recordAudit(c, "site.publish", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, fmt.Sprintf("Rilis %d diterbitkan di %s", release.Number, url))
+	c.JSON(http.StatusOK, gin.H{"ok": true, "url": url, "release": release})
+}
+
+// publishSiteVersion makes a release of the site's current version at the address and
+// serves it there. It answers the slug problem code when the address cannot be used.
+func publishSiteVersion(site *models.Site, rawSlug string) (models.SiteRelease, string, string) {
+	slug := strings.ToLower(strings.TrimSpace(rawSlug))
+	if problem := slugProblem(slug, site.ID); problem != "" {
+		return models.SiteRelease{}, "", problem
 	}
 	var release models.SiteRelease
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
@@ -1076,12 +1098,9 @@ func PublishSite(c *gin.Context) {
 		return tx.Model(site).Updates(map[string]any{"slug": slug, "published_release_id": release.ID}).Error
 	})
 	if err != nil {
-		siteError(c, http.StatusConflict, "slug_taken", "Alamat ini tidak dapat dipakai.")
-		return
+		return models.SiteRelease{}, "", "slug_taken"
 	}
-	url := sitebuilder.LoadSettings().LiveURL(slug)
-	recordAudit(c, "site.publish", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, fmt.Sprintf("Rilis %d diterbitkan di %s", release.Number, url))
-	c.JSON(http.StatusOK, gin.H{"ok": true, "url": url, "release": release})
+	return release, sitebuilder.LoadSettings().LiveURL(slug), ""
 }
 
 // UnpublishSite takes the site offline; its address stays reserved for it.
@@ -1090,10 +1109,15 @@ func UnpublishSite(c *gin.Context) {
 	if !ok {
 		return
 	}
-	config.DB.Model(&models.SiteRelease{}).Where("site_id = ? AND status = ?", site.ID, models.ReleaseLive).Update("status", models.ReleaseSuperseded)
-	config.DB.Model(site).Update("published_release_id", nil)
+	unpublishSiteRelease(site)
 	recordAudit(c, "site.unpublish", "site", strconv.FormatUint(uint64(site.ID), 10), site.Name, "Website tidak lagi diterbitkan")
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// unpublishSiteRelease takes the site offline; its address stays reserved for it.
+func unpublishSiteRelease(site *models.Site) {
+	config.DB.Model(&models.SiteRelease{}).Where("site_id = ? AND status = ?", site.ID, models.ReleaseLive).Update("status", models.ReleaseSuperseded)
+	config.DB.Model(site).Update("published_release_id", nil)
 }
 
 // loadOwnedVersion finds a version of an owned site by the :number parameter, and the

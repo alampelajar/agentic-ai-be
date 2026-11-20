@@ -79,7 +79,7 @@ func TestSitesOwnershipAndFlow(t *testing.T) {
 		db.Where("site_id IN ?", siteIDs).Delete(&models.SiteVersion{})
 		db.Where("user_id IN ?", []uint{owner.ID, other.ID}).Delete(&models.Site{})
 		db.Where("user_id IN ?", []uint{owner.ID, other.ID}).Delete(&models.CloudWorkspace{})
-		db.Where("user_id IN ?", []uint{owner.ID, other.ID}).Delete(&models.AuditLog{})
+		db.Where("actor_user_id IN ?", []uint{owner.ID, other.ID}).Delete(&models.AuditLog{})
 		db.Delete(&owner)
 		db.Delete(&other)
 	}()
