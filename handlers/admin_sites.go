@@ -131,16 +131,39 @@ func AdminGetSites(c *gin.Context) {
 		versions[vc.SiteID] = vc.Count
 	}
 
+	versionNumbers, releases := siteVersionNumbers(sites)
+
 	list := make([]gin.H, 0, len(sites))
 	for _, s := range sites {
-		liveURL := ""
+		liveURL, slug := "", ""
+		if s.Slug != nil {
+			slug = *s.Slug
+		}
 		if s.PublishedReleaseID != nil && s.Slug != nil {
 			liveURL = settings.LiveURL(*s.Slug)
+		}
+		currentVersion, publishedVersion := 0, 0
+		var publishedAt *time.Time
+		if s.CurrentVersionID != nil {
+			currentVersion = versionNumbers[*s.CurrentVersionID]
+		}
+		if s.PublishedReleaseID != nil {
+			if release, found := releases[*s.PublishedReleaseID]; found {
+				publishedVersion = versionNumbers[release.SiteVersionID]
+				at := release.PublishedAt
+				publishedAt = &at
+			}
+		}
+		suggested := slug
+		if suggested == "" {
+			suggested = sitebuilder.SuggestSlug(s.Name)
 		}
 		list = append(list, gin.H{
 			"id": s.ID, "name": s.Name, "description": s.Description, "status": s.Status,
 			"kind": s.Kind, "design_direction": s.DesignDirection,
 			"has_version": s.CurrentVersionID != nil, "versions": versions[s.ID],
+			"current_version": currentVersion, "published_version": publishedVersion, "published_at": publishedAt,
+			"slug": slug, "suggested_slug": suggested,
 			"published": liveURL != "", "live_url": liveURL, "showcased": s.ShowcasedAt != nil,
 			"created_at": s.CreatedAt, "updated_at": s.UpdatedAt, "user": owners[s.UserID],
 		})

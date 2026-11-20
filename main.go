@@ -414,6 +414,11 @@ func main() {
 		admin.GET("/sites", handlers.AdminGetSites)
 		admin.POST("/sites/:id/preview", handlers.AdminSitePreview)
 		admin.PATCH("/sites/:id/showcase", handlers.AdminSetSiteShowcase)
+		admin.PATCH("/sites/:id", handlers.AdminUpdateSite)
+		admin.POST("/sites/:id/publish", handlers.AdminPublishSite)
+		admin.POST("/sites/:id/unpublish", handlers.AdminUnpublishSite)
+		admin.DELETE("/sites/:id", handlers.AdminDeleteSite)
+		admin.GET("/site-logs", handlers.AdminGetSiteLogs)
 
 		admin.GET("/feedback", handlers.AdminGetFeedback)
 		admin.PATCH("/feedback/:id/status", handlers.AdminUpdateFeedbackStatus)
