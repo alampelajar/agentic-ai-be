@@ -421,6 +421,7 @@ func TestDeletingAnAccountDeletesItsDelegations(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("account deletion = %d, body=%s", response.Code, response.Body.String())
 	}
+	passWaitingTime(t, leaving.ID)
 	if f.storedFor(leaving.ID) != 0 {
 		t.Fatal("the leaving user's delegations remain")
 	}

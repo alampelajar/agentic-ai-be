@@ -20,8 +20,9 @@ var errCannotDeleteLastAdmin = errors.New("cannot delete the last admin account"
 // The caller records its own audit entry before calling, so it commits or rolls back
 // together with the deletion.
 func purgeUserAccount(tx *gorm.DB, user *models.User, audit *models.AuditLog) error {
-	// Do not allow deletion of the final administrator account.
-	if user.Role == "admin" {
+	// Do not allow deletion of the final administrator account. An account already in
+	// deletion no longer counts as an administrator, so its removal is not refused.
+	if user.Role == "admin" && !user.DeletedAt.Valid {
 		var adminCount int64
 		if err := tx.Model(&models.User{}).Where("role = ?", "admin").Count(&adminCount).Error; err != nil {
 			return err
@@ -148,6 +149,37 @@ func purgeUserAccount(tx *gorm.DB, user *models.User, audit *models.AuditLog) er
 			return err
 		}
 		if err := tx.Unscoped().Where("id IN ?", skillIDs).Delete(&models.Skill{}).Error; err != nil {
+			return err
+		}
+	}
+
+	// Websites, with their runs, versions and releases. Before this, they were left
+	// behind, and a published one stayed online after its owner was gone. The folders
+	// go after the commit (removeSiteFolders); the workspaces go below.
+	var siteIDs []uint
+	if err := tx.Model(&models.Site{}).Where("user_id = ?", user.ID).Pluck("id", &siteIDs).Error; err != nil {
+		return err
+	}
+	var runIDs []uint
+	if err := tx.Model(&models.AgentRun{}).Where("user_id = ?", user.ID).Pluck("id", &runIDs).Error; err != nil {
+		return err
+	}
+	if len(runIDs) > 0 {
+		if err := tx.Where("agent_run_id IN ?", runIDs).Delete(&models.AgentRunStep{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", runIDs).Delete(&models.AgentRun{}).Error; err != nil {
+			return err
+		}
+	}
+	if len(siteIDs) > 0 {
+		if err := tx.Where("site_id IN ?", siteIDs).Delete(&models.SiteRelease{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("site_id IN ?", siteIDs).Delete(&models.SiteVersion{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", siteIDs).Delete(&models.Site{}).Error; err != nil {
 			return err
 		}
 	}

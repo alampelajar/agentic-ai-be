@@ -638,6 +638,7 @@ func TestDeletingAnAccountDeletesItsWorkspaces(t *testing.T) {
 	if response := serveWorkspace(leaving.ID, request); response.Code != http.StatusOK {
 		t.Fatalf("account deletion = %d %s", response.Code, response.Body.String())
 	}
+	passWaitingTime(t, leaving.ID)
 	var rows, jobs int64
 	config.DB.Unscoped().Model(&models.CloudWorkspace{}).Where("user_id = ?", leaving.ID).Count(&rows)
 	config.DB.Model(&models.ExecutionJob{}).Where("user_id = ?", leaving.ID).Count(&jobs)

@@ -40,6 +40,11 @@ type UserResponse struct {
 	PremiumUntil  *time.Time     `json:"premium_until"`
 	PremiumActive bool           `json:"premium_active"`
 	Agents        []AgentSummary `json:"agents"`
+	// DeletionRequestedAt is set while the account waits to be removed for good, at DeletesAt.
+	DeletionRequestedAt *time.Time `json:"deletion_requested_at"`
+	DeletesAt           *time.Time `json:"deletes_at"`
+	// RestoredAt is set once an admin gave the account back; it cannot be restored again.
+	RestoredAt *time.Time `json:"restored_at"`
 	CreatedAt string         `json:"created_at"`
 	UpdatedAt string         `json:"updated_at"`
 }
@@ -90,7 +95,8 @@ func getAgentsUsedByUser(userID uint) ([]AgentSummary, error) {
 func AdminGetUsers(c *gin.Context) {
 	var users []models.User
 
-	if err := config.DB.
+	// Includes accounts waiting to be deleted, so an admin can restore one.
+	if err := config.DB.Unscoped().
 		Order("id ASC").
 		Find(&users).Error; err != nil {
 
@@ -116,7 +122,16 @@ func AdminGetUsers(c *gin.Context) {
 			return
 		}
 
+		var requested, deletes *time.Time
+		if pendingDeletion(user) {
+			at, end := user.DeletedAt.Time, deletesAt(user)
+			requested, deletes = &at, &end
+		}
+
 		result = append(result, UserResponse{
+			DeletionRequestedAt: requested,
+			DeletesAt:           deletes,
+			RestoredAt:          user.RestoredAt,
 			ID:        user.ID,
 			Name:      user.Name,
 			Email:     user.Email,
@@ -229,14 +244,10 @@ func AdminCreateUser(c *gin.Context) {
 	// Cek email
 	// --------------------------------------------------------
 
-	var existingUser models.User
+	// An account waiting to be deleted still holds its address.
+	taken, err := emailTaken(config.DB, req.Email, 0)
 
-	err := config.DB.
-		Where("email = ?", req.Email).
-		First(&existingUser).
-		Error
-
-	if err == nil {
+	if err == nil && taken {
 		c.JSON(http.StatusConflict, gin.H{
 			"ok":      false,
 			"message": "Email sudah digunakan",
@@ -244,7 +255,7 @@ func AdminCreateUser(c *gin.Context) {
 		return
 	}
 
-	if err != nil && err != gorm.ErrRecordNotFound {
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal mengecek email",
@@ -408,18 +419,9 @@ func AdminUpdateUser(c *gin.Context) {
 	// Cek email user lain
 	// --------------------------------------------------------
 
-	var emailUser models.User
+	taken, err := emailTaken(config.DB, req.Email, user.ID)
 
-	err = config.DB.
-		Where(
-			"email = ? AND id <> ?",
-			req.Email,
-			user.ID,
-		).
-		First(&emailUser).
-		Error
-
-	if err == nil {
+	if err == nil && taken {
 		c.JSON(http.StatusConflict, gin.H{
 			"ok":      false,
 			"message": "Email sudah digunakan oleh user lain",
@@ -427,7 +429,7 @@ func AdminUpdateUser(c *gin.Context) {
 		return
 	}
 
-	if err != nil && err != gorm.ErrRecordNotFound {
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal mengecek email",
@@ -557,7 +559,8 @@ func AdminDeleteUser(c *gin.Context) {
 
 	var user models.User
 
-	if err := config.DB.
+	// An account waiting to be deleted can be removed for good at once.
+	if err := config.DB.Unscoped().
 		First(&user, uint(userID)).
 		Error; err != nil {
 
@@ -605,10 +608,7 @@ func AdminDeleteUser(c *gin.Context) {
 		user.Name,
 		"Akun pengguna \""+user.Email+"\" dihapus oleh administrator.",
 	)
-	workspaceRefs := userWorkspaceRefs(user.ID)
-	err = config.DB.Transaction(func(tx *gorm.DB) error {
-		return purgeUserAccount(tx, &user, &audit)
-	})
+	err = purgeAccountForGood(user, audit)
 	if errors.Is(err, errCannotDeleteLastAdmin) {
 		c.JSON(http.StatusConflict, gin.H{
 			"ok":      false,
@@ -624,8 +624,6 @@ func AdminDeleteUser(c *gin.Context) {
 		})
 		return
 	}
-	removeWorkspaceFiles(user.ID, workspaceRefs)
-
 	c.JSON(http.StatusOK, gin.H{
 		"ok":      true,
 		"message": "User berhasil dihapus permanen",

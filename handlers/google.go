@@ -152,12 +152,14 @@ func GoogleLogin(c *gin.Context) {
 	// CARI USER DI POSTGRESQL
 	// ==========================================
 
-	var user models.User
+	// Includes an account in deletion: it gets its own answer, not a new account (the
+	// address is still taken, so creating one would fail).
+	user, err := findUserByEmailAny(email)
 
-	err = config.DB.
-		Where("email = ?", email).
-		First(&user).
-		Error
+	if err == nil && pendingDeletion(user) {
+		refusePendingDeletion(c, user)
+		return
+	}
 
 	if err != nil {
 		// ==========================================
