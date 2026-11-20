@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -32,7 +33,7 @@ var stepWords = map[string]map[string]string{
 	"resumed":       {"id": "Memakai bagian yang sudah jadi sebelumnya", "en": "Using the parts already made"},
 	"tokenLimit":    {"id": "Jatah AI Anda bulan ini sudah habis. Bagian yang sudah jadi tetap disimpan dan bisa dilanjutkan bulan depan.", "en": "Your AI allowance for this month is used up. The finished parts are kept and can be continued next month."},
 	"colours":       {"id": "Mengganti warna website", "en": "Changing the website's colours"},
-	"waitModel":    {"id": "Menunggu AI siap...", "en": "Waiting for the AI to be ready..."},
+	"waitModel":     {"id": "Menunggu AI siap...", "en": "Waiting for the AI to be ready..."},
 	"createdDone":   {"id": "Website Anda sudah jadi.", "en": "Your website is ready."},
 	"reviseDone":    {"id": "Perubahan sudah diterapkan.", "en": "The change is done."},
 	"restyleDone":   {"id": "Tampilan baru sudah diterapkan.", "en": "The new look is applied."},
@@ -66,4 +67,14 @@ func clip(text string, limit int) string {
 		return text
 	}
 	return text[:limit] + "\n..."
+}
+
+var longTypeLiteral = regexp.MustCompile(`'\{[^']{100,}\}'`)
+
+// ShortenErrors replaces long type descriptions in build errors ("does not exist on
+// type '{ name: string; tagline: string; ... }'") with '{...}'. TypeScript repeats the
+// whole shape on every line; the file, line and message are what a repair needs, and
+// a shorter request fits models with a small token limit.
+func ShortenErrors(text string) string {
+	return longTypeLiteral.ReplaceAllString(text, "'{...}'")
 }

@@ -114,7 +114,8 @@
       "classic",
       "cozy"
     ],
-    "kit": "Ornament kind line between sections; FramedPhoto frame thin; for an event or invitation also Countdown, Timeline and AddToCalendar."
+    "kit": "Ornament kind line between sections; FramedPhoto frame thin; for an event or invitation also Countdown, Timeline and AddToCalendar.",
+    "motion": "calm"
   },
   {
     "key": "bold-industrial",
@@ -230,7 +231,8 @@
       "strong",
       "bold"
     ],
-    "kit": "Ornament kind line with a thick rule (className with border-t-4); for an event Timeline."
+    "kit": "Ornament kind line with a thick rule (className with border-t-4); for an event Timeline.",
+    "motion": "lively"
   },
   {
     "key": "quiet-luxury",
@@ -350,7 +352,8 @@
       "elegant",
       "calm"
     ],
-    "kit": "Ornament kind diamond between sections; for an invitation a Monogram (frame circle) above the names, Countdown, Timeline, AddToCalendar and MapLink; FramedPhoto frame thin."
+    "kit": "Ornament kind diamond between sections; for an invitation a Monogram (frame circle) above the names, Countdown, Timeline, AddToCalendar and MapLink; FramedPhoto frame thin.",
+    "motion": "calm"
   },
   {
     "key": "fresh-clinic",
@@ -467,7 +470,8 @@
       "fresh",
       "friendly"
     ],
-    "kit": "Ornament kind dots between sections; Timeline for a schedule."
+    "kit": "Ornament kind dots between sections; Timeline for a schedule.",
+    "motion": "calm"
   },
   {
     "key": "playful-pop",
@@ -583,7 +587,8 @@
       "cheerful",
       "playful"
     ],
-    "kit": "Ornament kind dots; for an event Countdown and Timeline; PhotoGallery for photos."
+    "kit": "Ornament kind dots; for an event Countdown and Timeline; PhotoGallery for photos.",
+    "motion": "playful"
   },
   {
     "key": "nordic-minimal",
@@ -703,7 +708,8 @@
       "calm",
       "natural"
     ],
-    "kit": "Ornament kind line; FramedPhoto frame thin; for an invitation Timeline and AddToCalendar."
+    "kit": "Ornament kind line; FramedPhoto frame thin; for an invitation Timeline and AddToCalendar.",
+    "motion": "calm"
   },
   {
     "key": "night-studio",
@@ -823,7 +829,8 @@
       "modern",
       "cool"
     ],
-    "kit": "Ornament kind line; FramedPhoto frame offset; for an event Countdown."
+    "kit": "Ornament kind line; FramedPhoto frame offset; for an event Countdown.",
+    "motion": "lively"
   },
   {
     "key": "heritage-serif",
@@ -941,7 +948,8 @@
       "trusted",
       "formal"
     ],
-    "kit": "Ornament kind diamond; Monogram frame square for an invitation; Timeline."
+    "kit": "Ornament kind diamond; Monogram frame square for an invitation; Timeline.",
+    "motion": "calm"
   },
   {
     "key": "tropical-sun",
@@ -1058,7 +1066,8 @@
       "tropical",
       "beach"
     ],
-    "kit": "Ornament kind flourish; FramedPhoto frame arch; for an event Countdown and MapLink."
+    "kit": "Ornament kind flourish; FramedPhoto frame arch; for an event Countdown and MapLink.",
+    "motion": "playful"
   },
   {
     "key": "tech-precise",
@@ -1173,7 +1182,8 @@
       "neat",
       "professional"
     ],
-    "kit": "Ornament kind line; Timeline for steps or a schedule."
+    "kit": "Ornament kind line; Timeline for steps or a schedule.",
+    "motion": "lively"
   },
   {
     "key": "handmade-craft",
@@ -1293,7 +1303,8 @@
       "rustic",
       "homely"
     ],
-    "kit": "Ornament kind flourish between sections; FramedPhoto frame arch; for an invitation a Monogram (frame circle), Countdown, Timeline and AddToCalendar."
+    "kit": "Ornament kind flourish between sections; FramedPhoto frame arch; for an invitation a Monogram (frame circle), Countdown, Timeline and AddToCalendar.",
+    "motion": "calm"
   },
   {
     "key": "street-market",
@@ -1410,7 +1421,8 @@
       "busy",
       "bargain"
     ],
-    "kit": "Ornament kind dots; PhotoGallery for products."
+    "kit": "Ornament kind dots; PhotoGallery for products.",
+    "motion": "playful"
   },
   {
     "key": "romantic-soft",
@@ -1530,7 +1542,8 @@
           "putih"
         ]
       }
-    ]
+    ],
+    "motion": "calm"
   },
   {
     "key": "festive-warm",
@@ -1652,6 +1665,7 @@
           "emas"
         ]
       }
-    ]
+    ],
+    "motion": "playful"
   }
 ]

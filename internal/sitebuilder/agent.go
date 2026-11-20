@@ -646,14 +646,17 @@ func (j *job) revise(restyle bool) error {
 }
 
 // fixTokens repairs what the plain-text design check finds (hex colours, palette
-// classes, fonts in code, gradients, pictures from the internet).
+// classes, fonts in code, gradients, pictures from the internet, counting numbers the
+// owner never gave).
 func (j *job) fixTokens() error {
 	for attempt := 0; attempt < 2; attempt++ {
 		files := AgentFiles(j.filesDir)
+		known := KnownNumbers(briefText(j.brief))
 		var problems []string
 		involved := map[string]string{}
 		for rel, content := range files {
 			found := append(CheckTokens(rel, content), CheckLanguage(rel, content, j.brief.Language)...)
+			found = append(found, CheckCountUp(rel, content, known)...)
 			if len(found) > 0 {
 				problems = append(problems, found...)
 				involved[rel] = content
@@ -713,7 +716,7 @@ func (j *job) buildAndRepair() error {
 			return &userError{say(j.lang, "failed"), "the site still fails its check after repairs"}
 		}
 		repair := j.step(models.StepModel, say(j.lang, "repair"))
-		answer, model, err := j.ask(RepairPrompt(j.brief, j.direction, clip(errorsText, 6000), j.filesFor(errorsText)), NeedCoding)
+		answer, model, err := j.ask(RepairPrompt(j.brief, j.direction, clip(ShortenErrors(errorsText), 6000), j.filesFor(errorsText)), NeedCoding)
 		if err != nil {
 			j.done(repair, models.StepFailed, err.Error())
 			return err
