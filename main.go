@@ -231,6 +231,10 @@ func main() {
 			otpLimit(httpguard.ByIP),
 			handlers.ResetPasswordWithOTP,
 		)
+
+		// A message to the admins from an account waiting to be deleted; the token from
+		// the refused sign-in proves who sends it.
+		auth.POST("/deletion-appeal", otpLimit(httpguard.ByIP), handlers.SendDeletionAppeal)
 	}
 
 	// GitHub sends the browser back here; the one-time state says whose connection it is.
@@ -475,6 +479,7 @@ func main() {
 			handlers.AdminDeleteUser,
 		)
 		admin.PATCH("/users/:id/premium", handlers.AdminSetUserPremium)
+		admin.PATCH("/users/:id/restore", handlers.AdminRestoreUser)
 
 		// ========================================================
 		// MAINTENANCE MODE
@@ -515,6 +520,9 @@ func main() {
 		IdleTimeout:       2 * time.Minute,
 		MaxHeaderBytes:    1 << 20,
 	}
+
+	// Accounts deleted more than 30 days ago are removed for good, now and every hour.
+	handlers.StartAccountPurger()
 
 	// A container is stopped with SIGTERM: finish the requests in flight first.
 	go func() {

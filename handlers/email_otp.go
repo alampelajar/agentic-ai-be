@@ -126,7 +126,7 @@ func RequestRegisterOTP(c *gin.Context) {
 	}
 
 	var taken int64
-	if err := config.DB.Model(&models.User{}).Where("email = ?", email).Count(&taken).Error; err != nil {
+	if err := config.DB.Unscoped().Model(&models.User{}).Where("email = ?", email).Count(&taken).Error; err != nil {
 		c.Error(err)
 		otpFail(c, http.StatusInternalServerError, "otp_failed", "Pendaftaran tidak dapat diproses.")
 		return
@@ -207,7 +207,7 @@ func VerifyRegisterOTP(c *gin.Context) {
 		}
 
 		var count int64
-		if err := tx.Model(&models.User{}).Where("email = ?", email).Count(&count).Error; err != nil {
+		if err := tx.Unscoped().Model(&models.User{}).Where("email = ?", email).Count(&count).Error; err != nil {
 			return err
 		}
 		if count > 0 {
@@ -281,7 +281,7 @@ func RequestChangeEmailOTP(c *gin.Context) {
 	}
 
 	var taken int64
-	if err := config.DB.Model(&models.User{}).Where("email = ?", newEmail).Count(&taken).Error; err != nil {
+	if err := config.DB.Unscoped().Model(&models.User{}).Where("email = ?", newEmail).Count(&taken).Error; err != nil {
 		c.Error(err)
 		otpFail(c, http.StatusInternalServerError, "otp_failed", "Permintaan tidak dapat diproses.")
 		return
@@ -363,7 +363,7 @@ func VerifyChangeEmailOTP(c *gin.Context) {
 		}
 
 		var count int64
-		if err := tx.Model(&models.User{}).Where("email = ?", newEmail).Count(&count).Error; err != nil {
+		if err := tx.Unscoped().Model(&models.User{}).Where("email = ?", newEmail).Count(&count).Error; err != nil {
 			return err
 		}
 		if count > 0 {

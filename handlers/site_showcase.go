@@ -23,9 +23,14 @@ const showcaseLimit = 30
 
 // showcasedSite finds a website that is in the gallery now: chosen by an admin and
 // still published.
+// ownerNotInDeletion leaves out websites whose owner's account waits to be deleted: they
+// are offline (the site runner skips them) and must not show in the gallery either.
+const ownerNotInDeletion = "user_id IN (SELECT id FROM users WHERE deleted_at IS NULL)"
+
 func showcasedSite(id uint) (*models.Site, bool) {
 	var site models.Site
-	if config.DB.Where("id = ? AND showcased_at IS NOT NULL AND published_release_id IS NOT NULL", id).First(&site).Error != nil {
+	if config.DB.Where("id = ? AND showcased_at IS NOT NULL AND published_release_id IS NOT NULL", id).
+		Where(ownerNotInDeletion).First(&site).Error != nil {
 		return nil, false
 	}
 	return &site, true
@@ -50,7 +55,7 @@ func GetSiteShowcase(c *gin.Context) {
 	language := siteLanguage(c.Query("lang"))
 	var sites []models.Site
 	config.DB.Where("showcased_at IS NOT NULL AND published_release_id IS NOT NULL AND slug IS NOT NULL").
-		Order("showcased_at DESC").Limit(showcaseLimit).Find(&sites)
+		Where(ownerNotInDeletion).Order("showcased_at DESC").Limit(showcaseLimit).Find(&sites)
 	settings := sitebuilder.LoadSettings()
 	list := make([]gin.H, 0, len(sites))
 	for index := range sites {

@@ -435,6 +435,7 @@ func TestDeletingAnAccountDeletesItsMemories(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("account deletion = %d, body=%s", response.Code, response.Body.String())
 	}
+	passWaitingTime(t, leaving.ID)
 
 	var memories, settings, others int64
 	m.db.Unscoped().Model(&models.AgentMemory{}).Where("user_id = ?", leaving.ID).Count(&memories)
