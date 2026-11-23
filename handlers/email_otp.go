@@ -120,6 +120,12 @@ func RequestRegisterOTP(c *gin.Context) {
 		otpFail(c, http.StatusBadRequest, "invalid_email", "Email tidak valid.")
 		return
 	}
+	// Throwaway addresses (10minutemail, temp-mail...) would let one person open
+	// many accounts and their free quota; sign-up asks for an address they keep.
+	if services.IsDisposableEmail(email) {
+		otpFail(c, http.StatusBadRequest, services.DisposableEmailCode, services.DisposableEmailMessage)
+		return
+	}
 	if code, message := validNewPassword(req.Password, req.Email, req.Name); code != "" {
 		otpFail(c, http.StatusBadRequest, code, message)
 		return
@@ -262,6 +268,11 @@ func RequestChangeEmailOTP(c *gin.Context) {
 	newEmail, valid := services.NormalizeEmail(req.NewEmail)
 	if !valid {
 		otpFail(c, http.StatusBadRequest, "invalid_email", "Email tidak valid.")
+		return
+	}
+	// Same rule as sign-up, so an account cannot move to a throwaway address later.
+	if services.IsDisposableEmail(newEmail) {
+		otpFail(c, http.StatusBadRequest, services.DisposableEmailCode, services.DisposableEmailMessage)
 		return
 	}
 

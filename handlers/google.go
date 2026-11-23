@@ -16,6 +16,7 @@ import (
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
+	"agentic-ai-backend/services"
 	"agentic-ai-backend/utils"
 )
 
@@ -165,6 +166,17 @@ func GoogleLogin(c *gin.Context) {
 		// ==========================================
 		// USER BELUM ADA
 		// ==========================================
+
+		// A new account follows the sign-up rule: no throwaway address. An account
+		// that already exists may still sign in.
+		if services.IsDisposableEmail(email) {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"ok":      false,
+				"code":    services.DisposableEmailCode,
+				"message": services.DisposableEmailMessage,
+			})
+			return
+		}
 
 		// Addresses are personal data: they stay out of the log.
 		log.Println("Google login - user belum ada, membuat akun baru")
