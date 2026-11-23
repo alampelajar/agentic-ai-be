@@ -113,6 +113,15 @@ func Register(c *gin.Context) {
 		return
 	}
 
+	if services.IsDisposableEmail(req.Email) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ok":      false,
+			"code":    services.DisposableEmailCode,
+			"message": services.DisposableEmailMessage,
+		})
+		return
+	}
+
 	if len(req.Password) < 8 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"ok":      false,
