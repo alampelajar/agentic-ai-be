@@ -10,6 +10,14 @@ export const site = {
   social: {} as Record<string, string>,
   images: [] as { src: string; alt: string }[],
   logo: '',
+  products: [] as { name: string; image: string; alt: string }[],
+}
+
+/** The illustration of a product named in the brief, or undefined when it has none. */
+export function productImage(name: string): { src: string; alt: string } | undefined {
+  const wanted = name.trim().toLowerCase()
+  const product = site.products.find((item) => item.image && item.name.trim().toLowerCase() === wanted)
+  return product ? { src: product.image, alt: product.alt } : undefined
 }
 
 /** A WhatsApp link with a prepared message, or '' when the site has no WhatsApp number. */

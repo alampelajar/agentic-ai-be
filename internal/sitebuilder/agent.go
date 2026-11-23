@@ -49,6 +49,8 @@ type Worker struct {
 	DB            *gorm.DB
 	Storage       cloudworkspace.WorkspaceStorage
 	Models        ModelCaller
+	// Illustrator draws the product illustrations; nil leaves products without pictures.
+	Illustrator   Illustrator
 	Settings      Settings
 	Images        jobspec.Images
 	MaxConcurrent int
@@ -474,6 +476,15 @@ func (j *job) perform() error {
 		return err
 	}
 	j.done(step, models.StepDone, "direction: "+j.direction.Key)
+
+	// Product illustrations come before the pages, so the pages are written knowing
+	// which products have a picture. Another look draws them again in its colours.
+	if len(j.brief.Products) > 0 {
+		j.illustrate()
+		if err := j.writeGenerated(); err != nil { // site.ts lists the pictures
+			return err
+		}
+	}
 
 	switch {
 	case j.progress.Written:

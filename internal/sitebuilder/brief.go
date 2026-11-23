@@ -57,6 +57,9 @@ type Brief struct {
 	ContentNotes string            `json:"content_notes"`
 	Contact      Contact           `json:"contact"`
 	Social       map[string]string `json:"social,omitempty"`
+	// Products are the products, dishes or items the person named, each with the
+	// illustration the worker drew for it (illustrate.go).
+	Products []BriefProduct `json:"products,omitempty"`
 	// ChangesAsked are the owner's own later requests, newest last. They are part of
 	// the brief and win over the first plan, so a review never undoes them.
 	ChangesAsked []string `json:"changes_asked,omitempty"`
@@ -182,6 +185,7 @@ func (b *Brief) Normalize() error {
 		}
 	}
 	b.Forms = forms
+	b.Products = normalizeProducts(b.Products)
 	return nil
 }
 
@@ -226,7 +230,26 @@ func SiteTS(b Brief, images []Image) string {
 		fmt.Fprintf(&out, "    { src: %s, alt: %s },\n", jsString(image.Src), jsString(image.Alt))
 	}
 	out.WriteString("  ] as { src: string; alt: string }[],\n")
-	fmt.Fprintf(&out, "  logo: %s,\n}\n\n", jsString(logo))
+	fmt.Fprintf(&out, "  logo: %s,\n", jsString(logo))
+	// Illustrations drawn for the products; never the owner's photos, so a hero or a
+	// gallery (site.images) never shows a drawing as if it were a photo.
+	out.WriteString("  products: [\n")
+	for _, product := range b.Products {
+		image, alt := product.Image, product.Alt
+		if !ownIllustration(image) {
+			image, alt = "", ""
+		}
+		fmt.Fprintf(&out, "    { name: %s, image: %s, alt: %s },\n", jsString(product.Name), jsString(image), jsString(alt))
+	}
+	out.WriteString("  ] as { name: string; image: string; alt: string }[],\n}\n\n")
+	out.WriteString(`/** The illustration of a product named in the brief, or undefined when it has none. */
+export function productImage(name: string): { src: string; alt: string } | undefined {
+  const wanted = name.trim().toLowerCase()
+  const product = site.products.find((item) => item.image && item.name.trim().toLowerCase() === wanted)
+  return product ? { src: product.image, alt: product.alt } : undefined
+}
+
+`)
 	out.WriteString(`/** A WhatsApp link with a prepared message, or '' when the site has no WhatsApp number. */
 export function whatsappLink(message = ''): string {
   const number = site.contact.whatsapp.replace(/[^0-9]/g, '')

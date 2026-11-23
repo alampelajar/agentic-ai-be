@@ -50,6 +50,8 @@ export type Item = {
   note?: string
   /** A lucide-react icon element, e.g. <Wrench className="size-6" />. */
   icon?: ReactNode
+  /** The product's illustration: productImage('<product name>') from '../site'. Nothing is shown when it is undefined. */
+  image?: { src: string; alt: string }
 }
 
 /** The page sections can sit on: the page colour, the surface colour, the main colour or the dark text colour. */

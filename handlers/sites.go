@@ -679,6 +679,7 @@ func SiteBrief(c *gin.Context) {
 	if err == nil {
 		brief.Name = name
 		brief.Language, brief.Kind, brief.Contact = language, site.Kind, contact
+		brief.ForgetIllustrations() // only the worker draws them; never a path from the model
 		err = brief.Normalize()
 	}
 	if err != nil {
