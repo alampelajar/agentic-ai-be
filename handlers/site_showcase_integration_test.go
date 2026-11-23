@@ -84,8 +84,8 @@ func TestSiteShowcase(t *testing.T) {
 		_ = json.Unmarshal(rec.Body.Bytes(), &parsed)
 		return rec.Code, parsed
 	}
-	listed := func() map[string]any {
-		code, body := call(http.MethodGet, "/showcase?lang=id", "")
+	listedIn := func(lang string) map[string]any {
+		code, body := call(http.MethodGet, "/showcase?lang="+lang, "")
 		if code != http.StatusOK {
 			t.Fatalf("showcase = %d %v", code, body)
 		}
@@ -96,6 +96,7 @@ func TestSiteShowcase(t *testing.T) {
 		}
 		return nil
 	}
+	listed := func() map[string]any { return listedIn("id") }
 
 	if listed() != nil {
 		t.Fatal("a website no admin chose is in the gallery")
@@ -122,6 +123,22 @@ func TestSiteShowcase(t *testing.T) {
 	if _, found := showcasedSite(published.ID); !found {
 		t.Error("a website in the gallery cannot be copied")
 	}
+	// The gallery speaks the visitor's language: an English website is shown to an
+	// English interface, and only when nothing is written in Indonesian, to an
+	// Indonesian one.
+	db.Model(&published).Update("language", "en")
+	if listedIn("en") == nil {
+		t.Error("an English website is missing from the English gallery")
+	}
+	var indonesian int64
+	db.Model(&models.Site{}).Where("showcased_at IS NOT NULL AND published_release_id IS NOT NULL AND slug IS NOT NULL AND language = ?", "id").Count(&indonesian)
+	if inID := listedIn("id"); indonesian > 0 && inID != nil {
+		t.Error("an English website is in the Indonesian gallery although Indonesian ones exist")
+	} else if indonesian == 0 && inID == nil {
+		t.Error("with no Indonesian website the gallery must show the others, not nothing")
+	}
+	db.Model(&published).Update("language", "id")
+
 	var audit int64
 	db.Model(&models.AuditLog{}).Where("action = ? AND entity_id = ?", "site.showcase", strconv.Itoa(int(published.ID))).Count(&audit)
 	if audit != 1 {
