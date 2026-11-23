@@ -39,6 +39,7 @@ func main() {
 		DB:            config.DB,
 		Storage:       storage,
 		Models:        handlers.BuilderModels{},
+		Illustrator:   handlers.BuilderIllustrator{},
 		Settings:      sitebuilder.LoadSettings(),
 		MaxConcurrent: concurrent,
 	}

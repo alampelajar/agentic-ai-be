@@ -32,6 +32,7 @@ var stepWords = map[string]map[string]string{
 	"reviewSkipped": {"id": "Website sudah lolos pemeriksaan dan disimpan. Tinjauan tambahan bisa diminta nanti.", "en": "The website passed its check and is saved. A further review can be asked for later."},
 	"resumed":       {"id": "Memakai bagian yang sudah jadi sebelumnya", "en": "Using the parts already made"},
 	"tokenLimit":    {"id": "Jatah AI Anda bulan ini sudah habis. Bagian yang sudah jadi tetap disimpan dan bisa dilanjutkan bulan depan.", "en": "Your AI allowance for this month is used up. The finished parts are kept and can be continued next month."},
+	"illustrate":    {"id": "Menggambar ilustrasi produk", "en": "Drawing pictures of the products"},
 	"colours":       {"id": "Mengganti warna website", "en": "Changing the website's colours"},
 	"waitModel":     {"id": "Menunggu AI siap...", "en": "Waiting for the AI to be ready..."},
 	"createdDone":   {"id": "Website Anda sudah jadi.", "en": "Your website is ready."},
