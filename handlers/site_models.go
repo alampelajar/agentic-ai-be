@@ -138,7 +138,7 @@ func builderCandidates(userID uint, need sitebuilder.Need) ([]models.AIModel, er
 			found = defaults
 		}
 	}
-	overQuota := systemCallsToday(userID) >= int64(comboSystemDaily())
+	overQuota := !isUnlimitedUser(userID) && systemCallsToday(userID) >= int64(comboSystemDaily())
 	failRates := recentFailRates(userID, 6*time.Hour)
 	byID := map[uint]models.AIModel{}
 	candidates := make([]services.RouteCandidate, 0, len(found))
