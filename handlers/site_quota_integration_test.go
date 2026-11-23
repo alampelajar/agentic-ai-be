@@ -43,7 +43,10 @@ func TestBuilderLimitsFollowThePlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	UseCloudWorkspaceStorage(storage, cloudworkspace.DefaultLimits(), nil)
+	// Fewer workspaces than a premium account's websites: the plan's number still holds.
+	limits := cloudworkspace.DefaultLimits()
+	limits.MaxWorkspacesPerUser = freeSiteLimit
+	UseCloudWorkspaceStorage(storage, limits, nil)
 	t.Setenv("SITE_DATA_ROOT", t.TempDir())
 	t.Setenv(builderQuotaEnvName, "")
 	t.Setenv(builderPremiumQuotaEnv, "")

@@ -228,13 +228,17 @@ func CreateSite(c *gin.Context) {
 		siteError(c, http.StatusTooManyRequests, "token_limit", "Jatah AI Anda bulan ini sudah habis.")
 		return
 	}
-	// Every website has its own workspace, and the plan's website limit (2 free, 50
-	// premium) already bounds how many a person has. The general workspace limit is not
-	// checked here: it counted workspaces left from features people no longer see and
-	// stopped a premium account long before 50 websites.
+	var count int64
 	storage, limits, err := workspaceStorage()
 	if err != nil {
 		siteError(c, http.StatusInternalServerError, "storage", "Penyimpanan tidak tersedia.")
+		return
+	}
+	config.DB.Model(&models.CloudWorkspace{}).Where("user_id = ?", userID).Count(&count)
+	// Every website owns one workspace, so the plan's number of websites is allowed
+	// even where it is more than the general workspace limit (premium: 50, not 10).
+	if int(count) >= max(limits.MaxWorkspacesPerUser, plan.SiteLimit) {
+		siteError(c, http.StatusConflict, "workspace_limit", "Jumlah proyek sudah mencapai batas. Hapus workspace yang tidak dipakai.")
 		return
 	}
 

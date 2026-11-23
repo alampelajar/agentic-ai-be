@@ -173,6 +173,11 @@ func main() {
 		handlers.GetMaintenanceStatus,
 	)
 
+	// The gallery is public: a visitor who has not signed in may look around first
+	// (WEBSITE-BUILDER.md, section 2, rule 5). It shows only published websites an
+	// admin chose, never their owner or description.
+	api.GET("/sites/showcase", httpguard.RateLimit(httpguard.NewLimiter(120, 30), httpguard.ByIP), handlers.GetSiteShowcase)
+
 	// ============================================================
 	// AUTH
 	// ============================================================
@@ -301,7 +306,6 @@ func main() {
 		protected.GET("/sites", handlers.GetSites)
 		protected.POST("/sites", importLimit, handlers.CreateSite)
 		protected.GET("/sites/slug-available", handlers.SiteSlugAvailable)
-		protected.GET("/sites/showcase", handlers.GetSiteShowcase)
 		protected.GET("/sites/:id", handlers.GetSite)
 		protected.PATCH("/sites/:id", handlers.UpdateSite)
 		protected.DELETE("/sites/:id", handlers.DeleteSite)
