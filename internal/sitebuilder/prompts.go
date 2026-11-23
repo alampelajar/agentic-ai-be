@@ -242,7 +242,7 @@ func CodingSystem(b Brief, d Direction) string {
 STACK (fixed, nothing else exists)
 - React 19 + TypeScript function components, Tailwind CSS v4 classes, lucide-react icons. No other package: do not import anything else.
 - Pages are web/src/pages/<Name>.tsx with a default export. App already shows every page inside Layout, so a page never renders Layout, a header or a footer. Shared pieces go in web/src/components/<Name>.tsx (named or default export).
-- Allowed imports: 'react', 'lucide-react', '../site', '../router', '../components/<Name>', '../kit/<Name>' (or several at once from '../kit'), './<Name>' inside components.
+- Allowed imports: 'react', 'lucide-react', '../site', '../router', '../blocks' (the sections and every kit piece), '../components/<Name>', '../kit/<Name>' (or several at once from '../kit'), './<Name>' inside components.
 - '../site' exports: site = { name: string, tagline: string, language: 'id' | 'en', pages: {path, label}[], contact: {phone, whatsapp, email, address, hours} (all strings, '' when not given), social: Record<string, string>, images: {src, alt}[], logo: string (a picture path, '' when there is no logo) } and whatsappLink(message?: string): string, which returns '' when there is no WhatsApp number.
 - '../router' exports: Link (props: to, className, children... use it for every link to a page of this site), navigate(path), usePath().
 - '../components/SiteForm' exports: SiteForm with props { name: string; fields: {name, label, type?: 'text'|'email'|'tel'|'textarea'|'select'|'date'|'number', required?, placeholder?, options?}[]; submitLabel?; successMessage?; className? }. Use it for every form; it stores answers on the site's server, where only the owner reads them. A form marked guestbook in the brief must have a field named exactly "name" (the visitor's name) and one named exactly "message" (the wish or message); it may have more, private fields.
@@ -258,6 +258,19 @@ STACK (fixed, nothing else exists)
   PhotoGallery { limit? } the owner's photos in a grid; it shows nothing when there are none.
   Motion pieces (see MOTION): Reveal { from?: 'up'|'down'|'left'|'right'|'fade'|'zoom', delay?: ms, as? } fades a block in when scrolled into view; Stagger { from?, as?, itemAs?, className, itemClassName } shows its children one after another (grid classes go on Stagger); CountUp { to, prefix?, suffix? } counts up to a number written directly (to={12}) that the brief states, never a price or count it does not give (checked); Marquee { items: string[], speed? } slides short words across; RotatingWords { words: string[] } swaps one word inside a headline; Parallax { speed?: 0.05-0.3 } moves a picture slower than the page.
   Each accepts className to replace its default classes.
+FINISHED SECTIONS (import from '../blocks'; build every page from them)
+- They already carry this look: its layout, spacing, colours, buttons and movement. Pass only words and facts. Never style them, never give them className, never put them inside another wrapper or container, never rebuild what one does.
+- Stack them in the order of the page's sections, directly one after another: nothing between them (no Ornament, divider or spacer; the sections already have their own room). Every page starts with Hero (home page) or EventHero (the main page of an invitation or event), or PageIntro (every other page): these hold the page's one h1.
+- Sections alternate their background by themselves: leave tone out (use tone="primary" or "dark" only for one deliberate band). Never number titles yourself ("1. Ganti oli"): Steps numbers its steps, other lists are not numbered.
+- Hero { title, highlight?, text, actions?, facts?, panelTitle?, photo? }: title says what the business offers, in at most 8 words (not only its name: the header shows the name), written in normal case, never starting with "Selamat datang" or "Welcome"; text 1-2 plain sentences on what is offered, where and for whom; facts 2-4 short facts from the brief (hours, area served, what is made).
+- PageIntro { title, text? }. EventHero { title, date, start?: "YYYY-MM-DDTHH:MM", end?, place?, label?, letters? }: countdown, calendar button and map link included.
+- Features { title, intro?, items: {title, text?, note?, icon?}[] }: services, products, menu items, reasons. note only for a price or label the brief gives; icon is a lucide element, e.g. <Wrench className="size-6" />.
+- Steps { title, intro?, items: {title, text?}[] }. Statement { text, by? }: one strong sentence, at most once per page. InfoTable { title, intro?, rows: {label, value}[] }. FAQ { title, intro?, items: {question, answer}[] }. Gallery { title, intro?, limit? }: shows nothing without photos.
+- ContactSection { title, intro?, form?: {name, fields: {name, label, type?: 'text'|'email'|'tel'|'textarea'|'select'|'date'|'number', required?, options?: string[]}[], submitLabel?, successMessage?}, whatsappLabel?, whatsappMessage? }: shows WhatsApp, phone, e-mail, address with a map link and hours by itself. CallToAction { title, text?, actions? }: WhatsApp when no actions.
+- Action = { label, to?: a page path, href?, whatsapp?: a message, kind?: 'primary'|'secondary' }.
+- Header { note?, callLabel? } and Footer { signOff? } belong only in Layout.
+- Only where no finished section fits (a Timeline of the day, a Guestbook beside its form, something the owner asked for), write your own section: wrap it in Section { tone?, id?, labelledBy? } with a SectionHeading { id?, title, intro? }, so it has the same spacing and heading, and use the kit pieces and theme tokens inside.
+
 - Icons: import only names from this list, which exist in the installed lucide-react: %s. There are no brand logos (Instagram, Facebook, WhatsApp): use AtSign or MessageCircle.
 - Do not touch window, document or localStorage while rendering; only inside useEffect or event handlers.
 
@@ -268,12 +281,10 @@ COLOURS, FONTS AND SHAPE COME ONLY FROM THE THEME
 
 DESIGN DIRECTION: %s — %s
 Shape: %s
-Composition (follow it, it is what makes this site look different from others):
-- %s
 Voice of the text: %s
 Finished pieces this look uses (from '../kit/'): %s
 
-MOTION (this look moves in a "%s" way): %s Classes: lift (rises on hover), float (a decoration bobs; never text). Never write your own animation (@keyframes, animate-bounce/ping/pulse, requestAnimationFrame). The hero text shows at once or with a delay of at most 300.
+MOTION (this look moves in a "%s" way): the finished sections already move. In a section you write yourself: %s Classes: lift (rises on hover), float (a decoration bobs; never text). Never write your own animation (@keyframes, animate-bounce/ping/pulse, requestAnimationFrame). The hero text shows at once or with a delay of at most 300.
 
 %s
 
@@ -286,7 +297,7 @@ CONTENT
 - For an invitation or an event, make it feel like one: the date and place clearly at the top, the look's ornaments, and the finished pieces that fit (Countdown, AddToCalendar, Timeline for the schedule, MapLink for the place, Guestbook for wishes).
 
 QUALITY
-- Mobile first: works from 360px wide with no horizontal scroll, then sm:, md:, lg:. The header menu collapses into a button with aria-expanded on phones.
+- Mobile first: works from 360px wide with no horizontal scroll, then sm:, md:, lg:.
 - Semantic HTML: one h1 per page, sections with headings, buttons for actions, links for navigation; visible focus; alt text on images.
 - Content width with mx-auto max-w-6xl px-4 (or the direction's variant); sections with clear vertical rhythm (py-16 to py-28).
 - Keep components small and readable. No comments that explain the obvious.
@@ -296,7 +307,7 @@ Reply with complete files only, each in this exact form, and nothing outside the
 <file path="web/src/pages/Example.tsx">
 ...the whole file...
 </file>`,
-		knownIcons, strings.Join(palette, ", "), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], kitLine(d), d.Motion, d.MotionOf().Guide, neverList, languageName(b.Language))
+		knownIcons, strings.Join(palette, ", "), d.Name["en"], d.Description["en"], d.Shape, d.Voice["en"], kitLine(d), d.Motion, d.MotionOf().Guide, neverList, languageName(b.Language))
 }
 
 // kitLine names the finished pieces a look uses.
@@ -338,7 +349,9 @@ func LayoutPrompt(b Brief, d Direction) []Message {
 		{Role: "user", Content: fmt.Sprintf(`Brief:
 %s
 
-Write web/src/components/Layout.tsx: the default export Layout({ children }: { children: React.ReactNode }) that wraps every page. It holds the header with the site name (or site.logo when not empty) and navigation built from site.pages (Link, the current page marked with usePath and aria-current="page"), a phone menu button, <main>{children}</main>, and the footer with the contact details that are not empty. Follow the direction's header and footer exactly.`, briefText(b))},
+Write web/src/components/Layout.tsx: the default export Layout({ children }: { children: ReactNode }) that returns
+<div className="min-h-screen bg-background font-body text-foreground"><Header note="..." /><main>{children}</main><Footer signOff="..." /></div>
+with Header and Footer from '../blocks' (they already show the name, the pages, a phone menu and the contact details). note: a short line from the brief in the site's language, such as the opening hours or the delivery area. signOff: one short warm closing line for this business. Nothing else.`, briefText(b))},
 	}
 }
 
@@ -369,7 +382,7 @@ Write %s: the page "%s" at %s. Purpose: %s
 Sections, in order:
 - %s
 %s
-Make this page feel designed for this business, following the composition. The page is shown inside Layout already: do not import or render Layout, and do not add a header, navigation bar or footer. Return only this file (and a new component file only if the page really needs one).`,
+Build the page from the finished sections in '../blocks', one per listed section where one fits, in this order; start with Hero, EventHero or PageIntro as the rules say. Write the words for this business. The page is shown inside Layout already: do not import or render Layout, and do not add a header, navigation bar or footer. Return only this file (and a new component file only if the page really needs one).`,
 			briefText(b), layout, page.PageFile(index), page.Title, page.Path(index), page.Purpose, strings.Join(page.Sections, "\n- "), formNote)},
 	}
 }
@@ -409,8 +422,6 @@ First: every visible text must be in %s. Any text in another language is the mos
 
 Design direction: %s — %s
 Shape: %s
-Composition:
-- %s
 Voice: %s
 
 %s
@@ -421,12 +432,12 @@ The brief's "changes_asked" are the owner's own later requests, newest last. The
 
 Also check: no empty frame, empty picture box or gallery without photos is shown, and no text tells visitors that content will come later; a page only promises that answers appear when the form is a guestbook shown with Guestbook; an invitation or event page uses the finished pieces the look names (%s);
 the movement fits the look's motion level ("%s": %s) and uses only the motion pieces;
-the composition is followed (not a generic layout); text is specific to the business, in %s, and uses only facts from the brief; contact details are only shown when present; each page has one h1; the phone layout has no horizontal scroll and the menu works on phones; nothing references pictures from the internet.
+pages are built from the finished sections in '../blocks' in the brief's order, with the page's h1 in Hero, EventHero or PageIntro, and own sections only where none fits; text is specific to the business, in %s, and uses only facts from the brief; contact details are only shown when present; each page has one h1; the phone layout has no horizontal scroll and the menu works on phones; nothing references pictures from the internet.
 
 Reply with one JSON object and nothing else:
 {"pass": <true when nothing important is wrong>, "fixes": [{"file": "<path>", "problem": "<what to change, concretely>"}]}
 At most 6 fixes, most important first. Do not list matters of taste.`,
-		languageName(b.Language), d.Name["en"], d.Description["en"], d.Shape, strings.Join(d.Composition, "\n- "), d.Voice["en"], neverList, ownerRequestsRule(b), kitLine(d), d.Motion, d.MotionOf().Guide, languageName(b.Language))
+		languageName(b.Language), d.Name["en"], d.Description["en"], d.Shape, d.Voice["en"], neverList, ownerRequestsRule(b), kitLine(d), d.Motion, d.MotionOf().Guide, languageName(b.Language))
 	return []Message{
 		{Role: "system", Content: system},
 		{Role: "user", Content: fmt.Sprintf("Brief:\n%s\n\nFiles:\n\n%s", briefText(b), filesText(files, func(path string) bool { return strings.HasSuffix(path, ".tsx") }))},

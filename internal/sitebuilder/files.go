@@ -42,11 +42,11 @@ func CopyTemplate(filesDir string) error {
 
 // fixedPrefixes are template files that every run writes again, so a site made
 // before a template change gets the new version of them (the kit, the form route).
-var fixedPrefixes = []string{"web/src/kit/"}
+var fixedPrefixes = []string{"web/src/kit/", "web/src/blocks/"}
 
 // isFixed is true for a template file that is the same in every site.
 func isFixed(rel string) bool {
-	if protectedFiles[rel] && rel != "site.json" && rel != "web/index.html" && rel != "web/src/theme.css" && rel != "web/src/site.ts" && rel != "web/src/routes.tsx" && rel != "package.json" {
+	if protectedFiles[rel] && rel != "site.json" && rel != "web/index.html" && rel != "web/src/theme.css" && rel != "web/src/look.ts" && rel != "web/src/site.ts" && rel != "web/src/routes.tsx" && rel != "package.json" {
 		return true
 	}
 	for _, prefix := range fixedPrefixes {
@@ -81,6 +81,7 @@ func RefreshFixedFiles(filesDir string) error {
 // agent may not write them (WEBSITE-BUILDER.md, section 6).
 var protectedFiles = map[string]bool{
 	"web/src/theme.css":               true,
+	"web/src/look.ts":                 true,
 	"web/src/site.ts":                 true,
 	"web/src/routes.tsx":              true,
 	"web/src/main.tsx":                true,
@@ -397,4 +398,18 @@ func CheckCountUp(rel, content string, known map[string]bool) []string {
 		}
 	}
 	return problems
+}
+
+// CheckUsesBlocks refuses a page or layout written without the finished sections: the
+// sections carry the look, so a page built by hand looks plainer than the rest of the
+// site. The page-not-found page may stay simple.
+func CheckUsesBlocks(rel, content string) []string {
+	needs := rel == "web/src/components/Layout.tsx" || (strings.HasPrefix(rel, "web/src/pages/") && rel != "web/src/pages/NotFound.tsx" && strings.HasSuffix(rel, ".tsx"))
+	if !needs || strings.Contains(content, "../blocks") {
+		return nil
+	}
+	if rel == "web/src/components/Layout.tsx" {
+		return []string{rel + ":1 the layout must use Header and Footer from '../blocks'"}
+	}
+	return []string{rel + ":1 the page is not built from the finished sections: use Hero, PageIntro or EventHero and the other sections from '../blocks'"}
 }

@@ -436,7 +436,7 @@ func describe(model string, written, refused []string) string {
 }
 
 // writeGenerated writes the files that come from the brief and the direction.
-func (j *job) writeGenerated(theme bool) error {
+func (j *job) writeGenerated() error {
 	if err := RefreshFixedFiles(j.filesDir); err != nil {
 		return err
 	}
@@ -445,10 +445,13 @@ func (j *job) writeGenerated(theme bool) error {
 		"web/src/routes.tsx": RoutesTSX(j.brief),
 		"web/index.html":     IndexHTML(j.brief),
 		"site.json":          SiteJSON(j.brief, j.direction.Key),
+		// Always written: a site made before the finished sections existed gets its look too.
+		"web/src/look.ts": LookTS(j.direction),
 	}
-	if theme {
-		files["web/src/theme.css"] = ThemeCSS(j.direction, j.variant, j.brief.Colours)
-	}
+	// The theme is written on every run as well: it follows only from the look, its colour
+	// variant and the owner's colours, and a site made earlier gets new theme rules (the
+	// movement, the alternating sections) with its next change.
+	files["web/src/theme.css"] = ThemeCSS(j.direction, j.variant, j.brief.Colours)
 	for rel, content := range files {
 		if err := WriteSiteFile(j.filesDir, rel, content); err != nil {
 			return err
@@ -466,7 +469,7 @@ func (j *job) perform() error {
 	}
 
 	step := j.step(models.StepInfo, say(j.lang, "prepare"))
-	if err := j.writeGenerated(first || restyle); err != nil {
+	if err := j.writeGenerated(); err != nil {
 		j.done(step, models.StepFailed, err.Error())
 		return err
 	}
@@ -629,7 +632,7 @@ func (j *job) revise(restyle bool) error {
 		j.done(colourStep, models.StepDone, coloursText(ThemePalette(j.direction, j.variant, j.brief.Colours)))
 	}
 	if pagesChanged || coloursChanged {
-		if err := j.writeGenerated(coloursChanged); err != nil {
+		if err := j.writeGenerated(); err != nil {
 			return err
 		}
 	}
@@ -657,6 +660,7 @@ func (j *job) fixTokens() error {
 		for rel, content := range files {
 			found := append(CheckTokens(rel, content), CheckLanguage(rel, content, j.brief.Language)...)
 			found = append(found, CheckCountUp(rel, content, known)...)
+			found = append(found, CheckUsesBlocks(rel, content)...)
 			if len(found) > 0 {
 				problems = append(problems, found...)
 				involved[rel] = content

@@ -1,27 +1,14 @@
 import type { ReactNode } from 'react'
-import { Link } from '../router'
-import { site } from '../site'
+import { Footer, Header } from '../blocks'
 
-// The starting layout. The agent replaces it with one that follows the design direction.
+// The starting layout: the finished header and footer, shaped by the look. The agent may
+// give them a short note and a closing line.
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className='min-h-screen bg-background font-body text-foreground'>
-      <header className='border-b border-border'>
-        <nav className='mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4'>
-          <Link to='/' className='font-heading text-xl'>
-            {site.name}
-          </Link>
-          <div className='flex flex-wrap gap-4 text-sm'>
-            {site.pages.map((page) => (
-              <Link key={page.path} to={page.path}>
-                {page.label}
-              </Link>
-            ))}
-          </div>
-        </nav>
-      </header>
+      <Header />
       <main>{children}</main>
-      <footer className='border-t border-border px-4 py-8 text-center text-sm text-muted'>{site.name}</footer>
+      <Footer />
     </div>
   )
 }
