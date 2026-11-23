@@ -497,7 +497,7 @@ func TestLooksMove(t *testing.T) {
 		}
 		levels[d.Motion]++
 		css := ThemeCSS(d, "", nil)
-		for _, want := range []string{"--motion-distance: " + style.Distance, "@utility lift", "@utility float", "[data-reveal='up']:not([data-shown])", ".marquee-track [data-copy] { display: none; }"} {
+		for _, want := range []string{"--motion-distance: " + style.Distance, "@utility lift", "@utility float", "[data-reveal='up']:not([data-shown])", ".marquee-track [data-copy] { display: none; }", "main > section[data-band]:nth-of-type(even) {", "--color-on-accent: "} {
 			if !strings.Contains(css, want) {
 				t.Errorf("%s theme lacks %q", d.Key, want)
 			}
@@ -564,5 +564,67 @@ func TestShortenErrors(t *testing.T) {
 	short := "web/src/pages/Home.tsx:3:1 Cannot find name 'Foo'."
 	if ShortenErrors(short) != short {
 		t.Fatal("a short error changed")
+	}
+}
+
+// Every look shapes the finished sections, and its look.ts names every choice.
+func TestEveryLookShapesTheSections(t *testing.T) {
+	for _, d := range Directions() {
+		if err := d.Blocks.validate(); err != nil {
+			t.Fatalf("%s: %v", d.Key, err)
+		}
+		ts := LookTS(d)
+		for _, field := range []string{`"header": "` + d.Blocks.Header + `"`, `"hero": "` + d.Blocks.Hero + `"`, `"list": "` + d.Blocks.List + `"`, `"airy": `, "export const look: Look ="} {
+			if !strings.Contains(ts, field) {
+				t.Errorf("%s look.ts lacks %s", d.Key, field)
+			}
+		}
+		if !strings.Contains(CodingSystem(Brief{Language: "id"}, d), "FINISHED SECTIONS") {
+			t.Errorf("%s coding prompt does not name the finished sections", d.Key)
+		}
+	}
+}
+
+// Words set on the accent colour stay readable in every palette and variant.
+func TestOnAccentIsReadable(t *testing.T) {
+	for _, d := range Directions() {
+		for _, variant := range append([]string{""}, variantKeys(d)...) {
+			palette := ThemePalette(d, variant, nil)
+			css := ThemeCSS(d, variant, nil)
+			on := palette["background"]
+			if !strings.Contains(css, "--color-on-accent: "+on) {
+				on = palette["foreground"]
+			}
+			if c := Contrast(palette["accent"], on); c < 3 {
+				t.Errorf("%s %q: on-accent contrast %.2f, want at least 3 (large text)", d.Key, variant, c)
+			}
+		}
+	}
+}
+
+func variantKeys(d Direction) []string {
+	keys := make([]string, 0, len(d.Variants))
+	for _, v := range d.Variants {
+		keys = append(keys, v.Key)
+	}
+	return keys
+}
+
+// Pages and the layout are built from the finished sections; the page-not-found page may stay simple.
+func TestPagesUseTheFinishedSections(t *testing.T) {
+	if len(CheckUsesBlocks("web/src/pages/Home.tsx", "export default function Home() { return <div>Halo</div> }")) == 0 {
+		t.Error("a page without sections was not refused")
+	}
+	if len(CheckUsesBlocks("web/src/components/Layout.tsx", "export default function Layout() { return <header /> }")) == 0 {
+		t.Error("a layout without Header and Footer was not refused")
+	}
+	for rel, content := range map[string]string{
+		"web/src/pages/Home.tsx":       "import { Hero } from '../blocks'",
+		"web/src/pages/NotFound.tsx":   "export default function NotFound() { return <p>?</p> }",
+		"web/src/components/Badge.tsx": "export function Badge() { return <span /> }",
+	} {
+		if problems := CheckUsesBlocks(rel, content); len(problems) != 0 {
+			t.Errorf("%s refused: %v", rel, problems)
+		}
 	}
 }

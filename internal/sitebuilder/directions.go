@@ -44,6 +44,8 @@ type Direction struct {
 	// Motion is how much the look moves: "calm", "lively" or "playful". It sets the
 	// theme's --motion-* tokens and how many motion pieces the agent uses.
 	Motion string `json:"motion"`
+	// Blocks is how the look shapes the finished sections (blocks.go).
+	Blocks Blocks `json:"blocks"`
 }
 
 // MotionStyle is one motion level: the tokens written into theme.css and what the
@@ -167,7 +169,7 @@ func (d Direction) validate() error {
 	if _, found := MotionStyles[d.Motion]; !found {
 		return fmt.Errorf("invalid motion %q", d.Motion)
 	}
-	return nil
+	return d.Blocks.validate()
 }
 
 // Directions returns every direction.
@@ -354,6 +356,13 @@ func motionCSS(m MotionStyle) string {
   animation: site-float 6s ease-in-out infinite alternate;
 }
 
+main > section[data-band]:nth-of-type(even) {
+  background-color: var(--color-surface);
+}
+main > section[data-band]:nth-of-type(even) .bg-surface {
+  background-color: var(--color-background);
+}
+
 @keyframes site-float {
   from { transform: translateY(0); }
   to { transform: translateY(calc(var(--motion-distance) * -0.5)); }
@@ -412,6 +421,13 @@ func ThemeCSS(d Direction, variant string, owner map[string]string) string {
 	for _, key := range PaletteKeys {
 		fmt.Fprintf(&b, "  --color-%s: %s;\n", strings.ReplaceAll(key, "_", "-"), palette[key])
 	}
+	// on-accent: the text colour for words set on the accent colour (a highlighted word,
+	// a label): whichever of the page and text colours reads better on it in this palette.
+	onAccent := palette["background"]
+	if Contrast(palette["accent"], palette["foreground"]) > Contrast(palette["accent"], palette["background"]) {
+		onAccent = palette["foreground"]
+	}
+	fmt.Fprintf(&b, "  --color-on-accent: %s;\n", onAccent)
 	b.WriteString("  --color-white: #ffffff;\n  --color-black: #000000;\n  --color-transparent: transparent;\n  --color-current: currentColor;\n")
 	fmt.Fprintf(&b, "  --font-heading: '%s', %s;\n", d.Heading.Family, d.Heading.Fallback)
 	fmt.Fprintf(&b, "  --font-body: '%s', %s;\n", d.Body.Family, d.Body.Fallback)

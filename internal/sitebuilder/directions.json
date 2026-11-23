@@ -115,7 +115,23 @@
       "cozy"
     ],
     "kit": "Ornament kind line between sections; FramedPhoto frame thin; for an event or invitation also Countdown, Timeline and AddToCalendar.",
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "split",
+      "hero": "editorial",
+      "event": "plain",
+      "list": "rows",
+      "steps": "row",
+      "statement": "quote",
+      "footer": "columns",
+      "button": "square",
+      "frame": "line",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": true
+    }
   },
   {
     "key": "bold-industrial",
@@ -232,7 +248,23 @@
       "bold"
     ],
     "kit": "Ornament kind line with a thick rule (className with border-t-4); for an event Timeline.",
-    "motion": "lively"
+    "motion": "lively",
+    "blocks": {
+      "header": "bar",
+      "hero": "poster",
+      "event": "plain",
+      "list": "boxes",
+      "steps": "row",
+      "statement": "band",
+      "footer": "dark",
+      "button": "square",
+      "frame": "bold",
+      "caps": true,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "quiet-luxury",
@@ -353,7 +385,23 @@
       "calm"
     ],
     "kit": "Ornament kind diamond between sections; for an invitation a Monogram (frame circle) above the names, Countdown, Timeline, AddToCalendar and MapLink; FramedPhoto frame thin.",
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "centered",
+      "hero": "calm",
+      "event": "arch",
+      "list": "columns",
+      "steps": "timeline",
+      "statement": "quote",
+      "footer": "centered",
+      "button": "link",
+      "frame": "none",
+      "caps": false,
+      "centered": true,
+      "rule": false,
+      "tilt": false,
+      "airy": true
+    }
   },
   {
     "key": "fresh-clinic",
@@ -471,7 +519,23 @@
       "friendly"
     ],
     "kit": "Ornament kind dots between sections; Timeline for a schedule.",
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "split",
+      "hero": "split",
+      "event": "plain",
+      "list": "cards",
+      "steps": "row",
+      "statement": "quote",
+      "footer": "columns",
+      "button": "soft",
+      "frame": "line",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "playful-pop",
@@ -588,7 +652,23 @@
       "playful"
     ],
     "kit": "Ornament kind dots; for an event Countdown and Timeline; PhotoGallery for photos.",
-    "motion": "playful"
+    "motion": "playful",
+    "blocks": {
+      "header": "split",
+      "hero": "pop",
+      "event": "band",
+      "list": "cards",
+      "steps": "row",
+      "statement": "band",
+      "footer": "dark",
+      "button": "pill",
+      "frame": "bold",
+      "caps": false,
+      "centered": true,
+      "rule": false,
+      "tilt": true,
+      "airy": false
+    }
   },
   {
     "key": "nordic-minimal",
@@ -709,7 +789,23 @@
       "natural"
     ],
     "kit": "Ornament kind line; FramedPhoto frame thin; for an invitation Timeline and AddToCalendar.",
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "split",
+      "hero": "editorial",
+      "event": "plain",
+      "list": "tiles",
+      "steps": "row",
+      "statement": "quote",
+      "footer": "row",
+      "button": "square",
+      "frame": "line",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "night-studio",
@@ -830,7 +926,23 @@
       "cool"
     ],
     "kit": "Ornament kind line; FramedPhoto frame offset; for an event Countdown.",
-    "motion": "lively"
+    "motion": "lively",
+    "blocks": {
+      "header": "split",
+      "hero": "poster",
+      "event": "plain",
+      "list": "rows",
+      "steps": "row",
+      "statement": "band",
+      "footer": "row",
+      "button": "pill",
+      "frame": "line",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "heritage-serif",
@@ -949,7 +1061,23 @@
       "formal"
     ],
     "kit": "Ornament kind diamond; Monogram frame square for an invitation; Timeline.",
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "topbar",
+      "hero": "split",
+      "event": "plain",
+      "list": "columns",
+      "steps": "timeline",
+      "statement": "quote",
+      "footer": "columns",
+      "button": "square",
+      "frame": "double",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "tropical-sun",
@@ -1067,7 +1195,23 @@
       "beach"
     ],
     "kit": "Ornament kind flourish; FramedPhoto frame arch; for an event Countdown and MapLink.",
-    "motion": "playful"
+    "motion": "playful",
+    "blocks": {
+      "header": "split",
+      "hero": "panel",
+      "event": "band",
+      "list": "cards",
+      "steps": "row",
+      "statement": "band",
+      "footer": "centered",
+      "button": "pill",
+      "frame": "none",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": true
+    }
   },
   {
     "key": "tech-precise",
@@ -1183,7 +1327,23 @@
       "professional"
     ],
     "kit": "Ornament kind line; Timeline for steps or a schedule.",
-    "motion": "lively"
+    "motion": "lively",
+    "blocks": {
+      "header": "split",
+      "hero": "split",
+      "event": "plain",
+      "list": "bento",
+      "steps": "row",
+      "statement": "band",
+      "footer": "columns",
+      "button": "soft",
+      "frame": "line",
+      "caps": false,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "handmade-craft",
@@ -1304,7 +1464,23 @@
       "homely"
     ],
     "kit": "Ornament kind flourish between sections; FramedPhoto frame arch; for an invitation a Monogram (frame circle), Countdown, Timeline and AddToCalendar.",
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "split",
+      "hero": "framed",
+      "event": "arch",
+      "list": "cards",
+      "steps": "timeline",
+      "statement": "quote",
+      "footer": "columns",
+      "button": "pill",
+      "frame": "dashed",
+      "caps": false,
+      "centered": true,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "street-market",
@@ -1422,7 +1598,23 @@
       "bargain"
     ],
     "kit": "Ornament kind dots; PhotoGallery for products.",
-    "motion": "playful"
+    "motion": "playful",
+    "blocks": {
+      "header": "announce",
+      "hero": "split",
+      "event": "band",
+      "list": "tiles",
+      "steps": "row",
+      "statement": "band",
+      "footer": "dark",
+      "button": "square",
+      "frame": "bold",
+      "caps": true,
+      "centered": false,
+      "rule": false,
+      "tilt": false,
+      "airy": false
+    }
   },
   {
     "key": "romantic-soft",
@@ -1543,7 +1735,23 @@
         ]
       }
     ],
-    "motion": "calm"
+    "motion": "calm",
+    "blocks": {
+      "header": "centered",
+      "hero": "calm",
+      "event": "arch",
+      "list": "columns",
+      "steps": "timeline",
+      "statement": "quote",
+      "footer": "centered",
+      "button": "pill",
+      "frame": "line",
+      "caps": false,
+      "centered": true,
+      "rule": false,
+      "tilt": false,
+      "airy": true
+    }
   },
   {
     "key": "festive-warm",
@@ -1666,6 +1874,22 @@
         ]
       }
     ],
-    "motion": "playful"
+    "motion": "playful",
+    "blocks": {
+      "header": "split",
+      "hero": "poster",
+      "event": "band",
+      "list": "columns",
+      "steps": "timeline",
+      "statement": "band",
+      "footer": "dark",
+      "button": "square",
+      "frame": "none",
+      "caps": false,
+      "centered": false,
+      "rule": true,
+      "tilt": false,
+      "airy": false
+    }
   }
 ]
