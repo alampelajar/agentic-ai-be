@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 
+	"agentic-ai-backend/internal/emailpolicy"
 	"agentic-ai-backend/models"
 )
 
@@ -114,6 +115,7 @@ func ConnectDatabase() {
 		&models.AgentRunStep{},
 		&models.SiteVersion{},
 		&models.SiteRelease{},
+		&models.EmailSignup{},
 	)
 
 	if err != nil {
@@ -123,6 +125,7 @@ func ConnectDatabase() {
 		)
 	}
 
+	backfillEmailRecords()
 	seedAgents()
 	seedSystemProviderAndModels()
 	seedComboProvider()
@@ -399,5 +402,32 @@ func seedComboProvider() {
 	}
 	if err != nil {
 		log.Printf("Gagal membaca provider Combo: %v", err)
+	}
+}
+
+// backfillEmailRecords fills, once, what accounts made before the e-mail rules lack:
+// their canonical address, and a signup record each (dated when the account was made),
+// so an address that already opened accounts counts them.
+func backfillEmailRecords() {
+	var users []models.User
+	if err := DB.Unscoped().Select("id", "email", "canonical_email", "created_at").Find(&users).Error; err != nil {
+		log.Printf("[email-records] could not read accounts: %v", err)
+		return
+	}
+	var recorded []uint
+	DB.Model(&models.EmailSignup{}).Where("user_id IS NOT NULL").Pluck("user_id", &recorded)
+	has := make(map[uint]bool, len(recorded))
+	for _, id := range recorded {
+		has[id] = true
+	}
+	secret := emailpolicy.Secret()
+	for _, user := range users {
+		if canonical := emailpolicy.Canonical(user.Email); user.CanonicalEmail != canonical {
+			DB.Unscoped().Model(&models.User{}).Where("id = ?", user.ID).Update("canonical_email", canonical)
+		}
+		if !has[user.ID] {
+			id := user.ID
+			DB.Create(&models.EmailSignup{KeyHash: emailpolicy.SignupKey(user.Email, secret), UserID: &id, CreatedAt: user.CreatedAt})
+		}
 	}
 }

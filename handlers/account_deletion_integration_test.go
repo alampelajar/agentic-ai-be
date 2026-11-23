@@ -27,6 +27,8 @@ func TestAccountDeletionWaitsThirtyDays(t *testing.T) {
 	if dsn == "" {
 		t.Skip("SKILLS_TEST_DATABASE_URL is not configured")
 	}
+	// The test accounts use example.test; the domain rule is not what this test is about.
+	t.Setenv("EMAIL_ALLOWED_DOMAINS", "example.test")
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)

@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm/clause"
 
 	"agentic-ai-backend/config"
+	"agentic-ai-backend/internal/emailpolicy"
 	"agentic-ai-backend/models"
 	"agentic-ai-backend/services"
 )
@@ -291,7 +292,13 @@ func AdminCreateUser(c *gin.Context) {
 		Role:     req.Role,
 	}
 
-	if err := config.DB.Create(&user).Error; err != nil {
+	// An admin may choose any address; the account still counts for its address.
+	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		return services.RecordSignup(tx, user.Email, user.ID)
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal membuat user",
@@ -465,6 +472,7 @@ func AdminUpdateUser(c *gin.Context) {
 
 		user.Name = req.Name
 		user.Email = req.Email
+		user.CanonicalEmail = emailpolicy.Canonical(req.Email)
 		user.Role = req.Role
 		if err := tx.Save(&user).Error; err != nil {
 			return err

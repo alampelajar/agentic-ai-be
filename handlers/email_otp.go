@@ -46,6 +46,15 @@ func otpFail(c *gin.Context, status int, code, message string) {
 	c.JSON(status, gin.H{"ok": false, "code": code, "message": message})
 }
 
+// emailRefusalStatus is the HTTP status for a refused address: 409 when the mailbox
+// already has an account, 400 for an address that may not be used at all.
+func emailRefusalStatus(refusal services.EmailRefusal) int {
+	if refusal.Code == services.EmailTakenCode {
+		return http.StatusConflict
+	}
+	return http.StatusBadRequest
+}
+
 func otpUnavailable(c *gin.Context) {
 	otpFail(c, http.StatusServiceUnavailable, "otp_unavailable", "Layanan verifikasi email belum dikonfigurasi.")
 }
@@ -120,10 +129,11 @@ func RequestRegisterOTP(c *gin.Context) {
 		otpFail(c, http.StatusBadRequest, "invalid_email", "Email tidak valid.")
 		return
 	}
-	// Throwaway addresses (10minutemail, temp-mail...) would let one person open
-	// many accounts and their free quota; sign-up asks for an address they keep.
-	if services.IsDisposableEmail(email) {
-		otpFail(c, http.StatusBadRequest, services.DisposableEmailCode, services.DisposableEmailMessage)
+	// Throwaway addresses (10minutemail, temp-mail...) and unknown domains would let
+	// one person open many accounts and their free quota; sign-up asks for an address
+	// from a well-known provider.
+	if refusal := services.CheckEmailAddress(email); refusal.Refused() {
+		otpFail(c, http.StatusBadRequest, refusal.Code, refusal.Message)
 		return
 	}
 	if code, message := validNewPassword(req.Password, req.Email, req.Name); code != "" {
@@ -131,14 +141,16 @@ func RequestRegisterOTP(c *gin.Context) {
 		return
 	}
 
-	var taken int64
-	if err := config.DB.Unscoped().Model(&models.User{}).Where("email = ?", email).Count(&taken).Error; err != nil {
+	// The same mailbox under another spelling (name+1@gmail.com), or an address that
+	// already opened too many accounts, is refused before a code is sent.
+	refusal, err := services.CheckNewAccountEmail(config.DB, email)
+	if err != nil {
 		c.Error(err)
 		otpFail(c, http.StatusInternalServerError, "otp_failed", "Pendaftaran tidak dapat diproses.")
 		return
 	}
-	if taken > 0 {
-		otpFail(c, http.StatusConflict, "email_taken", "Email sudah terdaftar.")
+	if refusal.Refused() {
+		otpFail(c, emailRefusalStatus(refusal), refusal.Code, refusal.Message)
 		return
 	}
 
@@ -194,7 +206,7 @@ func VerifyRegisterOTP(c *gin.Context) {
 	var (
 		outcome = services.OTPInvalid
 		created models.User
-		taken   bool
+		refusal services.EmailRefusal
 	)
 	err := config.DB.Transaction(func(tx *gorm.DB) error {
 		challenge, result, err := services.VerifyOTP(tx, models.OTPPurposeRegister, email, req.OTP, pepper)
@@ -212,25 +224,29 @@ func VerifyRegisterOTP(c *gin.Context) {
 			return nil
 		}
 
-		var count int64
-		if err := tx.Unscoped().Model(&models.User{}).Where("email = ?", email).Count(&count).Error; err != nil {
+		// Checked again: another account may have taken the mailbox since the code was sent.
+		check, err := services.CheckNewAccountEmail(tx, email)
+		if err != nil {
 			return err
 		}
-		if count > 0 {
-			taken = true
+		if check.Refused() {
+			refusal = check
 			return nil
 		}
 
 		created = models.User{Name: pending.Name, Email: email, Password: pending.PasswordHash, Role: "user"}
-		return tx.Create(&created).Error
+		if err := tx.Create(&created).Error; err != nil {
+			return err
+		}
+		return services.RecordSignup(tx, email, created.ID)
 	})
 	if err != nil {
 		c.Error(err)
 		otpFail(c, http.StatusInternalServerError, "verify_failed", "Verifikasi tidak dapat diproses.")
 		return
 	}
-	if taken {
-		otpFail(c, http.StatusConflict, "email_taken", "Email sudah terdaftar.")
+	if refusal.Refused() {
+		otpFail(c, emailRefusalStatus(refusal), refusal.Code, refusal.Message)
 		return
 	}
 	if outcome != services.OTPVerified {
@@ -271,8 +287,8 @@ func RequestChangeEmailOTP(c *gin.Context) {
 		return
 	}
 	// Same rule as sign-up, so an account cannot move to a throwaway address later.
-	if services.IsDisposableEmail(newEmail) {
-		otpFail(c, http.StatusBadRequest, services.DisposableEmailCode, services.DisposableEmailMessage)
+	if refusal := services.CheckEmailAddress(newEmail); refusal.Refused() {
+		otpFail(c, http.StatusBadRequest, refusal.Code, refusal.Message)
 		return
 	}
 
@@ -291,14 +307,14 @@ func RequestChangeEmailOTP(c *gin.Context) {
 		return
 	}
 
-	var taken int64
-	if err := config.DB.Unscoped().Model(&models.User{}).Where("email = ?", newEmail).Count(&taken).Error; err != nil {
+	refusal, err := services.CheckEmailChange(config.DB, newEmail, userID)
+	if err != nil {
 		c.Error(err)
 		otpFail(c, http.StatusInternalServerError, "otp_failed", "Permintaan tidak dapat diproses.")
 		return
 	}
-	if taken > 0 {
-		otpFail(c, http.StatusConflict, "email_taken", "Email sudah terdaftar.")
+	if refusal.Refused() {
+		otpFail(c, emailRefusalStatus(refusal), refusal.Code, refusal.Message)
 		return
 	}
 
@@ -373,11 +389,9 @@ func VerifyChangeEmailOTP(c *gin.Context) {
 			return nil
 		}
 
-		var count int64
-		if err := tx.Unscoped().Model(&models.User{}).Where("email = ?", newEmail).Count(&count).Error; err != nil {
+		if refusal, err := services.CheckEmailChange(tx, newEmail, userID); err != nil {
 			return err
-		}
-		if count > 0 {
+		} else if refusal.Refused() {
 			taken = true
 			return nil
 		}
@@ -388,7 +402,7 @@ func VerifyChangeEmailOTP(c *gin.Context) {
 		}
 		oldEmail = user.Email
 		now := time.Now()
-		if err := tx.Model(&user).Update("email", newEmail).Error; err != nil {
+		if err := tx.Model(&user).Updates(models.CanonicalEmailUpdates(newEmail)).Error; err != nil {
 			return err
 		}
 		if err := tx.Model(&models.RefreshToken{}).

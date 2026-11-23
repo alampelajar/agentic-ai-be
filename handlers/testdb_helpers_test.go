@@ -13,6 +13,7 @@ import (
 func migrateAll(db *gorm.DB) error {
 	return testdb.Migrate(db,
 		&models.User{},
+		&models.EmailSignup{},
 		&models.RefreshToken{},
 		&models.PasswordResetChallenge{},
 		&models.OTPChallenge{},

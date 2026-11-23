@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"log"
@@ -13,6 +14,7 @@ import (
 	"cloud.google.com/go/auth/credentials/idtoken"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
@@ -167,26 +169,28 @@ func GoogleLogin(c *gin.Context) {
 		// USER BELUM ADA
 		// ==========================================
 
-		// A new account follows the sign-up rule: no throwaway address. An account
-		// that already exists may still sign in.
-		if services.IsDisposableEmail(email) {
-			c.JSON(http.StatusBadRequest, gin.H{
-				"ok":      false,
-				"code":    services.DisposableEmailCode,
-				"message": services.DisposableEmailMessage,
-			})
+		// A new account follows the sign-up rules: a well-known provider, no throwaway
+		// address, no second account on the same mailbox, not too many accounts from
+		// one address. An account that already exists may still sign in.
+		refusal, checkErr := services.CheckNewAccountEmail(config.DB, email)
+		if checkErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal membuat akun"})
+			return
+		}
+		if refusal.Refused() {
+			c.JSON(emailRefusalStatus(refusal), gin.H{"ok": false, "code": refusal.Code, "message": refusal.Message})
 			return
 		}
 
 		// Addresses are personal data: they stay out of the log.
 		log.Println("Google login - user belum ada, membuat akun baru")
 
+		// A password nobody knows, so the account signs in through Google only. It was
+		// made from the clock before; it must come from a cryptographic source.
 		randomPassword := make([]byte, 32)
-
-		for i := range randomPassword {
-			randomPassword[i] = byte(
-				time.Now().UnixNano() >> (i % 8),
-			)
+		if _, randErr := rand.Read(randomPassword); randErr != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal membuat akun"})
+			return
 		}
 
 		hashedPassword, hashErr := bcrypt.GenerateFromPassword(
@@ -215,7 +219,12 @@ func GoogleLogin(c *gin.Context) {
 			Role:     "user",
 		}
 
-		if createErr := config.DB.Create(&user).Error; createErr != nil {
+		if createErr := config.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&user).Error; err != nil {
+				return err
+			}
+			return services.RecordSignup(tx, user.Email, user.ID)
+		}); createErr != nil {
 			log.Printf(
 				"Google login - gagal membuat user: %v",
 				createErr,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/internal/httpguard"
@@ -113,12 +114,8 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	if services.IsDisposableEmail(req.Email) {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"ok":      false,
-			"code":    services.DisposableEmailCode,
-			"message": services.DisposableEmailMessage,
-		})
+	if refusal := services.CheckEmailAddress(req.Email); refusal.Refused() {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "code": refusal.Code, "message": refusal.Message})
 		return
 	}
 
@@ -130,12 +127,15 @@ func Register(c *gin.Context) {
 		return
 	}
 
-	// An account waiting to be deleted still holds its address.
-	if taken, _ := emailTaken(config.DB, req.Email, 0); taken {
-		c.JSON(http.StatusConflict, gin.H{
-			"ok":      false,
-			"message": "Email sudah terdaftar",
-		})
+	// An account waiting to be deleted still holds its address; an alias of a taken
+	// mailbox, or an address that opened too many accounts, is refused too.
+	refusal, err := services.CheckNewAccountEmail(config.DB, req.Email)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal memeriksa email"})
+		return
+	}
+	if refusal.Refused() {
+		c.JSON(emailRefusalStatus(refusal), gin.H{"ok": false, "code": refusal.Code, "message": refusal.Message})
 		return
 	}
 
@@ -159,7 +159,12 @@ func Register(c *gin.Context) {
 		Role:     "user",
 	}
 
-	if err := config.DB.Create(&user).Error; err != nil {
+	if err := config.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&user).Error; err != nil {
+			return err
+		}
+		return services.RecordSignup(tx, user.Email, user.ID)
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"ok":      false,
 			"message": "Gagal membuat pengguna",
