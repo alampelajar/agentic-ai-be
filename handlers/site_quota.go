@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +25,9 @@ const (
 	builderQuotaZoneTZ     = "Asia/Jakarta"
 	builderQuotaEnvName    = "BUILDER_MONTHLY_TOKENS"
 	builderPremiumQuotaEnv = "BUILDER_PREMIUM_MONTHLY_TOKENS"
+	// BUILDER_UNLIMITED_EMAILS lists the owners' own accounts (comma-separated e-mail
+	// addresses): no monthly token allowance and no daily system-model quota.
+	builderUnlimitedEnv = "BUILDER_UNLIMITED_EMAILS"
 )
 
 // builderPlan is what one person may use of the Website Builder right now.
@@ -36,6 +41,22 @@ type builderPlan struct {
 	ResetsAt time.Time `json:"resets_at"`
 	// PremiumUntil is when the premium account ends; nil when it does not end or there is none.
 	PremiumUntil *time.Time `json:"premium_until"`
+	// Unlimited is one of the owners' own accounts (BUILDER_UNLIMITED_EMAILS).
+	Unlimited bool `json:"unlimited"`
+}
+
+// unlimitedEmail says whether an e-mail address is listed in BUILDER_UNLIMITED_EMAILS.
+func unlimitedEmail(email string) bool {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		return false
+	}
+	for _, listed := range strings.Split(os.Getenv(builderUnlimitedEnv), ",") {
+		if strings.ToLower(strings.TrimSpace(listed)) == email {
+			return true
+		}
+	}
+	return false
 }
 
 // premiumActive says whether a premium account counts now: switched on, and not past its end.
@@ -69,10 +90,16 @@ func monthStart(now time.Time) time.Time {
 
 func loadPremium(userID uint) (models.User, bool) {
 	var user models.User
-	if err := config.DB.Select("id", "is_premium", "premium_until").First(&user, userID).Error; err != nil {
+	if err := config.DB.Select("id", "email", "is_premium", "premium_until").First(&user, userID).Error; err != nil {
 		return user, false
 	}
-	return user, premiumActive(user, time.Now())
+	return user, premiumActive(user, time.Now()) || unlimitedEmail(user.Email)
+}
+
+// isUnlimitedUser says whether the person's account has no Website Builder limits.
+func isUnlimitedUser(userID uint) bool {
+	user, _ := loadPremium(userID)
+	return unlimitedEmail(user.Email)
 }
 
 func isPremiumUser(userID uint) bool {
@@ -100,6 +127,12 @@ func builderPlanFor(userID uint) builderPlan {
 	config.DB.Model(&models.Site{}).Where("user_id = ?", userID).Count(&sites)
 	plan.SitesUsed = int(sites)
 	plan.TokensUsed = tokensThisMonth(userID)
+	if unlimitedEmail(user.Email) {
+		plan.Unlimited = true
+		plan.SiteLimit = premiumSiteLimit
+		plan.TokenLimit = 0
+		return plan
+	}
 	if plan.Premium {
 		plan.SiteLimit = premiumSiteLimit
 		plan.TokenLimit = envInt(builderPremiumQuotaEnv, premiumMonthlyTokens)

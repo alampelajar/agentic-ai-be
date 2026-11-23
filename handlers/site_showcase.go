@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"agentic-ai-backend/config"
 	"agentic-ai-backend/internal/sitebuilder"
@@ -49,13 +50,21 @@ func briefPageTitles(site *models.Site) []string {
 	return titles
 }
 
-// GetSiteShowcase lists the gallery, newest choice first. lang (id or en) picks the
-// language of the looks' names.
+// GetSiteShowcase lists the gallery, newest choice first. lang (id or en) is the
+// interface's language: it picks the looks' names, and only websites written in that
+// language are shown, so a visitor reads examples in their own language. When none
+// is written in it yet, every website is shown rather than an empty gallery.
 func GetSiteShowcase(c *gin.Context) {
 	language := siteLanguage(c.Query("lang"))
+	showcased := func() *gorm.DB {
+		return config.DB.Where("showcased_at IS NOT NULL AND published_release_id IS NOT NULL AND slug IS NOT NULL").
+			Where(ownerNotInDeletion).Order("showcased_at DESC").Limit(showcaseLimit)
+	}
 	var sites []models.Site
-	config.DB.Where("showcased_at IS NOT NULL AND published_release_id IS NOT NULL AND slug IS NOT NULL").
-		Where(ownerNotInDeletion).Order("showcased_at DESC").Limit(showcaseLimit).Find(&sites)
+	showcased().Where("language = ?", language).Find(&sites)
+	if len(sites) == 0 {
+		showcased().Find(&sites)
+	}
 	settings := sitebuilder.LoadSettings()
 	list := make([]gin.H, 0, len(sites))
 	for index := range sites {

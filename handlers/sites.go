@@ -235,7 +235,9 @@ func CreateSite(c *gin.Context) {
 		return
 	}
 	config.DB.Model(&models.CloudWorkspace{}).Where("user_id = ?", userID).Count(&count)
-	if int(count) >= limits.MaxWorkspacesPerUser {
+	// Every website owns one workspace, so the plan's number of websites is allowed
+	// even where it is more than the general workspace limit (premium: 50, not 10).
+	if int(count) >= max(limits.MaxWorkspacesPerUser, plan.SiteLimit) {
 		siteError(c, http.StatusConflict, "workspace_limit", "Jumlah proyek sudah mencapai batas. Hapus workspace yang tidak dipakai.")
 		return
 	}
