@@ -19,7 +19,7 @@ var backgroundFeaturePaths = []string{
 // registerBackgroundFeatures puts those features on the admin group. The handlers are
 // unchanged and still scope their data to the signed-in admin. The person's own models
 // and providers (/ai/models, /ai/providers) are not registered at all: admins manage
-// the system models through the admin routes in main.go.
+// the system models through the admin routes in routes.go.
 func registerBackgroundFeatures(admin gin.IRoutes, importLimit, executionLimit, chatLimit gin.HandlerFunc) {
 	// Agents and their roles. The full list with models, which the admin app shows.
 	admin.GET("/agent-catalog", handlers.GetAgents)

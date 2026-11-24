@@ -22,14 +22,6 @@ func memoryError(c *gin.Context, status int, message string) {
 	c.JSON(status, gin.H{"ok": false, "error": message})
 }
 
-func memoryID(c *gin.Context) (uint, bool) {
-	id, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
-	if err != nil || id == 0 {
-		return 0, false
-	}
-	return uint(id), true
-}
-
 // likePattern escapes LIKE wildcards so a search for "100%" is literal.
 func likePattern(term string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
@@ -166,7 +158,7 @@ func UpdateMemory(c *gin.Context) {
 		memoryError(c, http.StatusUnauthorized, "User tidak ditemukan.")
 		return
 	}
-	id, ok := memoryID(c)
+	id, ok := idParam(c)
 	if !ok {
 		memoryError(c, http.StatusNotFound, "Memory tidak ditemukan.")
 		return
@@ -240,7 +232,7 @@ func DeleteMemory(c *gin.Context) {
 		memoryError(c, http.StatusUnauthorized, "User tidak ditemukan.")
 		return
 	}
-	id, ok := memoryID(c)
+	id, ok := idParam(c)
 	if !ok {
 		memoryError(c, http.StatusNotFound, "Memory tidak ditemukan.")
 		return

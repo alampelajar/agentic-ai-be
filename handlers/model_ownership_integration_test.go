@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 
 	"agentic-ai-backend/config"
@@ -95,7 +94,6 @@ func TestModelReferencesRespectOwnership(t *testing.T) {
 	router.POST("/api/tasks", CreateTask)
 	router.PATCH("/api/tasks/:id", UpdateTask)
 	router.POST("/api/tasks/:id/messages", AddTaskMessage)
-	router.GET("/api/ai/models", GetAIModels)
 	send := func(method, path, body string) *httptest.ResponseRecorder {
 		req, _ := http.NewRequest(method, path, bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -147,15 +145,6 @@ func TestModelReferencesRespectOwnership(t *testing.T) {
 		t.Fatalf("a message was stored with another user's model")
 	}
 
-	// The model list never contains another user's model.
-	list := send("GET", "/api/ai/models", "")
-	expect("model list", list, http.StatusOK)
-	if strings.Contains(list.Body.String(), ownerModel.Name) {
-		t.Fatalf("model list leaks another user's model: %s", list.Body.String())
-	}
-	if !strings.Contains(list.Body.String(), callerModel.Name) || !strings.Contains(list.Body.String(), systemModel.Name) {
-		t.Fatalf("model list is missing the user's own or system model: %s", list.Body.String())
-	}
 	available, err := getAvailableModelsForAgent(caller.ID, agent.ID)
 	if err != nil {
 		t.Fatal(err)

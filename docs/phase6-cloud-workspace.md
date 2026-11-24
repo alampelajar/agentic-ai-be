@@ -29,7 +29,7 @@ Browser ──> API server (Gin) ──> PostgreSQL (metadata, jobs, approvals)
                  └── creates ExecutionJob (status queued)
                                    │
 Execution worker (separate binary) ┘  claims jobs, runs them through an Executor
-        └── Executor ──> DockerExecutor (hardened container) | DisabledExecutor
+        └── Executor ──> DockerExecutor (hardened container)
 ```
 
 - **API server** authenticates, checks ownership, does CRUD and file operations
@@ -41,9 +41,10 @@ Execution worker (separate binary) ┘  claims jobs, runs them through an Execut
   queued jobs from PostgreSQL with `FOR UPDATE SKIP LOCKED`, runs them through the
   `Executor` interface, enforces the timeout, watches for cancellation, stores
   bounded output and cleans up.
-- **Executor** is an interface. `DockerExecutor` builds the container command;
-  `DisabledExecutor` refuses every job. A sandbox provider (gVisor, Firecracker,
-  a managed service) can replace the Docker one without changing business logic.
+- **Executor** is an interface. `DockerExecutor` builds the container command.
+  When cloud execution is off, the API refuses to queue a job at all. A sandbox
+  provider (gVisor, Firecracker, a managed service) can replace the Docker one
+  without changing business logic.
 
 ### Storage
 `WorkspaceStorage` is an interface. `LocalDevelopmentStorage` keeps each workspace

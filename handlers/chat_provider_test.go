@@ -43,7 +43,7 @@ func TestProviderRateLimitDiagnosticClassifiesSourceAndSanitizesHeaders(t *testi
 }
 
 func TestProviderErrorsPreserveMetadataWithoutSecrets(t *testing.T) {
-	err := formatProviderHTTPError(400, []byte(`{"error":{"message":"invalid model","type":"invalid_request_error","code":"model_not_found","param":"model"}}`))
+	err := formatProviderHTTPErrorWithDiagnostic(400, []byte(`{"error":{"message":"invalid model","type":"invalid_request_error","code":"model_not_found","param":"model"}}`), "")
 	if !strings.Contains(err.Error(), "invalid model") || !strings.Contains(err.Error(), "model_not_found") {
 		t.Fatalf("metadata missing: %v", err)
 	}

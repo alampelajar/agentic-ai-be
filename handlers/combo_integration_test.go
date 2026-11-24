@@ -253,22 +253,6 @@ func TestComboLifecycleAndOwnership(t *testing.T) {
 		}
 	}
 
-	// The virtual model shows up for the owner (and only for the owner) next to the normal models.
-	status, resp = callAs(t, f.user.ID, http.MethodGet, "/api/ai/models", nil, nil, GetAIModels)
-	if status != http.StatusOK || !strings.Contains(fmt.Sprint(resp["models"]), "Combo Saya") {
-		t.Fatalf("the owner must see the combo as a model: %d", status)
-	}
-	_, resp = callAs(t, f.other.ID, http.MethodGet, "/api/ai/models", nil, nil, GetAIModels)
-	if strings.Contains(fmt.Sprint(resp["models"]), "Combo Saya") {
-		t.Fatal("another user must not see the combo")
-	}
-
-	// The generic model endpoints leave a combo's model alone.
-	status, _ = callAs(t, f.user.ID, http.MethodDelete, "/api/ai/models/x", gin.Params{{Key: "id", Value: strconv.Itoa(int(virtualID))}}, nil, DeleteAIModel)
-	if status != http.StatusNotFound {
-		t.Fatalf("a combo is not deleted through the model endpoint, got %d", status)
-	}
-
 	// Another user cannot read, change or delete it.
 	comboID := strconv.Itoa(int(combo["id"].(float64)))
 	for name, run := range map[string]func() int{
@@ -291,17 +275,6 @@ func TestComboLifecycleAndOwnership(t *testing.T) {
 		map[string]any{"name": "Combo Baru", "strategy": "round_robin", "members": members(f.mine[1].ID, f.mine[0].ID)}, UpdateCombo)
 	if status != http.StatusOK || comboOf(resp)["strategy"] != "round_robin" || comboOf(resp)["name"] != "Combo Baru" {
 		t.Fatalf("update: %d %v", status, resp)
-	}
-
-	// Deleting a model that is a member takes it out of the combo.
-	status, _ = callAs(t, f.user.ID, http.MethodDelete, "/", gin.Params{{Key: "id", Value: strconv.Itoa(int(f.mine[0].ID))}}, nil, DeleteAIModel)
-	if status != http.StatusOK {
-		t.Fatalf("delete member model: %d", status)
-	}
-	status, resp = callAs(t, f.user.ID, http.MethodGet, "/api/ai/combos", nil, nil, GetCombos)
-	list := resp["combos"].([]any)
-	if status != http.StatusOK || len(list[0].(map[string]any)["members"].([]any)) != 1 {
-		t.Fatalf("the deleted model must leave the combo: %v", resp)
 	}
 
 	// Delete the combo and its model and links.

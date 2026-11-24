@@ -221,7 +221,7 @@ func DeleteDelegation(c *gin.Context) {
 		memoryError(c, http.StatusUnauthorized, "User tidak ditemukan.")
 		return
 	}
-	id, ok := memoryID(c)
+	id, ok := idParam(c)
 	if !ok {
 		memoryError(c, http.StatusNotFound, "Delegasi tidak ditemukan.")
 		return

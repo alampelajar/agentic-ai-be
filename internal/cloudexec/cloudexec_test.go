@@ -560,10 +560,4 @@ func TestDockerAvailability(t *testing.T) {
 	if err := executor.Available(context.Background()); err == nil || !strings.Contains(err.Error(), "images are missing") {
 		t.Fatalf("missing images = %v", err)
 	}
-	if err := (DisabledExecutor{}).Available(context.Background()); err == nil {
-		t.Fatal("the disabled executor claims to be available")
-	}
-	if _, err := (DisabledExecutor{}).Run(context.Background(), RunRequest{}); err == nil {
-		t.Fatal("the disabled executor ran something")
-	}
 }

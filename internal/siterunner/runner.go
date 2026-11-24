@@ -362,12 +362,3 @@ func (r *Runner) writeRoutes(live map[string]uint) error {
 	}
 	return os.Rename(temporary, file)
 }
-
-// StopSite removes a site's containers and network at once (used when it is deleted).
-func (r *Runner) StopSite(ctx context.Context, siteID uint) {
-	for _, kind := range []string{"p", "l"} {
-		_, _ = r.docker(ctx, "rm", "-f", containerName(kind, siteID))
-	}
-	_, _ = r.docker(ctx, "network", "disconnect", "-f", networkName(siteID), gatewayName)
-	_, _ = r.docker(ctx, "network", "rm", networkName(siteID))
-}
