@@ -35,7 +35,7 @@ type updateSystemAIModelRequest struct {
 	// IsBuilderDefault marks the model the Website Builder uses for people without premium.
 	IsBuilderDefault *bool `json:"is_builder_default"`
 	AgentID          *uint `json:"agent_id"`
-	AllAgents   bool    `json:"all_agents"`
+	AllAgents        bool  `json:"all_agents"`
 }
 
 func systemProviderSlug(name string) string {
@@ -179,11 +179,11 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 	switch {
 	case providerErr == nil:
 		if err := tx.Model(&provider).Updates(map[string]interface{}{
-			"name": req.ProviderName,
-			"base_url": req.BaseURL,
-			"type": req.ProviderType,
+			"name":              req.ProviderName,
+			"base_url":          req.BaseURL,
+			"type":              req.ProviderType,
 			"api_key_encrypted": encryptedAPIKey,
-			"is_active": true,
+			"is_active":         true,
 		}).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"ok": false, "error": "Gagal memperbarui konfigurasi provider sistem.",
@@ -198,14 +198,14 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 
 	case errors.Is(providerErr, gorm.ErrRecordNotFound):
 		provider = models.AIProvider{
-			UserID: nil,
-			Name: req.ProviderName,
-			Slug: slug,
-			BaseURL: req.BaseURL,
-			Type: req.ProviderType,
+			UserID:          nil,
+			Name:            req.ProviderName,
+			Slug:            slug,
+			BaseURL:         req.BaseURL,
+			Type:            req.ProviderType,
 			APIKeyEncrypted: encryptedAPIKey,
-			IsSystem: true,
-			IsActive: true,
+			IsSystem:        true,
+			IsActive:        true,
 		}
 		if err := tx.Create(&provider).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -239,13 +239,13 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 	}
 
 	aiModel := models.AIModel{
-		ProviderID: provider.ID,
-		UserID: nil,
-		Name: req.Name,
-		ModelID: req.ModelID,
+		ProviderID:  provider.ID,
+		UserID:      nil,
+		Name:        req.Name,
+		ModelID:     req.ModelID,
 		Description: req.Description,
-		IsSystem: true,
-		IsActive: true,
+		IsSystem:    true,
+		IsActive:    true,
 	}
 	if err := tx.Create(&aiModel).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -281,9 +281,9 @@ func AdminCreateSystemAIModel(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{
-		"ok": true,
+		"ok":      true,
 		"message": "Model global berhasil ditambahkan dan dihubungkan ke agent yang dipilih untuk semua akun.",
-		"model": aiModel,
+		"model":   aiModel,
 	})
 }
 
@@ -480,4 +480,34 @@ func AdminDeleteSystemAIModel(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Model global berhasil dihapus."})
+}
+
+func normalizeProviderType(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+
+	switch value {
+	case "openai":
+		return "openai"
+
+	case "google":
+		return "google"
+
+	case "gemini":
+		return "google"
+
+	case "openrouter":
+		return "openrouter"
+
+	case "deepseek":
+		return "deepseek"
+
+	case "nararouter":
+		return "nararouter"
+
+	case "custom":
+		return "custom"
+
+	default:
+		return "custom"
+	}
 }

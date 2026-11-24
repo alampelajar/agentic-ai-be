@@ -1328,10 +1328,6 @@ func redactProviderValue(value any) any {
 	}
 }
 
-func formatProviderHTTPError(status int, body []byte) error {
-	return formatProviderHTTPErrorWithDiagnostic(status, body, "")
-}
-
 func formatProviderHTTPErrorWithDiagnostic(status int, body []byte, diagnostic string) error {
 	var response chatResponse
 	if json.Unmarshal(body, &response) == nil && response.Error != nil {

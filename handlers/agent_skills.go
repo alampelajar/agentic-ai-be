@@ -20,26 +20,18 @@ type agentSkillResponse struct {
 	Skill     skillResponse `json:"skill"`
 }
 
-func parseAgentID(c *gin.Context) (uint, bool) {
-	id, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
-	if err != nil || id == 0 || id > uint64(^uint(0)) {
-		return 0, false
-	}
-	return uint(id), true
-}
-
 func ensureAgentAccessible(userID, agentID uint) bool {
 	var agent models.Agent
 	return config.DB.Select("id").Where("id = ? AND is_active = ? AND (user_id IS NULL OR user_id = ?)", agentID, true, userID).First(&agent).Error == nil
 }
 
 func GetAgentSkills(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
 	}
-	agentID, ok := parseAgentID(c)
+	agentID, ok := idParam(c)
 	if !ok || !ensureAgentAccessible(userID, agentID) {
 		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent tidak ditemukan."})
 		return
@@ -57,12 +49,12 @@ func GetAgentSkills(c *gin.Context) {
 }
 
 func AssignSkillToAgent(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
 	}
-	agentID, ok := parseAgentID(c)
+	agentID, ok := idParam(c)
 	if !ok || !ensureAgentAccessible(userID, agentID) {
 		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent tidak ditemukan."})
 		return
@@ -89,12 +81,12 @@ func AssignSkillToAgent(c *gin.Context) {
 }
 
 func UpdateAgentSkill(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
 	}
-	agentID, ok := parseAgentID(c)
+	agentID, ok := idParam(c)
 	if !ok || !ensureAgentAccessible(userID, agentID) {
 		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent tidak ditemukan."})
 		return
@@ -124,12 +116,12 @@ func UpdateAgentSkill(c *gin.Context) {
 }
 
 func RemoveSkillFromAgent(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
 	}
-	agentID, ok := parseAgentID(c)
+	agentID, ok := idParam(c)
 	if !ok || !ensureAgentAccessible(userID, agentID) {
 		c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "Agent tidak ditemukan."})
 		return

@@ -12,9 +12,9 @@ import (
 func noLimit(c *gin.Context) { c.Next() }
 
 // The agent features left the person's app (WEBSITE-BUILDER.md, section 20): none of
-// them may be registered on the signed-in user's group in main.go again.
+// them may be registered on the signed-in user's group in routes.go again.
 func TestBackgroundFeaturesAreNotOpenToUsers(t *testing.T) {
-	source, err := os.ReadFile("main.go")
+	source, err := os.ReadFile("routes.go")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestBackgroundFeaturesAreNotOpenToUsers(t *testing.T) {
 		}
 	}
 	if !strings.Contains(string(source), "registerBackgroundFeatures(admin,") {
-		t.Error("main.go must register the background features on the admin group")
+		t.Error("routes.go must register the background features on the admin group")
 	}
 }
 

@@ -86,14 +86,3 @@ func ValidateToolRequest(name string, args map[string]any) error {
 	}
 	return nil
 }
-
-func ToolsForSkill(names []string) []ToolDefinition {
-	out := make([]ToolDefinition, 0, len(names))
-	for _, n := range names {
-		canonical := CanonicalToolName(n)
-		if d, ok := ToolRegistry[canonical]; ok {
-			out = append(out, d)
-		}
-	}
-	return out
-}

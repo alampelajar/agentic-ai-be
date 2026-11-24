@@ -9,7 +9,7 @@ import (
 // A visitor who has not signed in may look at the gallery, and only at the
 // gallery: every other website route stays behind sign-in.
 func TestOnlyTheGalleryIsOpenWithoutSignIn(t *testing.T) {
-	source, err := os.ReadFile("main.go")
+	source, err := os.ReadFile("routes.go")
 	if err != nil {
 		t.Fatal(err)
 	}

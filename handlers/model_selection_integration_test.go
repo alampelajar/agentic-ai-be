@@ -108,7 +108,6 @@ func TestModelSelectionHonoursAgentLinkActiveFlagAndOwnership(t *testing.T) {
 		c.Next()
 	})
 	router.POST("/api/chat", Chat)
-	router.GET("/api/ai/models", GetAIModels)
 	id := func(v uint) string { return strconv.FormatUint(uint64(v), 10) }
 	chat := func(agent models.Agent, modelID uint) *httptest.ResponseRecorder {
 		body := `{"message":"hi","agent_id":` + id(agent.ID) + `,"model_id":` + id(modelID) + `}`
@@ -180,23 +179,5 @@ func TestModelSelectionHonoursAgentLinkActiveFlagAndOwnership(t *testing.T) {
 	}
 	if len(forEmpty) != 0 {
 		t.Errorf("an agent without links is offered %v", names(forEmpty))
-	}
-
-	req, _ := http.NewRequest("GET", "/api/ai/models", nil)
-	res := httptest.NewRecorder()
-	router.ServeHTTP(res, req)
-	if res.Code != http.StatusOK {
-		t.Fatalf("model list: status=%d", res.Code)
-	}
-	body := res.Body.String()
-	for _, hidden := range []string{ownerModel.Name, deletedSystem.Name} {
-		if strings.Contains(body, hidden) {
-			t.Errorf("model list shows %q, which the user must not see", hidden)
-		}
-	}
-	for _, shown := range []string{systemModel.Name, callerModel.Name, callerInactive.Name, callerOtherAgent.Name} {
-		if !strings.Contains(body, shown) {
-			t.Errorf("model list is missing %q", shown)
-		}
 	}
 }

@@ -3,7 +3,6 @@ package handlers
 import (
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -128,18 +127,13 @@ func CreateExecution(c *gin.Context) {
 	c.JSON(http.StatusAccepted, gin.H{"ok": true, "job": job})
 }
 
-func jobIDParam(c *gin.Context) (uint, bool) {
-	id, err := strconv.ParseUint(strings.TrimSpace(c.Param("id")), 10, 64)
-	return uint(id), err == nil && id != 0
-}
-
 func loadOwnedJob(c *gin.Context) (*models.ExecutionJob, uint, bool) {
 	userID, ok := getCurrentUserID(c)
 	if !ok {
 		workspaceError(c, http.StatusUnauthorized, "User tidak ditemukan.")
 		return nil, 0, false
 	}
-	id, ok := jobIDParam(c)
+	id, ok := idParam(c)
 	if !ok {
 		workspaceError(c, http.StatusNotFound, "Job tidak ditemukan.")
 		return nil, 0, false

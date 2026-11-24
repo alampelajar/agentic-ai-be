@@ -3,7 +3,6 @@ package cloudexec
 import (
 	"bytes"
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -45,18 +44,6 @@ type Executor interface {
 	// Available says whether the sandbox can run jobs right now.
 	Available(ctx context.Context) error
 	Run(ctx context.Context, request RunRequest) (RunResult, error)
-}
-
-// ErrDisabled is returned by the executor used when execution is not turned on.
-var ErrDisabled = errors.New("code execution is not enabled on this server")
-
-// DisabledExecutor refuses everything. It is the safe default.
-type DisabledExecutor struct{}
-
-func (DisabledExecutor) Name() string                    { return "disabled" }
-func (DisabledExecutor) Available(context.Context) error { return ErrDisabled }
-func (DisabledExecutor) Run(context.Context, RunRequest) (RunResult, error) {
-	return RunResult{}, ErrDisabled
 }
 
 // limitedBuffer keeps the first MaxOutputBytes written to it and drops the rest

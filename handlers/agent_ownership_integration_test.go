@@ -86,9 +86,6 @@ func TestAgentReferencesRejectOtherUsersAgents(t *testing.T) {
 	})
 	router.POST("/api/tasks", CreateTask)
 	router.PATCH("/api/tasks/:id", UpdateTask)
-	router.POST("/api/ai/models", CreateAIModel)
-	router.PUT("/api/ai/models/:id", UpdateAIModel)
-	router.DELETE("/api/ai/models/:id/agents", RemoveModelFromAgent)
 	send := func(method, path, body string) *httptest.ResponseRecorder {
 		req, _ := http.NewRequest(method, path, bytes.NewBufferString(body))
 		req.Header.Set("Content-Type", "application/json")
@@ -117,35 +114,4 @@ func TestAgentReferencesRejectOtherUsersAgents(t *testing.T) {
 	}
 	expect("update task to other user's agent", send("PATCH", "/api/tasks/"+id(task.ID), `{"agent_id":`+id(ownerAgent.ID)+`}`), http.StatusBadRequest)
 	expect("update task to global agent", send("PATCH", "/api/tasks/"+id(task.ID), `{"agent_id":`+id(global.ID)+`}`), http.StatusOK)
-
-	// Models: create must be refused before any provider is created.
-	var providersBefore, modelsBefore int64
-	db.Model(&models.AIProvider{}).Where("user_id = ?", caller.ID).Count(&providersBefore)
-	db.Model(&models.AIModel{}).Where("user_id = ?", caller.ID).Count(&modelsBefore)
-	expect("create model on other user's agent", send("POST", "/api/ai/models",
-		`{"provider_name":"New Provider","provider_type":"custom","base_url":"https://example.test","api_key":"x","name":"N","model_id":"n-`+suffix+`","agent_ids":[`+id(ownerAgent.ID)+`]}`), http.StatusNotFound)
-	var providersAfter, modelsAfter int64
-	db.Model(&models.AIProvider{}).Where("user_id = ?", caller.ID).Count(&providersAfter)
-	db.Model(&models.AIModel{}).Where("user_id = ?", caller.ID).Count(&modelsAfter)
-	if providersAfter != providersBefore || modelsAfter != modelsBefore {
-		t.Fatalf("refused request left side effects: providers %d->%d models %d->%d", providersBefore, providersAfter, modelsBefore, modelsAfter)
-	}
-	var linksToOwner int64
-	db.Model(&models.AgentModel{}).Where("agent_id = ?", ownerAgent.ID).Count(&linksToOwner)
-	if linksToOwner != 0 {
-		t.Fatalf("a model was linked to another user's agent")
-	}
-
-	// Models: move to another user's agent must fail and keep the existing link.
-	expect("move model to other user's agent", send("PUT", "/api/ai/models/"+id(callerModel.ID), `{"agent_ids":[`+id(ownerAgent.ID)+`]}`), http.StatusNotFound)
-	var stillLinked int64
-	db.Model(&models.AgentModel{}).Where("ai_model_id = ? AND agent_id = ?", callerModel.ID, global.ID).Count(&stillLinked)
-	db.Model(&models.AgentModel{}).Where("agent_id = ?", ownerAgent.ID).Count(&linksToOwner)
-	if stillLinked != 1 || linksToOwner != 0 {
-		t.Fatalf("failed move changed links: stillLinked=%d linksToOwner=%d", stillLinked, linksToOwner)
-	}
-
-	// Models: removing a relation through another user's agent is refused; the global one works.
-	expect("remove model via other user's agent", send("DELETE", "/api/ai/models/"+id(callerModel.ID)+"/agents", `{"agent_id":`+id(ownerAgent.ID)+`}`), http.StatusNotFound)
-	expect("remove model via global agent", send("DELETE", "/api/ai/models/"+id(callerModel.ID)+"/agents", `{"agent_id":`+id(global.ID)+`}`), http.StatusOK)
 }

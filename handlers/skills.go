@@ -47,11 +47,6 @@ func skillFromModel(skill models.Skill) skillResponse {
 	return result
 }
 
-func currentSkillUser(c *gin.Context) (uint, bool) {
-	id := c.GetUint("user_id")
-	return id, id != 0
-}
-
 func skillManifestJSON(manifest models.SkillManifest) (string, error) {
 	data, err := json.Marshal(manifest)
 	return string(data), err
@@ -85,7 +80,7 @@ func createSkillFromPackage(userID uint, pkg services.ValidatedSkillPackage, sou
 }
 
 func GetSkills(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -113,7 +108,7 @@ func GetSkills(c *gin.Context) {
 }
 
 func GetSkill(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -127,7 +122,7 @@ func GetSkill(c *gin.Context) {
 }
 
 func CreateSkill(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -154,7 +149,7 @@ func CreateSkill(c *gin.Context) {
 }
 
 func ImportSkillZIP(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -192,7 +187,7 @@ func ImportSkillZIP(c *gin.Context) {
 }
 
 func ImportSkillGitHub(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -223,7 +218,7 @@ func ImportSkillGitHub(c *gin.Context) {
 }
 
 func UpdateSkill(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -270,7 +265,7 @@ func UpdateSkill(c *gin.Context) {
 }
 
 func DeleteSkill(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return
@@ -288,7 +283,7 @@ func DeleteSkill(c *gin.Context) {
 }
 
 func ValidateSkill(c *gin.Context) {
-	userID, ok := currentSkillUser(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "error": "User tidak ditemukan."})
 		return

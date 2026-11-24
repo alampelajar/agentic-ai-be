@@ -19,15 +19,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func currentFeedbackUserID(c *gin.Context) (uint, bool) {
-	value, ok := c.Get("user_id")
-	if !ok { return 0, false }
-	id, ok := value.(uint)
-	return id, ok
-}
-
 func CreateFeedback(c *gin.Context) {
-	userID, ok := currentFeedbackUserID(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
 		return
@@ -119,18 +112,24 @@ func CreateFeedback(c *gin.Context) {
 }
 
 func GetMyFeedback(c *gin.Context) {
-	userID, ok := currentFeedbackUserID(c)
-	if !ok { c.JSON(http.StatusUnauthorized, gin.H{"ok":false,"message":"User tidak ditemukan"}); return }
+	userID, ok := getCurrentUserID(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
+		return
+	}
 	var items []models.Feedback
 	if err := config.DB.Preload("Replies").Where("user_id = ?", userID).Order("created_at DESC").Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal mengambil feedback"}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal mengambil feedback"})
+		return
 	}
-	if items == nil { items = []models.Feedback{} }
-	c.JSON(http.StatusOK, gin.H{"ok":true,"feedback":items})
+	if items == nil {
+		items = []models.Feedback{}
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "feedback": items})
 }
 
 func RateMyFeedback(c *gin.Context) {
-	userID, ok := currentFeedbackUserID(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
 		return
@@ -163,11 +162,11 @@ func RateMyFeedback(c *gin.Context) {
 	}
 
 	allowedReasons := map[string]bool{
-		"admin_ramah": true,
-		"pengerjaan_cepat": true,
-		"solusi_tepat": true,
-		"komunikasi_jelas": true,
-		"responsif": true,
+		"admin_ramah":           true,
+		"pengerjaan_cepat":      true,
+		"solusi_tepat":          true,
+		"komunikasi_jelas":      true,
+		"responsif":             true,
 		"masalah_terselesaikan": true,
 	}
 	seen := make(map[string]bool)
@@ -201,7 +200,7 @@ func RateMyFeedback(c *gin.Context) {
 	}
 
 	if err := config.DB.Model(&item).Updates(map[string]interface{}{
-		"rating": req.Rating,
+		"rating":         req.Rating,
 		"rating_reasons": gorm.Expr("?::jsonb", string(reasonsJSON)),
 		"rating_comment": req.RatingComment,
 	}).Error; err != nil {
@@ -283,7 +282,7 @@ func serveFeedbackAttachment(c *gin.Context, scope func(*gorm.DB) *gorm.DB) {
 
 // GetMyFeedbackAttachment sends the image of one of the signed-in user's own tickets.
 func GetMyFeedbackAttachment(c *gin.Context) {
-	userID, ok := currentFeedbackUserID(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
 		return
@@ -297,7 +296,7 @@ func AdminGetFeedbackAttachment(c *gin.Context) {
 }
 
 func DeleteMyFeedback(c *gin.Context) {
-	userID, ok := currentFeedbackUserID(c)
+	userID, ok := getCurrentUserID(c)
 	if !ok {
 		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "User tidak ditemukan"})
 		return
@@ -317,7 +316,8 @@ func AdminGetFeedback(c *gin.Context) {
 	var items []models.Feedback
 	if err := config.DB.Preload("Replies").Joins("JOIN users ON users.id = feedbacks.user_id").
 		Select("feedbacks.*").Order("feedbacks.created_at DESC").Find(&items).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal mengambil feedback"}); return
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal mengambil feedback"})
+		return
 	}
 	type row struct {
 		models.Feedback
@@ -327,53 +327,90 @@ func AdminGetFeedback(c *gin.Context) {
 		// console then offers to restore it next to the message.
 		UserDeletesAt *time.Time `json:"user_deletes_at"`
 	}
-	rows := make([]row,0,len(items))
+	rows := make([]row, 0, len(items))
 	for _, item := range items {
 		var user models.User
 		// Unscoped: messages from accounts waiting to be deleted are the ones asking for them back.
-		if err := config.DB.Unscoped().Select("id","name","email","deleted_at").First(&user,item.UserID).Error; err == nil {
-			entry := row{Feedback:item,UserName:user.Name,UserEmail:user.Email}
+		if err := config.DB.Unscoped().Select("id", "name", "email", "deleted_at").First(&user, item.UserID).Error; err == nil {
+			entry := row{Feedback: item, UserName: user.Name, UserEmail: user.Email}
 			if pendingDeletion(user) {
 				end := deletesAt(user)
 				entry.UserDeletesAt = &end
 			}
-			rows = append(rows,entry)
+			rows = append(rows, entry)
 		}
 	}
-	c.JSON(http.StatusOK, gin.H{"ok":true,"feedback":rows})
+	c.JSON(http.StatusOK, gin.H{"ok": true, "feedback": rows})
 }
 
 func AdminUpdateFeedbackStatus(c *gin.Context) {
-	id, err := strconv.ParseUint(c.Param("id"),10,64)
-	if err != nil { c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"ID feedback tidak valid"}); return }
-	var req struct { Status string `json:"status"` }
-	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"Format JSON tidak valid"}); return }
-	if req.Status != "new" && req.Status != "processing" && req.Status != "completed" && req.Status != "rejected" {
-		c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"Status feedback tidak valid"}); return
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "ID feedback tidak valid"})
+		return
 	}
-	result := config.DB.Model(&models.Feedback{}).Where("id = ?",id).Update("status",req.Status)
-	if result.Error != nil { c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal memperbarui status"}); return }
-	if result.RowsAffected == 0 { c.JSON(http.StatusNotFound, gin.H{"ok":false,"message":"Feedback tidak ditemukan"}); return }
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Format JSON tidak valid"})
+		return
+	}
+	if req.Status != "new" && req.Status != "processing" && req.Status != "completed" && req.Status != "rejected" {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Status feedback tidak valid"})
+		return
+	}
+	result := config.DB.Model(&models.Feedback{}).Where("id = ?", id).Update("status", req.Status)
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal memperbarui status"})
+		return
+	}
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "message": "Feedback tidak ditemukan"})
+		return
+	}
 	idText := strconv.FormatUint(id, 10)
 	recordAudit(c, "feedback.status_changed", "feedback", idText, "Feedback #"+idText, "Status feedback #"+idText+" diubah menjadi "+req.Status+" oleh administrator.")
-	c.JSON(http.StatusOK, gin.H{"ok":true})
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func AdminReplyFeedback(c *gin.Context) {
 	adminValue, ok := c.Get("user_id")
 	adminID, valid := adminValue.(uint)
-	if !ok || !valid { c.JSON(http.StatusUnauthorized, gin.H{"ok":false,"message":"Admin tidak ditemukan"}); return }
-	id, err := strconv.ParseUint(c.Param("id"),10,64)
-	if err != nil { c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"ID feedback tidak valid"}); return }
-	var req struct { Message string `json:"message"` }
-	if err := c.ShouldBindJSON(&req); err != nil { c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"Format JSON tidak valid"}); return }
+	if !ok || !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"ok": false, "message": "Admin tidak ditemukan"})
+		return
+	}
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "ID feedback tidak valid"})
+		return
+	}
+	var req struct {
+		Message string `json:"message"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Format JSON tidak valid"})
+		return
+	}
 	req.Message = strings.TrimSpace(req.Message)
-	if req.Message == "" || len([]rune(req.Message)) > 5000 { c.JSON(http.StatusBadRequest, gin.H{"ok":false,"message":"Balasan wajib diisi (maksimal 5000 karakter)"}); return }
+	if req.Message == "" || len([]rune(req.Message)) > 5000 {
+		c.JSON(http.StatusBadRequest, gin.H{"ok": false, "message": "Balasan wajib diisi (maksimal 5000 karakter)"})
+		return
+	}
 	var item models.Feedback
-	if err := config.DB.First(&item,id).Error; err != nil { c.JSON(http.StatusNotFound, gin.H{"ok":false,"message":"Feedback tidak ditemukan"}); return }
-	reply := models.FeedbackReply{FeedbackID:uint(id),AdminID:adminID,Message:req.Message}
-	if err := config.DB.Create(&reply).Error; err != nil { c.JSON(http.StatusInternalServerError, gin.H{"ok":false,"message":"Gagal mengirim balasan"}); return }
-	if item.Status == "new" { config.DB.Model(&item).Update("status","processing") }
+	if err := config.DB.First(&item, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"ok": false, "message": "Feedback tidak ditemukan"})
+		return
+	}
+	reply := models.FeedbackReply{FeedbackID: uint(id), AdminID: adminID, Message: req.Message}
+	if err := config.DB.Create(&reply).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"ok": false, "message": "Gagal mengirim balasan"})
+		return
+	}
+	if item.Status == "new" {
+		config.DB.Model(&item).Update("status", "processing")
+	}
 	recordAudit(c, "feedback.replied", "feedback", strconv.FormatUint(uint64(item.ID), 10), "Feedback #"+strconv.FormatUint(uint64(item.ID), 10), "Administrator membalas feedback #"+strconv.FormatUint(uint64(item.ID), 10)+".")
-	c.JSON(http.StatusCreated, gin.H{"ok":true,"reply":reply})
+	c.JSON(http.StatusCreated, gin.H{"ok": true, "reply": reply})
 }
