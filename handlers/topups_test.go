@@ -130,8 +130,14 @@ func TestTopUpByHand(t *testing.T) {
 		t.Fatalf("settings = %d %v", code, body)
 	}
 
-	if code, _ := send("7", pngBytes(t)); code != http.StatusBadRequest {
-		t.Errorf("a package that is not offered = %d, want 400", code)
+	// Besides the packages, a person may type their own number within the bounds.
+	for _, wrong := range []string{"0", "-5", "1001", "abc"} {
+		if code, _ := send(wrong, pngBytes(t)); code != http.StatusBadRequest {
+			t.Errorf("a top-up of %q credits = %d, want 400", wrong, code)
+		}
+	}
+	if code, body := call(person.ID, "GET", "/topup", nil, ""); code != http.StatusOK || body["topup"].(map[string]any)["custom_max"] != float64(maxCustomTopUp) {
+		t.Errorf("custom bounds = %d %v", code, body)
 	}
 	if code, _ := send("10", []byte("not a picture")); code != http.StatusBadRequest {
 		t.Errorf("a proof that is not a picture = %d, want 400", code)
