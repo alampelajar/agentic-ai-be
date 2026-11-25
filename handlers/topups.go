@@ -26,11 +26,14 @@ import (
 // TopUpSettings), sends a screenshot of the payment, and an admin approves it; only
 // then are the credits added. The screenshot is never public.
 const (
-	topUpProofDir        = "uploads/topups"
-	maxTopUpProofBytes   = 3 << 20
-	maxPendingTopUps     = 3
-	maxTopUpPackages     = 8
-	maxTopUpCredits      = 10_000
+	topUpProofDir      = "uploads/topups"
+	maxTopUpProofBytes = 3 << 20
+	maxPendingTopUps   = 3
+	maxTopUpPackages   = 8
+	maxTopUpCredits    = 10_000
+	// A person may also type their own number of credits, within these bounds.
+	minCustomTopUp       = 1
+	maxCustomTopUp       = 1_000
 	maxTopUpPaymentInfo  = 2000
 	maxTopUpNote         = 300
 	topUpRequestListSize = 50
@@ -44,6 +47,8 @@ type topUpView struct {
 	PricePerCredit int    `json:"price_per_credit"`
 	Packages       []int  `json:"packages"`
 	PaymentInfo    string `json:"payment_info"`
+	CustomMin      int    `json:"custom_min"`
+	CustomMax      int    `json:"custom_max"`
 }
 
 func loadTopUpSettings() models.TopUpSettings {
@@ -74,7 +79,7 @@ func parsePackages(raw string) []int {
 func viewTopUp(settings models.TopUpSettings) topUpView {
 	packages := parsePackages(settings.Packages)
 	info := strings.TrimSpace(settings.PaymentInfo)
-	view := topUpView{PricePerCredit: settings.PricePerCredit, Packages: packages, PaymentInfo: info}
+	view := topUpView{PricePerCredit: settings.PricePerCredit, Packages: packages, PaymentInfo: info, CustomMin: minCustomTopUp, CustomMax: maxCustomTopUp}
 	view.Available = settings.Enabled && settings.PricePerCredit > 0 && len(packages) > 0 && info != ""
 	if !view.Available {
 		view.PaymentInfo, view.Packages = "", []int{}
@@ -102,7 +107,8 @@ func GetTopUp(c *gin.Context) {
 }
 
 // CreateTopUp answers POST /api/topups (multipart: credits, proof): a request for one of
-// the packages, with the screenshot of the payment. It waits for an admin.
+// the packages or a number of the person's own choosing (minCustomTopUp to
+// maxCustomTopUp), with the screenshot of the payment. It waits for an admin.
 func CreateTopUp(c *gin.Context) {
 	userID, ok := getCurrentUserID(c)
 	if !ok {
@@ -115,12 +121,12 @@ func CreateTopUp(c *gin.Context) {
 		return
 	}
 	credits, err := strconv.Atoi(strings.TrimSpace(c.PostForm("credits")))
-	valid := false
+	valid := err == nil && credits >= minCustomTopUp && credits <= maxCustomTopUp
 	for _, choice := range view.Packages {
 		valid = valid || (err == nil && credits == choice)
 	}
 	if !valid {
-		siteError(c, http.StatusBadRequest, "topup_package", "Pilih salah satu paket kredit.")
+		siteError(c, http.StatusBadRequest, "topup_package", "Pilih paket kredit, atau tulis jumlah 1 sampai 1000.")
 		return
 	}
 	var pending int64
