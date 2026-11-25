@@ -400,6 +400,33 @@ func CheckCountUp(rel, content string, known map[string]bool) []string {
 	return problems
 }
 
+var (
+	statsTag   = regexp.MustCompile(`(?s)<Stats\b.*?/>`)
+	statsValue = regexp.MustCompile(`\bvalue\s*:\s*([^,}\s]+)`)
+	plainValue = regexp.MustCompile(`^[0-9][0-9_.,]*$`)
+)
+
+// CheckStats is CheckCountUp for the Stats section, whose numbers count up the same
+// way: each value must be written directly and be a number the brief gives.
+func CheckStats(rel, content string, known map[string]bool) []string {
+	var problems []string
+	for _, tag := range statsTag.FindAllStringIndex(content, -1) {
+		block := content[tag[0]:tag[1]]
+		for _, match := range statsValue.FindAllStringSubmatchIndex(block, -1) {
+			raw := block[match[2]:match[3]]
+			line := strings.Count(content[:tag[0]+match[0]], "\n") + 1
+			if !plainValue.MatchString(raw) {
+				problems = append(problems, fmt.Sprintf("%s:%d Stats values must be written directly, as value: 12, and only numbers the brief gives", rel, line))
+				continue
+			}
+			if !known[strings.NewReplacer(".", "", ",", "", "_", "").Replace(raw)] {
+				problems = append(problems, fmt.Sprintf("%s:%d Stats shows %s, a number the owner never gave: remove it or show a number from the brief", rel, line, raw))
+			}
+		}
+	}
+	return problems
+}
+
 // CheckUsesBlocks refuses a page or layout written without the finished sections: the
 // sections carry the look, so a page built by hand looks plainer than the rest of the
 // site. The page-not-found page may stay simple.

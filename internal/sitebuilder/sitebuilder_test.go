@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -550,6 +551,42 @@ func TestCountUpShowsOnlyNumbersTheOwnerGave(t *testing.T) {
 	for _, line := range []string{`<CountUp to={40000} prefix="Rp " />`, `<CountUp to={stat.value} />`, `<CountUp to={500} suffix="+ pelanggan" />`} {
 		if len(CheckCountUp("web/src/pages/Home.tsx", line, known)) == 0 {
 			t.Errorf("not refused: %s", line)
+		}
+	}
+}
+
+// The Stats section counts up too, so its values follow the same rule as CountUp.
+func TestStatsShowOnlyNumbersTheOwnerGave(t *testing.T) {
+	known := KnownNumbers(`{"content_notes": "memasak sejak 12 tahun lalu, 3 dapur di Bandung"}`)
+	good := "<Stats\n  items={[\n    { value: 12, suffix: ' tahun', label: 'memasak' },\n    { value: 3, label: 'dapur' },\n  ]}\n/>"
+	if problems := CheckStats("web/src/pages/Home.tsx", good, known); len(problems) != 0 {
+		t.Errorf("refused numbers from the brief: %v", problems)
+	}
+	for _, bad := range []string{
+		"<Stats items={[{ value: 500, suffix: '+', label: 'pelanggan' }]} />",
+		"<Stats items={stats.map((s) => ({ value: s.n, label: s.l }))} />",
+	} {
+		if len(CheckStats("web/src/pages/Home.tsx", bad, known)) == 0 {
+			t.Errorf("not refused: %s", bad)
+		}
+	}
+	problems := CheckStats("web/src/pages/Home.tsx", "import x\n\n<Stats\n  items={[{ value: 99, label: 'x' }]}\n/>", known)
+	if len(problems) != 1 || !strings.Contains(problems[0], "Home.tsx:4 ") {
+		t.Errorf("wrong line: %v", problems)
+	}
+}
+
+// Every finished section the template exports is described to the agent, so it can use it.
+func TestEveryBlockIsInThePrompt(t *testing.T) {
+	index, err := os.ReadFile("template/web/src/blocks/index.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := DirectionByKey("warm-editorial")
+	prompt := CodingSystem(Brief{Language: "id"}, d)
+	for _, match := range regexp.MustCompile(`export \{ (\w+) \} from '\./\w+'`).FindAllStringSubmatch(string(index), -1) {
+		if !strings.Contains(prompt, match[1]+" {") {
+			t.Errorf("%s is exported by blocks/index.ts but not described in the coding prompt", match[1])
 		}
 	}
 }

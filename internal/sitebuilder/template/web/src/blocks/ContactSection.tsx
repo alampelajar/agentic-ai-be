@@ -24,7 +24,7 @@ type ContactSectionProps = {
 }
 
 /** A form field as a page may write it; turned into the form's own field shape. */
-type FieldInput = {
+export type FieldInput = {
   name: string
   label: string
   type?: string
@@ -35,7 +35,7 @@ type FieldInput = {
 
 const FIELD_TYPES: SiteFormField['type'][] = ['text', 'email', 'tel', 'textarea', 'select', 'date', 'number']
 
-function toField(input: FieldInput): SiteFormField {
+export function toField(input: FieldInput): SiteFormField {
   const type = FIELD_TYPES.includes(input.type as SiteFormField['type']) ? (input.type as SiteFormField['type']) : 'text'
   const options = input.options?.map((option) => (typeof option === 'string' ? option : (option.label ?? option.value ?? ''))).filter(Boolean)
   return { name: input.name, label: input.label, type, required: input.required, placeholder: input.placeholder, options }

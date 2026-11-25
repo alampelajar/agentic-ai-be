@@ -671,6 +671,7 @@ func (j *job) fixTokens() error {
 		for rel, content := range files {
 			found := append(CheckTokens(rel, content), CheckLanguage(rel, content, j.brief.Language)...)
 			found = append(found, CheckCountUp(rel, content, known)...)
+			found = append(found, CheckStats(rel, content, known)...)
 			found = append(found, CheckUsesBlocks(rel, content)...)
 			if len(found) > 0 {
 				problems = append(problems, found...)
