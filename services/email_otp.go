@@ -251,19 +251,19 @@ func SendEmail(ctx context.Context, apiKey, sender, recipient, subject, htmlBody
 
 // OTPEmail builds the subject and bodies for a purpose.
 func OTPEmail(purpose, code string) (subject, htmlBody, textBody string) {
-	heading, intro := "Verify your Agentic AI email", "Use this code to verify your email address and finish creating your account."
-	subject = "Your Agentic AI verification code"
+	heading, intro := "Verify your THIS MY WEBSITE email", "Use this code to verify your email address and finish creating your account."
+	subject = "Your THIS MY WEBSITE verification code"
 	if purpose == models.OTPPurposePasswordReset {
-		heading, intro = "Reset your Agentic AI password", "Use this verification code to continue resetting your password."
-		subject = "Your Agentic AI password reset code"
+		heading, intro = "Reset your THIS MY WEBSITE password", "Use this verification code to continue resetting your password."
+		subject = "Your THIS MY WEBSITE password reset code"
 	}
 	if purpose == models.OTPPurposeDeleteAccount {
-		heading, intro = "Confirm account deletion", "Use this code to confirm that you want to permanently delete your Agentic AI account. If you did not ask for this, do not share the code."
-		subject = "Confirm deleting your Agentic AI account"
+		heading, intro = "Confirm account deletion", "Use this code to confirm that you want to permanently delete your THIS MY WEBSITE account. If you did not ask for this, do not share the code."
+		subject = "Confirm deleting your THIS MY WEBSITE account"
 	}
 	if purpose == models.OTPPurposeChangeEmail {
-		heading, intro = "Confirm your new email", "Use this code to confirm this address as the new email for your Agentic AI account."
-		subject = "Confirm your new Agentic AI email"
+		heading, intro = "Confirm your new email", "Use this code to confirm this address as the new email for your THIS MY WEBSITE account."
+		subject = "Confirm your new THIS MY WEBSITE email"
 	}
 	htmlBody = fmt.Sprintf(`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#171717">
 <h2 style="margin-bottom:12px">%s</h2>

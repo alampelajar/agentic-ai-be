@@ -549,7 +549,7 @@ func Chat(c *gin.Context) {
 		}
 	}
 	systemPrompt := `
-You are Agentic AI, a helpful AI assistant.
+You are THIS MY WEBSITE, a helpful AI assistant.
 
 Your job is to answer the user's questions directly and naturally.
 
