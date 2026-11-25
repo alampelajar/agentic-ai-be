@@ -440,9 +440,9 @@ func VerifyChangeEmailOTP(c *gin.Context) {
 
 	// Best effort: tell the old address so a takeover does not go unnoticed.
 	if apiKey, sender, _, ok := services.EmailOTPConfig(); ok && oldEmail != "" {
-		text := "The email on your Agentic AI account was changed. If this was not you, contact support immediately."
+		text := "The email on your THIS MY WEBSITE account was changed. If this was not you, contact support immediately."
 		htmlBody := "<p>" + text + "</p>"
-		if err := services.SendEmail(c.Request.Context(), apiKey, sender, oldEmail, "Your Agentic AI email was changed", htmlBody, text); err != nil {
+		if err := services.SendEmail(c.Request.Context(), apiKey, sender, oldEmail, "Your THIS MY WEBSITE email was changed", htmlBody, text); err != nil {
 			log.Printf("[email-otp] change_email notice failed: %v", err)
 		}
 	}

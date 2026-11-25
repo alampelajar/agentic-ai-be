@@ -147,7 +147,7 @@ func TestChatUsesPersistentMemoryOnlyWhenAllowed(t *testing.T) {
 		t.Errorf("a memory closed the memory block early:\n%s", prompt)
 	}
 	// The usual instructions are still there, and come before the memory.
-	if !strings.Contains(prompt, "You are Agentic AI") || strings.Index(prompt, "You are Agentic AI") > strings.Index(prompt, "USER MEMORY") {
+	if !strings.Contains(prompt, "You are THIS MY WEBSITE") || strings.Index(prompt, "You are THIS MY WEBSITE") > strings.Index(prompt, "USER MEMORY") {
 		t.Errorf("memory must follow the normal system prompt")
 	}
 
