@@ -26,10 +26,23 @@ type User struct {
 	PremiumUntil *time.Time `json:"premium_until"`
 	// RestoredAt is when an admin gave the account back after its owner deleted it. A
 	// restore happens once: deleting the account again removes it at once.
-	RestoredAt *time.Time     `json:"-"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
+	RestoredAt *time.Time `json:"-"`
+	// Credits pay for the Website Builder: a new website uses 2, a change uses 1. A new
+	// account starts with 10 (also the default for accounts made before credits); more
+	// come from an admin (a top-up). An account in BUILDER_UNLIMITED_EMAILS uses none.
+	Credits int `json:"credits" gorm:"not null;default:10"`
+	// New-account promo: 10 free credits and 50% off top-ups for 30 days. An account made
+	// from the same device as another, or from an address many accounts came from, gets
+	// neither (PromoEligible false, PromoNote says why); an admin may change it.
+	PromoEligible bool   `json:"-" gorm:"not null;default:true"`
+	PromoNote     string `json:"-" gorm:"type:varchar(160)"`
+	// Keyed hashes of the sign-up address and the browser's random device id, never the
+	// values themselves: they can be compared, not read back.
+	SignupIP     string         `json:"-" gorm:"type:varchar(64);index"`
+	SignupDevice string         `json:"-" gorm:"type:varchar(64);index"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // BeforeCreate fills CanonicalEmail. Code that changes Email on an existing account

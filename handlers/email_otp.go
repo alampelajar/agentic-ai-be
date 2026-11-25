@@ -238,6 +238,9 @@ func VerifyRegisterOTP(c *gin.Context) {
 		if err := tx.Create(&created).Error; err != nil {
 			return err
 		}
+		if err := applySignupPromo(tx, c, created.ID); err != nil {
+			return err
+		}
 		return services.RecordSignup(tx, email, created.ID)
 	})
 	if err != nil {

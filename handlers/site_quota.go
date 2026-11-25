@@ -13,34 +13,32 @@ import (
 	"agentic-ai-backend/models"
 )
 
-// Website Builder limits per person. Everyone gets a monthly token allowance. A free account
-// also gets a small number of websites and the model(s) the admin marked as the builder's
-// default; a premium account (User.IsPremium) gets a larger allowance, many websites and
-// every active system model.
+// Website Builder limits per person: credits. A new account starts with 10 (the
+// column default on users.credits); a new website uses 2 and a change uses 1, only when
+// the work succeeded. More credits come from an admin (a top-up). The owners' own
+// accounts (BUILDER_UNLIMITED_EMAILS) use none. A premium account (User.IsPremium) still
+// lets the builder use every active system model instead of the default one only.
 const (
-	freeSiteLimit          = 2
-	freeMonthlyTokens      = 200_000
-	premiumSiteLimit       = 50 // a safety bound, not a product limit
-	premiumMonthlyTokens   = 1_000_000
-	builderQuotaZoneTZ     = "Asia/Jakarta"
-	builderQuotaEnvName    = "BUILDER_MONTHLY_TOKENS"
-	builderPremiumQuotaEnv = "BUILDER_PREMIUM_MONTHLY_TOKENS"
+	welcomeCredits     = 10 // keep equal to the default of models.User.Credits
+	createCredits      = 2
+	reviseCredits      = 1
+	siteSafetyLimit    = 50 // a safety bound on websites per person, not a product limit
+	builderQuotaZoneTZ = "Asia/Jakarta"
 	// BUILDER_UNLIMITED_EMAILS lists the owners' own accounts (comma-separated e-mail
-	// addresses): no monthly token allowance and no daily system-model quota.
+	// addresses): no credits used and no daily system-model quota.
 	builderUnlimitedEnv = "BUILDER_UNLIMITED_EMAILS"
 )
 
 // builderPlan is what one person may use of the Website Builder right now.
 type builderPlan struct {
-	Premium    bool `json:"premium"`
-	SiteLimit  int  `json:"site_limit"`
-	SitesUsed  int  `json:"sites_used"`
-	TokenLimit int  `json:"token_limit"` // 0: no limit
-	TokensUsed int  `json:"tokens_used"`
-	// ResetsAt is when the monthly allowance starts again.
-	ResetsAt time.Time `json:"resets_at"`
-	// PremiumUntil is when the premium account ends; nil when it does not end or there is none.
-	PremiumUntil *time.Time `json:"premium_until"`
+	// Credits is the balance; Available is what is left once the work already started
+	// (queued or running) is paid for.
+	Credits    int `json:"credits"`
+	Available  int `json:"available"`
+	CreateCost int `json:"create_cost"`
+	ReviseCost int `json:"revise_cost"`
+	SiteLimit  int `json:"site_limit"`
+	SitesUsed  int `json:"sites_used"`
 	// Unlimited is one of the owners' own accounts (BUILDER_UNLIMITED_EMAILS).
 	Unlimited bool `json:"unlimited"`
 }
@@ -64,9 +62,9 @@ func premiumActive(user models.User, now time.Time) bool {
 	return user.IsPremium && (user.PremiumUntil == nil || now.Before(*user.PremiumUntil))
 }
 
-// OutOfTokens says whether the monthly allowance is used up.
-func (p builderPlan) OutOfTokens() bool {
-	return p.TokenLimit > 0 && p.TokensUsed >= p.TokenLimit
+// CanAfford says whether the person may start work that uses cost credits.
+func (p builderPlan) CanAfford(cost int) bool {
+	return p.Unlimited || p.Available >= cost
 }
 
 // AtSiteLimit says whether the person may not make another website.
@@ -81,16 +79,9 @@ func quotaZone() *time.Location {
 	return time.FixedZone("WIB", 7*60*60)
 }
 
-// monthStart is the first moment of the current month in Indonesian time, when the
-// allowance is counted from.
-func monthStart(now time.Time) time.Time {
-	local := now.In(quotaZone())
-	return time.Date(local.Year(), local.Month(), 1, 0, 0, 0, 0, local.Location())
-}
-
 func loadPremium(userID uint) (models.User, bool) {
 	var user models.User
-	if err := config.DB.Select("id", "email", "is_premium", "premium_until").First(&user, userID).Error; err != nil {
+	if err := config.DB.Select("id", "email", "is_premium", "premium_until", "credits").First(&user, userID).Error; err != nil {
 		return user, false
 	}
 	return user, premiumActive(user, time.Now()) || unlimitedEmail(user.Email)
@@ -107,39 +98,33 @@ func isPremiumUser(userID uint) bool {
 	return active
 }
 
-// tokensThisMonth adds up the tokens of the person's model calls since the month began.
-func tokensThisMonth(userID uint) int {
-	var total int64
-	config.DB.Model(&models.AIModelCallLog{}).
-		Where("user_id = ? AND created_at >= ?", userID, monthStart(time.Now())).
-		Select("COALESCE(SUM(tokens), 0)").Scan(&total)
-	return int(total)
+// runCredits is what a run of this kind uses when it succeeds.
+func runCredits(kind string) int {
+	if kind == models.AgentRunCreate {
+		return createCredits
+	}
+	return reviseCredits
+}
+
+// reservedCredits is what the person's queued and running work will use.
+func reservedCredits(userID uint) int {
+	var runs []models.AgentRun
+	config.DB.Select("kind").Where("user_id = ? AND status IN ?", userID, []string{models.RunQueued, models.RunRunning}).Find(&runs)
+	total := 0
+	for _, run := range runs {
+		total += runCredits(run.Kind)
+	}
+	return total
 }
 
 func builderPlanFor(userID uint) builderPlan {
-	start := monthStart(time.Now())
-	user, premium := loadPremium(userID)
-	plan := builderPlan{Premium: premium, ResetsAt: start.AddDate(0, 1, 0)}
-	if premium {
-		plan.PremiumUntil = user.PremiumUntil
-	}
+	user, _ := loadPremium(userID)
+	plan := builderPlan{Credits: user.Credits, CreateCost: createCredits, ReviseCost: reviseCredits, SiteLimit: siteSafetyLimit}
 	var sites int64
 	config.DB.Model(&models.Site{}).Where("user_id = ?", userID).Count(&sites)
 	plan.SitesUsed = int(sites)
-	plan.TokensUsed = tokensThisMonth(userID)
-	if unlimitedEmail(user.Email) {
-		plan.Unlimited = true
-		plan.SiteLimit = premiumSiteLimit
-		plan.TokenLimit = 0
-		return plan
-	}
-	if plan.Premium {
-		plan.SiteLimit = premiumSiteLimit
-		plan.TokenLimit = envInt(builderPremiumQuotaEnv, premiumMonthlyTokens)
-		return plan
-	}
-	plan.SiteLimit = freeSiteLimit
-	plan.TokenLimit = envInt(builderQuotaEnvName, freeMonthlyTokens)
+	plan.Unlimited = unlimitedEmail(user.Email)
+	plan.Available = user.Credits - reservedCredits(userID)
 	return plan
 }
 

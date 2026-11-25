@@ -19,9 +19,8 @@ import (
 	"agentic-ai-backend/models"
 )
 
-// Without premium a person may keep two websites and use 200,000 tokens a month; a
-// premium account has neither limit. Needs SKILLS_TEST_DATABASE_URL.
-func TestBuilderLimitsFollowThePlan(t *testing.T) {
+func creditsTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
 	dsn := os.Getenv("SKILLS_TEST_DATABASE_URL")
 	if dsn == "" {
 		t.Skip("SKILLS_TEST_DATABASE_URL is not configured")
@@ -39,34 +38,40 @@ func TestBuilderLimitsFollowThePlan(t *testing.T) {
 	if err := migrateAll(db); err != nil {
 		t.Fatal(err)
 	}
+	return db
+}
+
+// A new account starts with 10 credits; a new website needs 2 and a change 1, paid
+// only when the work succeeded and only once; work already started holds its credits;
+// an admin tops up. Needs SKILLS_TEST_DATABASE_URL.
+func TestBuilderCredits(t *testing.T) {
+	db := creditsTestDB(t)
 	storage, err := cloudworkspace.NewLocalDevelopmentStorage(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Fewer workspaces than a premium account's websites: the plan's number still holds.
-	limits := cloudworkspace.DefaultLimits()
-	limits.MaxWorkspacesPerUser = freeSiteLimit
-	UseCloudWorkspaceStorage(storage, limits, nil)
+	UseCloudWorkspaceStorage(storage, cloudworkspace.DefaultLimits(), nil)
 	t.Setenv("SITE_DATA_ROOT", t.TempDir())
-	t.Setenv(builderQuotaEnvName, "")
-	t.Setenv(builderPremiumQuotaEnv, "")
+	t.Setenv(builderUnlimitedEnv, "")
 
 	suffix := strconv.Itoa(os.Getpid())
-	free := models.User{Name: "Free", Email: "quota-free-" + suffix + "@example.test"}
-	premium := models.User{Name: "Premium", Email: "quota-premium-" + suffix + "@example.test", IsPremium: true}
-	for _, u := range []*models.User{&free, &premium} {
+	person := models.User{Name: "Credits", Email: "credits-" + suffix + "@example.test"}
+	admin := models.User{Name: "Admin", Email: "credits-admin-" + suffix + "@example.test", Role: "admin"}
+	for _, u := range []*models.User{&person, &admin} {
 		if err := db.Create(u).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
-	ids := []uint{free.ID, premium.ID}
+	ids := []uint{person.ID, admin.ID}
 	defer func() {
+		db.Where("user_id IN ?", ids).Delete(&models.CreditEntry{})
+		db.Where("user_id IN ?", ids).Delete(&models.AgentRun{})
 		db.Where("actor_user_id IN ?", ids).Delete(&models.AuditLog{})
-		db.Where("user_id IN ?", ids).Delete(&models.AIModelCallLog{})
+		db.Where("entity_type = ? AND entity_id = ?", "user", strconv.Itoa(int(person.ID))).Delete(&models.AuditLog{})
 		db.Unscoped().Where("user_id IN ?", ids).Delete(&models.Site{})
 		db.Unscoped().Where("user_id IN ?", ids).Delete(&models.CloudWorkspace{})
-		db.Unscoped().Delete(&free)
-		db.Unscoped().Delete(&premium)
+		db.Unscoped().Delete(&person)
+		db.Unscoped().Delete(&admin)
 	}()
 
 	send := func(as uint, method, path, body string) (int, map[string]any) {
@@ -74,94 +79,122 @@ func TestBuilderLimitsFollowThePlan(t *testing.T) {
 		r.Use(func(c *gin.Context) { c.Set("user_id", as); c.Next() })
 		r.GET("/sites", GetSites)
 		r.POST("/sites", CreateSite)
+		r.GET("/me/credits", GetMyCredits)
+		r.PATCH("/admin/users/:id/credits", AdminChangeCredits)
 		res := httptest.NewRecorder()
 		r.ServeHTTP(res, httptest.NewRequest(method, path, bytes.NewBufferString(body)))
 		var parsed map[string]any
 		_ = json.Unmarshal(res.Body.Bytes(), &parsed)
 		return res.Code, parsed
 	}
-	create := func(as uint) (int, string) {
-		code, body := send(as, "POST", "/sites", `{"description":"Toko roti rumahan di Yogyakarta, pesan lewat WhatsApp."}`)
+	create := func() (int, string) {
+		code, body := send(person.ID, "POST", "/sites", `{"description":"Toko roti rumahan di Yogyakarta, pesan lewat WhatsApp."}`)
 		reason, _ := body["code"].(string)
 		return code, reason
 	}
-
-	for i := 0; i < freeSiteLimit; i++ {
-		if code, reason := create(free.ID); code != http.StatusCreated {
-			t.Fatalf("free website %d = %d %s", i+1, code, reason)
-		}
-	}
-	if code, reason := create(free.ID); code != http.StatusConflict || reason != "site_limit" {
-		t.Errorf("a third free website = %d %s, want 409 site_limit", code, reason)
-	}
-	for i := 0; i < freeSiteLimit+1; i++ {
-		if code, reason := create(premium.ID); code != http.StatusCreated {
-			t.Fatalf("premium website %d = %d %s, want no limit", i+1, code, reason)
-		}
+	topUp := func(body string) (int, map[string]any) {
+		return send(admin.ID, "PATCH", "/admin/users/"+strconv.Itoa(int(person.ID))+"/credits", body)
 	}
 
-	// The list tells the interface what is left.
-	_, listed := send(free.ID, "GET", "/sites", "")
-	plan, _ := listed["plan"].(map[string]any)
-	if plan == nil || plan["premium"] != false || plan["site_limit"] != float64(freeSiteLimit) || plan["token_limit"] != float64(freeMonthlyTokens) {
-		t.Errorf("plan = %v", plan)
+	// A new account starts with the welcome credits.
+	plan := builderPlanFor(person.ID)
+	if plan.Credits != welcomeCredits || plan.Available != welcomeCredits || plan.CreateCost != createCredits || plan.ReviseCost != reviseCredits {
+		t.Fatalf("new account plan = %+v", plan)
 	}
-
-	// Tokens of this month count; last month's do not.
-	lastMonth := monthStart(time.Now()).Add(-time.Hour)
-	db.Create(&models.AIModelCallLog{UserID: free.ID, Attempt: 1, Status: "ok", Tokens: freeMonthlyTokens, CreatedAt: lastMonth})
-	if builderPlanFor(free.ID).OutOfTokens() {
-		t.Error("tokens of last month must not count")
+	if code, reason := create(); code != http.StatusCreated {
+		t.Fatalf("a website with 10 credits = %d %s", code, reason)
 	}
-	db.Create(&models.AIModelCallLog{UserID: free.ID, Attempt: 1, Status: "ok", Tokens: freeMonthlyTokens})
-	if !builderPlanFor(free.ID).OutOfTokens() {
-		t.Error("a used-up allowance must stop the builder")
-	}
-	// Premium has a larger allowance: past the free one it goes on, at a million it stops.
-	db.Create(&models.AIModelCallLog{UserID: premium.ID, Attempt: 1, Status: "ok", Tokens: freeMonthlyTokens * 2})
-	if plan := builderPlanFor(premium.ID); plan.OutOfTokens() || plan.TokenLimit != premiumMonthlyTokens {
-		t.Errorf("premium past the free allowance: plan = %+v", plan)
-	}
-	db.Create(&models.AIModelCallLog{UserID: premium.ID, Attempt: 1, Status: "ok", Tokens: premiumMonthlyTokens})
-	if !builderPlanFor(premium.ID).OutOfTokens() {
-		t.Error("premium must stop at its monthly allowance")
-	}
-
-	// A person without tokens left cannot start a new website either.
 	var site models.Site
-	db.Where("user_id = ?", free.ID).First(&site)
-	db.Delete(&site)
-	if code, reason := create(free.ID); code != http.StatusTooManyRequests || reason != "token_limit" {
-		t.Errorf("a new website without tokens = %d %s, want 429 token_limit", code, reason)
+	db.Where("user_id = ?", person.ID).First(&site)
+
+	// Paid when it succeeds, once.
+	createRun := models.AgentRun{SiteID: site.ID, UserID: person.ID, Kind: models.AgentRunCreate, Status: models.RunCompleted}
+	reviseRun := models.AgentRun{SiteID: site.ID, UserID: person.ID, Kind: models.AgentRunRevise, Status: models.RunCompleted}
+	db.Create(&createRun)
+	db.Create(&reviseRun)
+	ChargeRun(createRun)
+	ChargeRun(createRun) // a repeat must not charge again
+	ChargeRun(reviseRun)
+	if got := builderPlanFor(person.ID).Credits; got != welcomeCredits-createCredits-reviseCredits {
+		t.Fatalf("after a website and a change: %d credits, want %d", got, welcomeCredits-createCredits-reviseCredits)
 	}
 
-	// An admin gives premium for a time; it ends by itself.
+	// Work already started holds its credits: with 2 left and a website being made,
+	// nothing else can start.
+	db.Model(&models.User{}).Where("id = ?", person.ID).Update("credits", 2)
+	queued := models.AgentRun{SiteID: site.ID, UserID: person.ID, Kind: models.AgentRunCreate, Status: models.RunQueued}
+	db.Create(&queued)
+	if plan := builderPlanFor(person.ID); plan.Available != 0 || plan.CanAfford(reviseCredits) {
+		t.Errorf("with a website being made: plan = %+v", plan)
+	}
+	db.Model(&queued).Update("status", models.RunFailed)
+
+	// Not enough credits: no new website.
+	db.Model(&models.User{}).Where("id = ?", person.ID).Update("credits", 1)
+	if code, reason := create(); code != http.StatusPaymentRequired || reason != "credit_limit" {
+		t.Errorf("a website with 1 credit = %d %s, want 402 credit_limit", code, reason)
+	}
+
+	// An admin tops up; taking away never goes below zero.
+	if code, body := topUp(`{"amount":20,"note":"Transfer"}`); code != http.StatusOK || body["credits"] != float64(21) {
+		t.Fatalf("top-up = %d %v", code, body)
+	}
+	if code, _ := topUp(`{"amount":0}`); code != http.StatusBadRequest {
+		t.Errorf("a top-up of 0 = %d, want 400", code)
+	}
+	if code, body := topUp(`{"amount":-500}`); code != http.StatusOK || body["credits"] != float64(0) {
+		t.Errorf("taking away more than there is = %d %v, want 0", code, body)
+	}
+	var audits int64
+	db.Model(&models.AuditLog{}).Where("action = ? AND entity_id = ?", "user.credits", strconv.Itoa(int(person.ID))).Count(&audits)
+	if audits != 2 {
+		t.Errorf("audit entries = %d, want 2", audits)
+	}
+
+	// The person sees the balance and the history, newest first, with the website's name.
+	code, body := send(person.ID, "GET", "/me/credits", "")
+	history, _ := body["history"].([]any)
+	if code != http.StatusOK || len(history) != 4 {
+		t.Fatalf("history = %d %v", code, body)
+	}
+	if first := history[0].(map[string]any); first["reason"] != models.CreditReasonAdmin || first["balance"] != float64(0) {
+		t.Errorf("newest entry = %v", first)
+	}
+	if oldest := history[3].(map[string]any); oldest["reason"] != models.CreditReasonCreate || oldest["amount"] != float64(-createCredits) || oldest["site_name"] == "" {
+		t.Errorf("oldest entry = %v", oldest)
+	}
+}
+
+// An admin gives premium for a time; it ends by itself. Premium now only widens the
+// models the builder may use. Needs SKILLS_TEST_DATABASE_URL.
+func TestPremiumComesAndGoes(t *testing.T) {
+	db := creditsTestDB(t)
+	user := models.User{Name: "Premium", Email: "quota-premium-" + strconv.Itoa(os.Getpid()) + "@example.test"}
+	if err := db.Create(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	defer db.Unscoped().Delete(&user)
+	defer db.Where("entity_type = ? AND entity_id = ?", "user", strconv.Itoa(int(user.ID))).Delete(&models.AuditLog{})
+
 	setPremium := func(body string) int {
 		r := gin.New()
 		r.PATCH("/users/:id/premium", AdminSetUserPremium)
 		res := httptest.NewRecorder()
-		r.ServeHTTP(res, httptest.NewRequest("PATCH", "/users/"+strconv.Itoa(int(free.ID))+"/premium", bytes.NewBufferString(body)))
+		r.ServeHTTP(res, httptest.NewRequest("PATCH", "/users/"+strconv.Itoa(int(user.ID))+"/premium", bytes.NewBufferString(body)))
 		return res.Code
 	}
-	defer db.Where("entity_type = ? AND entity_id = ?", "user", strconv.Itoa(int(free.ID))).Delete(&models.AuditLog{})
 	if code := setPremium(`{"is_premium":true,"premium_until":"2001-01-01T00:00:00Z"}`); code != http.StatusBadRequest {
 		t.Errorf("premium ending in the past = %d, want 400", code)
 	}
 	until := time.Now().Add(30 * 24 * time.Hour).UTC().Format(time.RFC3339)
-	if code := setPremium(`{"is_premium":true,"premium_until":"` + until + `"}`); code != http.StatusOK {
+	if code := setPremium(`{"is_premium":true,"premium_until":"` + until + `"}`); code != http.StatusOK || !isPremiumUser(user.ID) {
 		t.Fatalf("premium for 30 days = %d", code)
 	}
-	if plan := builderPlanFor(free.ID); !plan.Premium || plan.PremiumUntil == nil || plan.OutOfTokens() {
-		t.Errorf("premium for 30 days: plan = %+v", plan)
+	db.Model(&models.User{}).Where("id = ?", user.ID).Update("premium_until", time.Now().Add(-time.Minute))
+	if isPremiumUser(user.ID) {
+		t.Error("an ended premium must count as free again")
 	}
-	db.Model(&models.User{}).Where("id = ?", free.ID).Update("premium_until", time.Now().Add(-time.Minute))
-	if plan := builderPlanFor(free.ID); plan.Premium || !plan.OutOfTokens() {
-		t.Errorf("an ended premium must count as free again: plan = %+v", plan)
-	}
-	if code := setPremium(`{"is_premium":true}`); code != http.StatusOK || !isPremiumUser(free.ID) {
-		t.Errorf("premium without end = %d", code)
-	}
-	if code := setPremium(`{"is_premium":false}`); code != http.StatusOK || isPremiumUser(free.ID) {
+	if code := setPremium(`{"is_premium":false}`); code != http.StatusOK || isPremiumUser(user.ID) {
 		t.Errorf("taking premium away = %d", code)
 	}
 }

@@ -68,7 +68,7 @@ func CORS(origins []string) gin.HandlerFunc {
 				return
 			}
 			header := c.Writer.Header()
-			header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Request-ID")
+			header.Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Request-ID, X-Device-ID")
 			header.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			header.Set("Access-Control-Max-Age", "600")
 		}

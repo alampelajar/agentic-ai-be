@@ -77,9 +77,6 @@ func (BuilderIllustrator) Illustrate(ctx context.Context, userID uint, prompt, a
 	if len(list) == 0 {
 		return nil, "", "", sitebuilder.ErrNoIllustrator
 	}
-	if builderPlanFor(userID).OutOfTokens() {
-		return nil, "", "", sitebuilder.ErrTokenLimit
-	}
 	providers := imageProviders()
 	if len(providers) == 0 {
 		return nil, "", "", sitebuilder.ErrNoIllustrator

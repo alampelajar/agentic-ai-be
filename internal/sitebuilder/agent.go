@@ -52,6 +52,8 @@ type Worker struct {
 	// Illustrator draws the product illustrations; nil leaves products without pictures.
 	Illustrator   Illustrator
 	Settings      Settings
+	// Charge takes the credits of a run that succeeded; nil charges nothing.
+	Charge        func(run models.AgentRun)
 	Images        jobspec.Images
 	MaxConcurrent int
 	PollInterval  time.Duration
@@ -964,6 +966,10 @@ func (j *job) finish(err error) {
 		db.Model(j.run).Updates(map[string]any{"status": models.RunCompleted, "finished_at": now, "summary": j.run.Summary})
 		if j.progressFile != "" {
 			ClearProgress(j.progressFile)
+		}
+		// Only work that succeeded is paid for; a failed or stopped run costs nothing.
+		if j.w.Charge != nil && j.run != nil {
+			j.w.Charge(*j.run)
 		}
 		return
 	}

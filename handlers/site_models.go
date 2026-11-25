@@ -170,9 +170,6 @@ func builderCandidates(userID uint, need sitebuilder.Need) ([]models.AIModel, er
 // Complete asks the best model and falls back to the next ones on failure. Every
 // attempt is logged, so it counts toward the daily system quota and model health.
 func (BuilderModels) Complete(ctx context.Context, userID uint, need sitebuilder.Need, messages []sitebuilder.Message) (string, string, error) {
-	if builderPlanFor(userID).OutOfTokens() {
-		return "", "", sitebuilder.ErrTokenLimit
-	}
 	chosen, err := builderCandidates(userID, need)
 	if err != nil {
 		return "", "", err
