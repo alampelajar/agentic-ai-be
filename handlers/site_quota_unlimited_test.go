@@ -4,12 +4,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
-	"time"
 
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
-	"agentic-ai-backend/config"
 	"agentic-ai-backend/models"
 )
 
@@ -32,59 +27,40 @@ func TestUnlimitedEmailReadsTheList(t *testing.T) {
 	}
 }
 
-// An owner's own account has no monthly allowance and no daily system-model quota,
-// even when it has used far more than a premium account may. Needs
-// SKILLS_TEST_DATABASE_URL.
-func TestUnlimitedAccountHasNoBuilderLimits(t *testing.T) {
-	dsn := os.Getenv("SKILLS_TEST_DATABASE_URL")
-	if dsn == "" {
-		t.Skip("SKILLS_TEST_DATABASE_URL is not configured")
-	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if sqlDB, dbErr := db.DB(); dbErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	config.DB = db
-	if err := migrateAll(db); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(builderPremiumQuotaEnv, "")
-
+// An owner's own account uses no credits, even with none left, and only the listed
+// account is unlimited. Needs SKILLS_TEST_DATABASE_URL.
+func TestUnlimitedAccountUsesNoCredits(t *testing.T) {
+	db := creditsTestDB(t)
 	suffix := strconv.Itoa(os.Getpid())
 	owner := models.User{Name: "Owner", Email: "quota-owner-" + suffix + "@example.test"}
-	premium := models.User{Name: "Premium", Email: "quota-premium2-" + suffix + "@example.test", IsPremium: true}
-	for _, u := range []*models.User{&owner, &premium} {
+	other := models.User{Name: "Other", Email: "quota-other-" + suffix + "@example.test"}
+	for _, u := range []*models.User{&owner, &other} {
 		if err := db.Create(u).Error; err != nil {
 			t.Fatal(err)
 		}
 	}
-	ids := []uint{owner.ID, premium.ID}
+	ids := []uint{owner.ID, other.ID}
 	defer func() {
-		db.Where("user_id IN ?", ids).Delete(&models.AIModelCallLog{})
+		db.Where("user_id IN ?", ids).Delete(&models.CreditEntry{})
 		db.Unscoped().Delete(&owner)
-		db.Unscoped().Delete(&premium)
+		db.Unscoped().Delete(&other)
 	}()
-	// Both used twice the premium allowance this month.
-	for _, id := range ids {
-		if err := db.Create(&models.AIModelCallLog{UserID: id, Attempt: 1, Status: "ok", Tokens: 2 * premiumMonthlyTokens, CreatedAt: time.Now()}).Error; err != nil {
-			t.Fatal(err)
-		}
-	}
+	db.Model(&models.User{}).Where("id IN ?", ids).Update("credits", 0)
 	t.Setenv(builderUnlimitedEnv, owner.Email)
 
-	plan := builderPlanFor(owner.ID)
-	if !plan.Unlimited || !plan.Premium || plan.TokenLimit != 0 || plan.OutOfTokens() {
-		t.Fatalf("owner plan = %+v, want unlimited without a token limit", plan)
+	if plan := builderPlanFor(owner.ID); !plan.Unlimited || !plan.CanAfford(createCredits) {
+		t.Fatalf("owner plan = %+v, want unlimited", plan)
 	}
-	if !isUnlimitedUser(owner.ID) || isUnlimitedUser(premium.ID) {
+	if !isUnlimitedUser(owner.ID) || isUnlimitedUser(other.ID) {
 		t.Fatal("only the listed account is unlimited")
 	}
-	if other := builderPlanFor(premium.ID); other.Unlimited || !other.OutOfTokens() {
-		t.Fatalf("premium plan = %+v, want its allowance used up", other)
+	if plan := builderPlanFor(other.ID); plan.Unlimited || plan.CanAfford(reviseCredits) {
+		t.Fatalf("other plan = %+v, want no credits", plan)
+	}
+	ChargeRun(models.AgentRun{ID: 999999001, UserID: owner.ID, SiteID: 1, Kind: models.AgentRunCreate})
+	var charged int64
+	db.Model(&models.CreditEntry{}).Where("user_id = ?", owner.ID).Count(&charged)
+	if charged != 0 {
+		t.Error("an unlimited account was charged")
 	}
 }

@@ -181,13 +181,13 @@ func GetSites(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true, "sites": list, "plan": builderPlanFor(userID)})
 }
 
-// refuseWhenOutOfTokens answers 429 token_limit when the person's monthly allowance is
-// used up, and reports whether it did.
-func refuseWhenOutOfTokens(c *gin.Context, userID uint) bool {
-	if !builderPlanFor(userID).OutOfTokens() {
+// refuseWithoutCredits answers 402 credit_limit when the person cannot pay for work
+// that uses cost credits, and reports whether it did.
+func refuseWithoutCredits(c *gin.Context, userID uint, cost int) bool {
+	if builderPlanFor(userID).CanAfford(cost) {
 		return false
 	}
-	siteError(c, http.StatusTooManyRequests, "token_limit", "Jatah AI Anda bulan ini sudah habis.")
+	siteError(c, http.StatusPaymentRequired, "credit_limit", "Kredit Anda tidak cukup. Tambah kredit untuk melanjutkan.")
 	return true
 }
 
@@ -224,8 +224,8 @@ func CreateSite(c *gin.Context) {
 		siteError(c, http.StatusConflict, "site_limit", "Jumlah website sudah mencapai batas. Hapus website yang tidak dipakai.")
 		return
 	}
-	if plan.OutOfTokens() {
-		siteError(c, http.StatusTooManyRequests, "token_limit", "Jatah AI Anda bulan ini sudah habis.")
+	if !plan.CanAfford(createCredits) {
+		siteError(c, http.StatusPaymentRequired, "credit_limit", "Kredit Anda tidak cukup. Tambah kredit untuk melanjutkan.")
 		return
 	}
 	var count int64
@@ -445,7 +445,8 @@ func SiteQuestions(c *gin.Context) {
 	if site.QuestionsJSON != "" && c.Query("refresh") != "1" {
 		_ = json.Unmarshal([]byte(site.QuestionsJSON), &set)
 	} else {
-		if refuseWhenOutOfTokens(c, userID) {
+		// Asking the AI is free, but only for someone who can pay for what follows.
+		if refuseWithoutCredits(c, userID, reviseCredits) {
 			return
 		}
 		ctx, cancel := context.WithTimeout(c.Request.Context(), builderFastTimeout+20*time.Second)
@@ -616,7 +617,11 @@ func SiteBrief(c *gin.Context) {
 		siteError(c, http.StatusConflict, "run_active", "Website sedang dikerjakan.")
 		return
 	}
-	if refuseWhenOutOfTokens(c, userID) {
+	cost := createCredits
+	if site.CurrentVersionID != nil {
+		cost = reviseCredits
+	}
+	if refuseWithoutCredits(c, userID, cost) {
 		return
 	}
 	var req struct {
@@ -815,9 +820,6 @@ func StartSiteRun(c *gin.Context) {
 		siteError(c, http.StatusTooManyRequests, "run_limit", "Tunggu sampai website lain selesai dikerjakan.")
 		return
 	}
-	if refuseWhenOutOfTokens(c, userID) {
-		return
-	}
 	run := models.AgentRun{SiteID: site.ID, UserID: userID, Status: models.RunQueued}
 	request := strings.TrimSpace(req.Request)
 	switch req.Kind {
@@ -847,6 +849,10 @@ func StartSiteRun(c *gin.Context) {
 	}
 	if utf8.RuneCountInString(request) > 2000 {
 		siteError(c, http.StatusBadRequest, "request_length", "Permintaan terlalu panjang.")
+		return
+	}
+	// Paid when it succeeds; the work already started counts against the balance now.
+	if refuseWithoutCredits(c, userID, runCredits(run.Kind)) {
 		return
 	}
 	run.Request = request

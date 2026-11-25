@@ -188,6 +188,10 @@ func registerRoutes(router *gin.Engine) {
 			"/me/password",
 			handlers.ChangePassword,
 		)
+		protected.GET("/me/credits", handlers.GetMyCredits)
+		protected.GET("/topup", handlers.GetTopUp)
+		protected.POST("/topups", importLimit, handlers.CreateTopUp)
+		protected.GET("/topups/:id/proof", handlers.GetMyTopUpProof)
 		protected.POST(
 			"/me/verify-delete-password",
 			handlers.VerifyDeleteAccountPassword,
@@ -379,6 +383,14 @@ func registerRoutes(router *gin.Engine) {
 			handlers.AdminDeleteUser,
 		)
 		admin.PATCH("/users/:id/premium", handlers.AdminSetUserPremium)
+		admin.PATCH("/users/:id/credits", handlers.AdminChangeCredits)
+		admin.PATCH("/users/:id/promo", handlers.AdminSetPromo)
+		admin.GET("/usage", handlers.AdminUsage)
+		admin.GET("/topups", handlers.AdminListTopUps)
+		admin.GET("/topups/:id/proof", handlers.AdminGetTopUpProof)
+		admin.PATCH("/topups/:id", handlers.AdminReviewTopUp)
+		admin.GET("/topup-settings", handlers.AdminGetTopUpSettings)
+		admin.PUT("/topup-settings", handlers.AdminSaveTopUpSettings)
 		admin.PATCH("/users/:id/restore", handlers.AdminRestoreUser)
 
 		// ========================================================

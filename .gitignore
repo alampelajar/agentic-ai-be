@@ -14,3 +14,6 @@ deploy/.env.*
 
 # Database dumps from deploy/backup.sh: never commit them
 deploy/backups/
+
+# Uploaded screenshots (feedback, proofs of payment): people's data, never committed.
+/uploads/
