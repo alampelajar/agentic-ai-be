@@ -114,12 +114,38 @@ func viewDirection(d sitebuilder.Direction, variant, language string) directionV
 		Serif: strings.Contains(d.Heading.Fallback, "serif") && !strings.Contains(d.Heading.Fallback, "sans-serif"), Radius: d.Radius["lg"],
 		SampleURL: sitebuilder.LoadSettings().SampleURL(d.Key),
 	}
+	if view.SampleURL == "" {
+		view.SampleURL = showcasedExample(d.Key, language)
+	}
 	for _, v := range d.Variants {
 		if v.Key == variant {
 			view.VariantName = v.Name[language]
 		}
 	}
 	return view
+}
+
+// showcasedExample is the live address of a website in the gallery made with the
+// look, preferring one written in the person's language, for a look whose own
+// example website has not been made yet. "" when no such website is shown.
+func showcasedExample(key, language string) string {
+	var sites []models.Site
+	config.DB.Where("design_direction = ? AND showcased_at IS NOT NULL AND published_release_id IS NOT NULL AND slug IS NOT NULL", key).
+		Where(ownerNotInDeletion).Order("showcased_at DESC").Limit(10).Find(&sites)
+	chosen := -1
+	for index := range sites {
+		if sites[index].Language == language {
+			chosen = index
+			break
+		}
+	}
+	if chosen < 0 && len(sites) > 0 {
+		chosen = 0
+	}
+	if chosen < 0 {
+		return ""
+	}
+	return sitebuilder.LoadSettings().LiveURL(*sites[chosen].Slug)
 }
 
 // bestVariant is the palette of d that matches the wished colours best: a variant,

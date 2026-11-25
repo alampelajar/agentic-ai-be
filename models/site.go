@@ -46,9 +46,12 @@ type Site struct {
 	// every person sees in the builder; nil when it is not shown there.
 	ShowcasedAt *time.Time `json:"-" gorm:"index"`
 	// RemixOf is the gallery website whose look and page list this one copies.
-	RemixOf   *uint     `json:"-"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	RemixOf *uint `json:"-"`
+	// MessagesNotifiedID is the newest visitor message of the published website the
+	// owner was e-mailed about; nil until the first look, which only sets it.
+	MessagesNotifiedID *int64    `json:"-"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 const (

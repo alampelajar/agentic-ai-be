@@ -82,7 +82,7 @@ function sample(key, url, response) {
     response.writeHead(200, { 'content-type': TYPES[extname(file)] ?? 'application/octet-stream', 'cache-control': 'public, max-age=300', 'x-content-type-options': 'nosniff' })
     response.end(body)
   } catch {
-    page(response, 404, 'Not found', 'This example is not available.')
+    page(response, 404, 'sampleMissing', false, response.req?.headers['accept-language'])
   }
 }
 const SLUG_LABEL = /^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/
@@ -119,17 +119,59 @@ function target(hostHeader) {
   return null
 }
 
-function page(response, status, title, text, refresh) {
+// The gateway's own pages, in Indonesian and English. It cannot know the builder's
+// language, so it shows both: first the one the visitor's browser asks for.
+const NOTICES = {
+  missing: {
+    id: ['Website tidak ditemukan', 'Tidak ada website di alamat ini.'],
+    en: ['Not found', 'There is no website at this address.'],
+  },
+  sampleMissing: {
+    id: ['Contoh tidak ditemukan', 'Contoh ini belum tersedia.'],
+    en: ['Not found', 'This example is not available.'],
+  },
+  expired: {
+    id: ['Tautan sudah kedaluwarsa', 'Buka lagi website Anda dari pembuat website.'],
+    en: ['Preview link expired', 'Open the preview again from the builder.'],
+  },
+  starting: {
+    id: ['Menyiapkan website Anda...', 'Ini butuh beberapa detik. Halaman ini muncul sendiri setelah siap.'],
+    en: ['Starting the preview...', 'This takes a few seconds. The page reloads by itself.'],
+  },
+  unavailable: {
+    id: ['Sebentar lagi kembali', 'Website ini sedang tidak bisa dibuka dan akan segera kembali.'],
+    en: ['Temporarily unavailable', 'This website will be back shortly.'],
+  },
+}
+
+// prefersIndonesian reads the Accept-Language header: Indonesian (or Malay) before English.
+export function prefersIndonesian(acceptLanguage) {
+  for (const part of String(acceptLanguage || '').toLowerCase().split(',')) {
+    const tag = part.split(';')[0].trim()
+    if (tag.startsWith('id') || tag.startsWith('ms')) return true
+    if (tag.startsWith('en')) return false
+  }
+  return false
+}
+
+function page(response, status, notice, refresh, acceptLanguage) {
+  const [first, second] = prefersIndonesian(acceptLanguage) ? ['id', 'en'] : ['en', 'id']
+  const [title, text] = NOTICES[notice][first]
+  const [otherTitle, otherText] = NOTICES[notice][second]
   response.writeHead(status, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
-  response.end(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? '<meta http-equiv="refresh" content="3">' : ''}<title>${title}</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#333;background:#fafafa}main{max-width:28rem;padding:2rem;text-align:center}</style></head><body><main><h1 style="font-size:1.25rem">${title}</h1><p>${text}</p></main></body></html>`)
+  response.end(`<!doctype html><html lang="${first}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">${refresh ? '<meta http-equiv="refresh" content="3">' : ''}<title>${title}</title><style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#333;background:#fafafa}main{max-width:28rem;padding:2rem;text-align:center}.other{margin-top:2rem;color:#737373;font-size:.875rem}</style></head><body><main><h1 style="font-size:1.25rem">${title}</h1><p>${text}</p><div class="other" lang="${second}"><p><strong>${otherTitle}</strong><br>${otherText}</p></div></main></body></html>`)
 }
 
 const server = createServer((request, response) => {
   const found = target(request.headers.host)
-  if (!found) return page(response, 404, 'Not found', 'There is no website at this address.')
-  if (found.expired) return page(response, 410, 'Preview link expired', 'Open the preview again from the builder.')
+  // The builder asks for its own language with ?lang=id or ?lang=en; others get
+  // their browser's.
+  const asked = /[?&]lang=(id|en)(?:&|$)/.exec(request.url || '')?.[1]
+  const language = asked ?? request.headers['accept-language']
+  if (!found) return page(response, 404, 'missing', false, language)
+  if (found.expired) return page(response, 410, 'expired', false, language)
   if (found.sample) return sample(found.sample, request.url, response)
-  if (!found.container) return page(response, 404, 'Not found', 'There is no website at this address.')
+  if (!found.container) return page(response, 404, 'missing', false, language)
 
   const headers = { ...request.headers }
   for (const name of Object.keys(headers)) if (name.startsWith('x-forwarded-')) delete headers[name]
@@ -144,8 +186,8 @@ const server = createServer((request, response) => {
   upstream.on('timeout', () => upstream.destroy(new Error('timeout')))
   upstream.on('error', () => {
     if (response.headersSent) return response.destroy()
-    if (found.preview) page(response, 503, 'Starting the preview...', 'This takes a few seconds. The page reloads by itself.', true)
-    else page(response, 503, 'Temporarily unavailable', 'This website will be back shortly.', true)
+    if (found.preview) page(response, 503, 'starting', true, language)
+    else page(response, 503, 'unavailable', true, language)
   })
   request.pipe(upstream)
 })

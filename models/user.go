@@ -26,10 +26,14 @@ type User struct {
 	PremiumUntil *time.Time `json:"premium_until"`
 	// RestoredAt is when an admin gave the account back after its owner deleted it. A
 	// restore happens once: deleting the account again removes it at once.
-	RestoredAt *time.Time     `json:"-"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `json:"-" gorm:"index"`
+	RestoredAt *time.Time `json:"-"`
+	// The e-mails the person wants (Settings, Notifications): one when a website or a
+	// change is finished, and one when a visitor sends a message through a website.
+	NotifyWebsiteReady bool           `json:"notify_website_ready" gorm:"not null;default:true"`
+	NotifyNewMessages  bool           `json:"notify_new_messages" gorm:"not null;default:true"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 // BeforeCreate fills CanonicalEmail. Code that changes Email on an existing account
