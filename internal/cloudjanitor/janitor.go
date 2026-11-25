@@ -5,6 +5,10 @@
 // has not been opened for the whole retention period, is not in use (no queued,
 // preparing or running job) and has a final status. Nothing is deleted unless the
 // caller asks for it, and a workspace that was opened recently is never touched.
+//
+// A website's workspace is never a candidate: it holds the website's own files,
+// and the builder works in it without "opening" it, so its last-opened time says
+// nothing about whether the website is still in use.
 package cloudjanitor
 
 import (
@@ -38,6 +42,7 @@ func Inactive(db *gorm.DB, retention time.Duration, now time.Time) ([]models.Clo
 	err := db.Where("status = ? AND COALESCE(last_accessed_at, created_at) < ?", models.WorkspaceStatusReady, cutoff).
 		Where("NOT EXISTS (SELECT 1 FROM execution_jobs WHERE execution_jobs.workspace_id = cloud_workspaces.id AND execution_jobs.status IN ?)",
 			[]string{models.JobQueued, models.JobPreparing, models.JobRunning}).
+		Where("NOT EXISTS (SELECT 1 FROM sites WHERE sites.workspace_id = cloud_workspaces.id)").
 		Order("COALESCE(last_accessed_at, created_at) ASC").Find(&candidates).Error
 	if err != nil {
 		return nil, err

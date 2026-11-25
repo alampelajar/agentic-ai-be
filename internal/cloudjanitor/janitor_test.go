@@ -30,7 +30,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := testdb.Migrate(db, &models.User{}, &models.Task{}, &models.TaskMessage{}, &models.CloudWorkspace{}, &models.ExecutionJob{}, &models.WorkspaceToolApproval{}); err != nil {
+	if err := testdb.Migrate(db, &models.User{}, &models.Task{}, &models.TaskMessage{}, &models.CloudWorkspace{}, &models.ExecutionJob{}, &models.WorkspaceToolApproval{}, &models.Site{}); err != nil {
 		t.Fatal(err)
 	}
 	f := &fixture{db: db}
@@ -42,6 +42,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() {
 		db.Where("user_id = ?", f.user.ID).Delete(&models.ExecutionJob{})
 		db.Where("user_id = ?", f.user.ID).Delete(&models.Task{})
+		db.Where("user_id = ?", f.user.ID).Delete(&models.Site{})
 		db.Unscoped().Where("user_id = ?", f.user.ID).Delete(&models.CloudWorkspace{})
 		db.Unscoped().Delete(&f.user)
 	})
@@ -82,6 +83,11 @@ func TestOnlyLongUnusedReadyWorkspacesWithoutActiveJobsAreCandidates(t *testing.
 	f.workspace(t, "stale-but-not-ready", nil, long, models.WorkspaceStatusCreating)
 	busy := f.workspace(t, "stale-with-a-running-job", nil, long, models.WorkspaceStatusReady)
 	f.db.Create(&models.ExecutionJob{UserID: f.user.ID, WorkspaceID: busy.ID, JobType: "go-test", Command: "go test ./...", Runtime: "go", Status: models.JobRunning, TimeoutSeconds: 60})
+	// A website's workspace is never "opened": the builder works in it directly.
+	website := f.workspace(t, "stale-website", nil, long, models.WorkspaceStatusReady)
+	if err := f.db.Create(&models.Site{UserID: f.user.ID, WorkspaceID: website.ID, Name: "Roti Senja", Status: models.SiteStatusReady}).Error; err != nil {
+		t.Fatal(err)
+	}
 
 	candidates, err := Inactive(f.db, 90*24*time.Hour, now)
 	if err != nil {
@@ -93,7 +99,7 @@ func TestOnlyLongUnusedReadyWorkspacesWithoutActiveJobsAreCandidates(t *testing.
 			t.Errorf("%s should be a candidate", want)
 		}
 	}
-	for _, unwanted := range []string{"old-but-opened-recently", "new", "stale-but-not-ready", "stale-with-a-running-job"} {
+	for _, unwanted := range []string{"old-but-opened-recently", "new", "stale-but-not-ready", "stale-with-a-running-job", "stale-website"} {
 		if got[unwanted] {
 			t.Errorf("%s must not be a candidate", unwanted)
 		}
