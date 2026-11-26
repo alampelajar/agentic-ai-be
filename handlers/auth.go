@@ -163,6 +163,9 @@ func Register(c *gin.Context) {
 		if err := tx.Create(&user).Error; err != nil {
 			return err
 		}
+		if err := applySignupPromo(tx, c, user.ID); err != nil {
+			return err
+		}
 		return services.RecordSignup(tx, user.Email, user.ID)
 	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{

@@ -48,5 +48,8 @@ func migrateAll(db *gorm.DB) error {
 		&models.AgentRunStep{},
 		&models.SiteVersion{},
 		&models.SiteRelease{},
+		&models.CreditEntry{},
+		&models.TopUpSettings{},
+		&models.TopUpRequest{},
 	)
 }

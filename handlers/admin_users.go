@@ -40,6 +40,12 @@ type UserResponse struct {
 	// once that moment has passed.
 	PremiumUntil  *time.Time     `json:"premium_until"`
 	PremiumActive bool           `json:"premium_active"`
+	// Credits is the Website Builder balance; Unlimited is an owner's own account, which uses none.
+	Credits   int  `json:"credits"`
+	Unlimited bool `json:"unlimited"`
+	// PromoEligible is false when the new-account promo was not given (PromoNote says why).
+	PromoEligible bool   `json:"promo_eligible"`
+	PromoNote     string `json:"promo_note"`
 	Agents        []AgentSummary `json:"agents"`
 	// DeletionRequestedAt is set while the account waits to be removed for good, at DeletesAt.
 	DeletionRequestedAt *time.Time `json:"deletion_requested_at"`
@@ -141,6 +147,10 @@ func AdminGetUsers(c *gin.Context) {
 			IsPremium:     user.IsPremium,
 			PremiumUntil:  user.PremiumUntil,
 			PremiumActive: premiumActive(user, time.Now()),
+			Credits:       user.Credits,
+			Unlimited:     unlimitedEmail(user.Email),
+			PromoEligible: user.PromoEligible,
+			PromoNote:     user.PromoNote,
 			Agents:        agents,
 			CreatedAt: user.CreatedAt.Format("2006-01-02 15:04:05"),
 			UpdatedAt: user.UpdatedAt.Format("2006-01-02 15:04:05"),

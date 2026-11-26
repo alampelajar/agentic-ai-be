@@ -46,14 +46,16 @@ var (
 // and writes files into the site's workspace, and asks the execution worker to build
 // and check the site in the sandbox. It never runs site code itself.
 type Worker struct {
-	DB            *gorm.DB
-	Storage       cloudworkspace.WorkspaceStorage
-	Models        ModelCaller
+	DB      *gorm.DB
+	Storage cloudworkspace.WorkspaceStorage
+	Models  ModelCaller
 	// Illustrator draws the product illustrations; nil leaves products without pictures.
-	Illustrator   Illustrator
-	Settings      Settings
+	Illustrator Illustrator
+	Settings    Settings
 	// Notify is told how each run ended (e-mail to the owner); nil tells no one.
-	Notify        func(run models.AgentRun, site models.Site, completed bool)
+	Notify func(run models.AgentRun, site models.Site, completed bool)
+	// Charge takes the credits of a run that succeeded; nil charges nothing.
+	Charge        func(run models.AgentRun)
 	Images        jobspec.Images
 	MaxConcurrent int
 	PollInterval  time.Duration
@@ -673,6 +675,7 @@ func (j *job) fixTokens() error {
 		for rel, content := range files {
 			found := append(CheckTokens(rel, content), CheckLanguage(rel, content, j.brief.Language)...)
 			found = append(found, CheckCountUp(rel, content, known)...)
+			found = append(found, CheckStats(rel, content, known)...)
 			found = append(found, CheckUsesBlocks(rel, content)...)
 			if len(found) > 0 {
 				problems = append(problems, found...)
@@ -977,6 +980,10 @@ func (j *job) finish(err error) {
 		db.Model(j.run).Updates(map[string]any{"status": models.RunCompleted, "finished_at": now, "summary": j.run.Summary})
 		if j.progressFile != "" {
 			ClearProgress(j.progressFile)
+		}
+		// Only work that succeeded is paid for; a failed or stopped run costs nothing.
+		if j.w.Charge != nil && j.run != nil {
+			j.w.Charge(*j.run)
 		}
 		j.notify(true)
 		return

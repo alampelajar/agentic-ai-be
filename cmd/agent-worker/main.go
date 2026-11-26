@@ -41,6 +41,7 @@ func main() {
 		Models:        handlers.BuilderModels{},
 		Illustrator:   handlers.BuilderIllustrator{},
 		Notify:        handlers.NotifyRunFinished,
+		Charge:        handlers.ChargeRun,
 		Settings:      sitebuilder.LoadSettings(),
 		MaxConcurrent: concurrent,
 	}
