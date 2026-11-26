@@ -27,6 +27,10 @@ type User struct {
 	// RestoredAt is when an admin gave the account back after its owner deleted it. A
 	// restore happens once: deleting the account again removes it at once.
 	RestoredAt *time.Time `json:"-"`
+	// The e-mails the person wants (Settings, Notifications): one when a website or a
+	// change is finished, and one when a visitor sends a message through a website.
+	NotifyWebsiteReady bool `json:"notify_website_ready" gorm:"not null;default:true"`
+	NotifyNewMessages  bool `json:"notify_new_messages" gorm:"not null;default:true"`
 	// Credits pay for the Website Builder: a new website uses 2, a change uses 1. A new
 	// account starts with 10 (also the default for accounts made before credits); more
 	// come from an admin (a top-up). An account in BUILDER_UNLIMITED_EMAILS uses none.

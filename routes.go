@@ -188,6 +188,8 @@ func registerRoutes(router *gin.Engine) {
 			"/me/password",
 			handlers.ChangePassword,
 		)
+		protected.GET("/me/notifications", handlers.GetMyNotifications)
+		protected.PUT("/me/notifications", handlers.UpdateMyNotifications)
 		protected.GET("/me/credits", handlers.GetMyCredits)
 		protected.GET("/topup", handlers.GetTopUp)
 		protected.POST("/topups", importLimit, handlers.CreateTopUp)
@@ -207,6 +209,7 @@ func registerRoutes(router *gin.Engine) {
 		protected.POST("/sites", importLimit, handlers.CreateSite)
 		protected.GET("/sites/slug-available", handlers.SiteSlugAvailable)
 		protected.GET("/sites/:id", handlers.GetSite)
+		protected.GET("/sites/:id/messages", handlers.GetSiteMessages)
 		protected.PATCH("/sites/:id", handlers.UpdateSite)
 		protected.DELETE("/sites/:id", handlers.DeleteSite)
 		protected.POST("/sites/:id/questions", chatLimit, handlers.SiteQuestions)

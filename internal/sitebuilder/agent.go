@@ -46,12 +46,14 @@ var (
 // and writes files into the site's workspace, and asks the execution worker to build
 // and check the site in the sandbox. It never runs site code itself.
 type Worker struct {
-	DB            *gorm.DB
-	Storage       cloudworkspace.WorkspaceStorage
-	Models        ModelCaller
+	DB      *gorm.DB
+	Storage cloudworkspace.WorkspaceStorage
+	Models  ModelCaller
 	// Illustrator draws the product illustrations; nil leaves products without pictures.
-	Illustrator   Illustrator
-	Settings      Settings
+	Illustrator Illustrator
+	Settings    Settings
+	// Notify is told how each run ended (e-mail to the owner); nil tells no one.
+	Notify func(run models.AgentRun, site models.Site, completed bool)
 	// Charge takes the credits of a run that succeeded; nil charges nothing.
 	Charge        func(run models.AgentRun)
 	Images        jobspec.Images
@@ -957,6 +959,18 @@ func (j *job) saveVersion(restyle bool) error {
 	return nil
 }
 
+// notify tells the owner how the run ended, without holding up the worker.
+func (j *job) notify(completed bool) {
+	if j.w.Notify == nil || j.run == nil {
+		return
+	}
+	run, site := *j.run, j.site
+	if completed {
+		run.Status = models.RunCompleted
+	}
+	go j.w.Notify(run, site, completed)
+}
+
 // finish records how the run ended. After a failure the workspace goes back to the
 // site's current version, so the preview and the files agree again.
 func (j *job) finish(err error) {
@@ -971,6 +985,7 @@ func (j *job) finish(err error) {
 		if j.w.Charge != nil && j.run != nil {
 			j.w.Charge(*j.run)
 		}
+		j.notify(true)
 		return
 	}
 	status, message, detail := models.RunFailed, "", err.Error()
@@ -991,6 +1006,8 @@ func (j *job) finish(err error) {
 		j.done(step, models.StepFailed, detail)
 	}
 	db.Model(j.run).Updates(map[string]any{"status": status, "finished_at": now, "error_message": message})
+	j.run.Status = status
+	j.notify(false)
 
 	siteStatus := models.SiteStatusFailed
 	if j.site.ID != 0 && j.site.CurrentVersionID != nil {

@@ -151,6 +151,7 @@ func main() {
 
 	// Accounts deleted more than 30 days ago are removed for good, now and every hour.
 	handlers.StartAccountPurger()
+	handlers.StartMessageNotifier()
 
 	// A container is stopped with SIGTERM: finish the requests in flight first.
 	go func() {
