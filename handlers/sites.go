@@ -106,13 +106,15 @@ type directionView struct {
 	Serif       bool              `json:"serif"`
 	Radius      string            `json:"radius"`
 	SampleURL   string            `json:"sample_url"`
+	// Blocks lets the look's card draw where things sit on its pages.
+	Blocks sitebuilder.Blocks `json:"blocks"`
 }
 
 func viewDirection(d sitebuilder.Direction, variant, language string) directionView {
 	view := directionView{
 		Key: d.Key, Variant: variant, Name: d.Name[language], Description: d.Description[language], Palette: d.PaletteFor(variant),
 		Serif: strings.Contains(d.Heading.Fallback, "serif") && !strings.Contains(d.Heading.Fallback, "sans-serif"), Radius: d.Radius["lg"],
-		SampleURL: sitebuilder.LoadSettings().SampleURL(d.Key),
+		SampleURL: sitebuilder.LoadSettings().SampleURL(d.Key), Blocks: d.Blocks,
 	}
 	if view.SampleURL == "" {
 		view.SampleURL = showcasedExample(d.Key, language)
