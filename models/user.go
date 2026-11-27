@@ -27,6 +27,12 @@ type User struct {
 	// RestoredAt is when an admin gave the account back after its owner deleted it. A
 	// restore happens once: deleting the account again removes it at once.
 	RestoredAt *time.Time `json:"-"`
+	// SuspendedAt is when an admin suspended the account, for example after it tried
+	// to make a forbidden website; nil when it is not suspended. A suspended account
+	// cannot sign in, every session ends, and its published websites go offline.
+	// SuspendReason is what the person is told.
+	SuspendedAt   *time.Time `json:"suspended_at"`
+	SuspendReason string     `json:"suspend_reason" gorm:"type:varchar(300);not null;default:''"`
 	// The e-mails the person wants (Settings, Notifications): one when a website or a
 	// change is finished, and one when a visitor sends a message through a website.
 	NotifyWebsiteReady bool `json:"notify_website_ready" gorm:"not null;default:true"`

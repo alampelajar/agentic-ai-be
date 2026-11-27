@@ -90,7 +90,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		// Reject still-unexpired JWTs for accounts that have been deleted.
 		var activeUser models.User
-		if err := config.DB.Select("id", "email", "role").First(&activeUser, claims.UserID).Error; err != nil {
+		if err := config.DB.Select("id", "email", "role", "suspended_at", "suspend_reason").First(&activeUser, claims.UserID).Error; err != nil {
 			status := http.StatusUnauthorized
 			message := "Akun pengguna sudah tidak tersedia"
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -110,6 +110,17 @@ func AuthMiddleware() gin.HandlerFunc {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"ok":      false,
 				"message": "Sesi sudah tidak berlaku. Silakan masuk kembali.",
+			})
+			c.Abort()
+			return
+		}
+		// A suspended account is refused at once, whatever token it still holds.
+		if activeUser.SuspendedAt != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"ok":      false,
+				"code":    "account_suspended",
+				"message": "Akun Anda ditangguhkan oleh admin.",
+				"reason":  activeUser.SuspendReason,
 			})
 			c.Abort()
 			return

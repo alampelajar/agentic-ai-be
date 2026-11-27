@@ -26,6 +26,10 @@ type fakeBuilderModels struct{}
 
 func (fakeBuilderModels) Complete(_ context.Context, _ uint, _ sitebuilder.Need, messages []sitebuilder.Message) (string, string, error) {
 	if strings.Contains(messages[0].Content, "ask only what is still missing") {
+		// The planner recognises a gambling website the word list cannot see.
+		if strings.Contains(messages[len(messages)-1].Content, "berhadiah uang") {
+			return `{"forbidden":"gambling","kind":"general","language":"id","questions":[]}`, "fake", nil
+		}
 		return `{"kind":"food","suggested_name":"Dapur Uji","understood":[{"label":"Usaha","value":"Toko roti"}],"known_contact":{"whatsapp":"0812 1111"},"look_wish":"hijau","questions":[{"id":"pages","text":"Halaman?","multiple":true,"options":["Menu","Kontak"]}]}`, "fake", nil
 	}
 	return "```json\n" + `{"name":"x","tagline":"Roti hangat","summary":"Website untuk toko roti.","pages":[{"slug":"home","title":"Beranda","sections":["hero"]},{"slug":"menu","title":"Menu","sections":["daftar"]}],"forms":[{"name":"Pesan","fields":["nama"]}]}` + "\n```", "fake", nil
@@ -212,6 +216,52 @@ func TestSitesOwnershipAndFlow(t *testing.T) {
 	if code, preview := send(owner.ID, "GET", path+"/preview", ""); code != http.StatusOK || !strings.Contains(preview["url"].(string), "p-"+id+"-") {
 		t.Errorf("preview = %d %v", code, preview)
 	}
+
+	// Forbidden websites: gambling and pornography are refused at every step, and
+	// every refusal is in the audit log.
+	refusals := func() int64 {
+		var n int64
+		db.Model(&models.AuditLog{}).Where("action = ? AND actor_user_id = ?", "site.refused", owner.ID).Count(&n)
+		return n
+	}
+	var before int64
+	db.Model(&models.Site{}).Where("user_id = ?", owner.ID).Count(&before)
+	for text, topic := range map[string]string{"buatkan saya web judi online": "gambling", "situs sl0t g4c0r maxwin": "gambling", "web porn0 gratis untuk dewasa": "adult"} {
+		if code, body := send(owner.ID, "POST", "/sites", `{"description":"`+text+`"}`); code != http.StatusUnprocessableEntity || body["code"] != "forbidden_topic" || body["topic"] != topic {
+			t.Errorf("create %q = %d %v, want 422 forbidden_topic %s", text, code, body, topic)
+		}
+	}
+	var after int64
+	db.Model(&models.Site{}).Where("user_id = ?", owner.ID).Count(&after)
+	if after != before || refusals() != 3 {
+		t.Errorf("a refused description made a site (%d -> %d) or was not audited (%d)", before, after, refusals())
+	}
+	// The planner catches what the word list cannot; the site then goes no further.
+	code, hidden := send(owner.ID, "POST", "/sites", `{"description":"Main kartu remi berhadiah uang dari rumah"}`)
+	if code != http.StatusCreated {
+		t.Fatalf("create = %d %v", code, hidden)
+	}
+	hiddenPath := "/sites/" + strconv.Itoa(int(hidden["site"].(map[string]any)["id"].(float64)))
+	if code, body := send(owner.ID, "POST", hiddenPath+"/questions", ""); code != http.StatusUnprocessableEntity || body["topic"] != "gambling" {
+		t.Errorf("questions for a hidden gambling site = %d %v, want 422 gambling", code, body)
+	}
+	if code, body := send(owner.ID, "POST", hiddenPath+"/brief", `{"name":"Remi","direction":"warm-editorial"}`); code != http.StatusUnprocessableEntity || body["code"] != "forbidden_topic" {
+		t.Errorf("brief for a refused site = %d %v, want 422", code, body)
+	}
+	// A change request on an existing website, then everything after it.
+	if code, body := send(owner.ID, "POST", path+"/runs", `{"kind":"revise","request":"ubah jadi situs togel online"}`); code != http.StatusUnprocessableEntity || body["topic"] != "gambling" {
+		t.Errorf("a gambling change = %d %v, want 422 gambling", code, body)
+	}
+	if code, _ := send(owner.ID, "POST", path+"/publish", `{"slug":"`+slug+`"}`); code != http.StatusUnprocessableEntity {
+		t.Errorf("publishing a site marked forbidden = %d, want 422", code)
+	}
+	if code, _ := send(owner.ID, "PATCH", path, `{"name":"Bokep Indo"}`); code != http.StatusUnprocessableEntity {
+		t.Errorf("an adult name = %d, want 422", code)
+	}
+	if refusals() != 8 {
+		t.Errorf("refusals audited = %d, want 8", refusals())
+	}
+
 	if code, _ := send(owner.ID, "DELETE", path, ""); code != http.StatusOK {
 		t.Errorf("delete = %d", code)
 	}

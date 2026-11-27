@@ -159,8 +159,8 @@ func AdminDeleteSite(c *gin.Context) {
 }
 
 // siteLogActions are the events the console's Logs page shows: a website was made,
-// published, or deleted.
-var siteLogActions = []string{"site.create", "site.publish", "site.delete"}
+// published, deleted, or refused as forbidden (gambling, pornography).
+var siteLogActions = []string{"site.create", "site.publish", "site.delete", "site.refused"}
 
 // siteLogLimit is how many events the Logs page shows.
 const siteLogLimit = 500

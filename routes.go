@@ -388,6 +388,7 @@ func registerRoutes(router *gin.Engine) {
 		admin.PATCH("/users/:id/premium", handlers.AdminSetUserPremium)
 		admin.PATCH("/users/:id/credits", handlers.AdminChangeCredits)
 		admin.PATCH("/users/:id/promo", handlers.AdminSetPromo)
+		admin.PATCH("/users/:id/suspend", handlers.AdminSuspendUser)
 		admin.GET("/usage", handlers.AdminUsage)
 		admin.GET("/topups", handlers.AdminListTopUps)
 		admin.GET("/topups/:id/proof", handlers.AdminGetTopUpProof)

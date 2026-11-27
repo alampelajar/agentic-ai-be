@@ -52,6 +52,11 @@ type UserResponse struct {
 	DeletesAt           *time.Time `json:"deletes_at"`
 	// RestoredAt is set once an admin gave the account back; it cannot be restored again.
 	RestoredAt *time.Time `json:"restored_at"`
+	// Status is "Suspended" while an admin has suspended the account (SuspendedAt,
+	// SuspendReason), else empty.
+	Status        string     `json:"status,omitempty"`
+	SuspendedAt   *time.Time `json:"suspended_at"`
+	SuspendReason string     `json:"suspend_reason"`
 	CreatedAt string         `json:"created_at"`
 	UpdatedAt string         `json:"updated_at"`
 }
@@ -139,6 +144,9 @@ func AdminGetUsers(c *gin.Context) {
 			DeletionRequestedAt: requested,
 			DeletesAt:           deletes,
 			RestoredAt:          user.RestoredAt,
+			Status:              suspendedStatus(user),
+			SuspendedAt:         user.SuspendedAt,
+			SuspendReason:       user.SuspendReason,
 			ID:        user.ID,
 			Name:      user.Name,
 			Email:     user.Email,
