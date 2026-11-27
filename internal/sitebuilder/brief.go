@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Contact holds the facts the person typed. Only these are ever put on the site as
@@ -68,8 +69,13 @@ type Brief struct {
 	Colours map[string]string `json:"colours,omitempty"`
 }
 
-// maxChangesKept bounds how many of the owner's requests the brief carries.
-const maxChangesKept = 10
+// maxChangesKept bounds how many of the owner's requests the brief carries, and
+// maxChangesChars how long they may be together: every later prompt carries them,
+// and a request may be 10,000 characters. The newest request is always kept whole.
+const (
+	maxChangesKept  = 10
+	maxChangesChars = 12_000
+)
 
 // AddChange records a request of the owner in the brief.
 func (b *Brief) AddChange(request string) {
@@ -81,6 +87,17 @@ func (b *Brief) AddChange(request string) {
 	if len(b.ChangesAsked) > maxChangesKept {
 		b.ChangesAsked = b.ChangesAsked[len(b.ChangesAsked)-maxChangesKept:]
 	}
+	for len(b.ChangesAsked) > 1 && changesLength(b.ChangesAsked) > maxChangesChars {
+		b.ChangesAsked = b.ChangesAsked[1:]
+	}
+}
+
+func changesLength(changes []string) int {
+	total := 0
+	for _, change := range changes {
+		total += utf8.RuneCountInString(change)
+	}
+	return total
 }
 
 var slugPart = regexp.MustCompile(`[^a-z0-9]+`)

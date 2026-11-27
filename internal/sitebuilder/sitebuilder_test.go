@@ -330,6 +330,21 @@ func TestOwnerRequestsStayInTheBrief(t *testing.T) {
 	if !strings.Contains(briefText(brief), "changes_asked") {
 		t.Fatal("the prompts do not see the owner's requests")
 	}
+
+	// Long requests: older ones leave so that together they stay within the bound,
+	// and the newest is always kept whole, even when it alone is longer.
+	var long Brief
+	long.AddChange("short one")
+	for index := 0; index < 3; index++ {
+		long.AddChange(strings.Repeat("a", 5000))
+	}
+	if changesLength(long.ChangesAsked) > maxChangesChars || len(long.ChangesAsked) != 2 {
+		t.Fatalf("long requests not bounded: %d kept, %d characters", len(long.ChangesAsked), changesLength(long.ChangesAsked))
+	}
+	long.AddChange(strings.Repeat("b", 13000))
+	if len(long.ChangesAsked) != 1 || len(long.ChangesAsked[0]) != 13000 {
+		t.Fatalf("the newest request was not kept whole: %d kept", len(long.ChangesAsked))
+	}
 }
 
 func TestPublishedSitesCanUseTheirOwnScheme(t *testing.T) {

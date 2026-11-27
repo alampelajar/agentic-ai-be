@@ -118,6 +118,10 @@ func TestSitesOwnershipAndFlow(t *testing.T) {
 	if code, _ := send(owner.ID, "POST", "/sites", `{"description":"short"}`); code != http.StatusBadRequest {
 		t.Errorf("a too short description = %d, want 400", code)
 	}
+	// A long text pasted from elsewhere fits up to 10,000 characters, not one more.
+	if code, body := send(owner.ID, "POST", "/sites", `{"description":"`+strings.Repeat("a", maxSiteTextLength+1)+`"}`); code != http.StatusBadRequest || body["code"] != "description_length" {
+		t.Errorf("a description over the limit = %d %v, want 400 description_length", code, body["code"])
+	}
 	// The interface is in English, the description in Indonesian: the website is Indonesian.
 	code, created := send(owner.ID, "POST", "/sites", `{"description":"Toko roti rumahan di Yogyakarta dengan warna hijau, pesan lewat WhatsApp.","language":"en"}`)
 	if code != http.StatusCreated {
@@ -190,6 +194,9 @@ func TestSitesOwnershipAndFlow(t *testing.T) {
 	version := models.SiteVersion{SiteID: uint(siteID), Number: 1, Summary: "v1"}
 	db.Create(&version)
 	db.Model(&models.Site{}).Where("id = ?", siteID).Update("current_version_id", version.ID)
+	if code, body := send(owner.ID, "POST", path+"/runs", `{"kind":"revise","request":"`+strings.Repeat("a", maxSiteTextLength+1)+`"}`); code != http.StatusBadRequest || body["code"] != "request_length" {
+		t.Errorf("a change request over the limit = %d %v, want 400 request_length", code, body["code"])
+	}
 	taken := "diambil-" + suffix
 	otherSite := models.Site{UserID: other.ID, WorkspaceID: 0, Name: "Lain", Slug: &taken}
 	db.Create(&otherSite)
