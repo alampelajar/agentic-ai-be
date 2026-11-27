@@ -34,6 +34,10 @@ const (
 	maxSiteImages        = 8
 	maxSiteImageBytes    = 3 << 20
 	maxActiveRunsPerUser = 2
+	// maxSiteTextLength bounds a description and a change request, in characters, so
+	// a long text pasted from elsewhere fits. The brief keeps the requests within
+	// sitebuilder.maxChangesChars, so long ones do not crowd every later prompt.
+	maxSiteTextLength = 10_000
 )
 
 var builderModels sitebuilder.ModelCaller = BuilderModels{}
@@ -235,8 +239,8 @@ func CreateSite(c *gin.Context) {
 		return
 	}
 	description := strings.TrimSpace(req.Description)
-	if length := utf8.RuneCountInString(description); length < 10 || length > 2000 {
-		siteError(c, http.StatusBadRequest, "description_length", "Ceritakan website Anda dalam 10 sampai 2000 karakter.")
+	if length := utf8.RuneCountInString(description); length < 10 || length > maxSiteTextLength {
+		siteError(c, http.StatusBadRequest, "description_length", "Ceritakan website Anda dalam 10 sampai 10000 karakter.")
 		return
 	}
 	if req.RemixOf != nil {
@@ -873,8 +877,8 @@ func StartSiteRun(c *gin.Context) {
 		siteError(c, http.StatusBadRequest, "invalid", "Jenis pekerjaan tidak dikenal.")
 		return
 	}
-	if utf8.RuneCountInString(request) > 2000 {
-		siteError(c, http.StatusBadRequest, "request_length", "Permintaan terlalu panjang.")
+	if utf8.RuneCountInString(request) > maxSiteTextLength {
+		siteError(c, http.StatusBadRequest, "request_length", "Permintaan terlalu panjang. Paling banyak 10000 karakter.")
 		return
 	}
 	// Paid when it succeeds; the work already started counts against the balance now.
