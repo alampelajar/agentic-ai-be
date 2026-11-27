@@ -243,6 +243,10 @@ func CreateSite(c *gin.Context) {
 		siteError(c, http.StatusBadRequest, "description_length", "Ceritakan website Anda dalam 10 sampai 10000 karakter.")
 		return
 	}
+	if topic := sitebuilder.ForbiddenTopic(description); topic != "" {
+		refuseForbidden(c, topic, nil, description)
+		return
+	}
 	if req.RemixOf != nil {
 		if _, found := showcasedSite(*req.RemixOf); !found {
 			siteError(c, http.StatusNotFound, "not_found", "Website contoh ini tidak lagi ada di galeri.")
@@ -395,6 +399,10 @@ func UpdateSite(c *gin.Context) {
 		siteError(c, http.StatusBadRequest, "invalid_name", "Nama tidak valid.")
 		return
 	}
+	if topic := sitebuilder.ForbiddenTopic(req.Name); topic != "" {
+		refuseForbidden(c, topic, site, req.Name)
+		return
+	}
 	config.DB.Model(site).Update("name", strings.TrimSpace(req.Name))
 	c.JSON(http.StatusOK, gin.H{"ok": true, "site": siteView(site)})
 }
@@ -471,6 +479,10 @@ func SiteQuestions(c *gin.Context) {
 	if !ok {
 		return
 	}
+	if topic := siteForbiddenTopic(site); topic != "" {
+		refuseForbidden(c, topic, site, site.Description)
+		return
+	}
 	var set sitebuilder.QuestionSet
 	if site.QuestionsJSON != "" && c.Query("refresh") != "1" {
 		_ = json.Unmarshal([]byte(site.QuestionsJSON), &set)
@@ -483,6 +495,11 @@ func SiteQuestions(c *gin.Context) {
 		defer cancel()
 		answer, _, err := builderModels.Complete(ctx, userID, sitebuilder.NeedFast, sitebuilder.QuestionsPrompt(site.Description, uiLanguageOf(site)))
 		decoded := err == nil && sitebuilder.DecodeJSON(answer, &set) == nil
+		// The planner recognises a forbidden website the word list missed.
+		if decoded && sitebuilder.IsForbiddenTopic(set.Forbidden) {
+			refuseForbidden(c, set.Forbidden, site, site.Description)
+			return
+		}
 		if !decoded || !usableQuestions(set) {
 			if err != nil {
 				log.Printf("[SITES] questions for site %d: %v", site.ID, err)
@@ -698,6 +715,10 @@ func SiteBrief(c *gin.Context) {
 	if extra := clipRunes(strings.TrimSpace(req.Extra), 1000); extra != "" {
 		answers["_extra"] = []string{extra}
 	}
+	if topic := siteForbiddenTopic(site, answerTexts(answers, name)...); topic != "" {
+		refuseForbidden(c, topic, site, strings.Join(answerTexts(answers, name), " "))
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(c.Request.Context(), builderFastTimeout+20*time.Second)
 	defer cancel()
@@ -879,6 +900,10 @@ func StartSiteRun(c *gin.Context) {
 	}
 	if utf8.RuneCountInString(request) > maxSiteTextLength {
 		siteError(c, http.StatusBadRequest, "request_length", "Permintaan terlalu panjang. Paling banyak 10000 karakter.")
+		return
+	}
+	if topic := siteForbiddenTopic(site, request); topic != "" {
+		refuseForbidden(c, topic, site, request)
 		return
 	}
 	// Paid when it succeeds; the work already started counts against the balance now.
@@ -1107,6 +1132,10 @@ func PublishSite(c *gin.Context) {
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		siteError(c, http.StatusBadRequest, "invalid", "Format permintaan tidak valid.")
+		return
+	}
+	if topic := siteForbiddenTopic(site, req.Slug); topic != "" {
+		refuseForbidden(c, topic, site, req.Slug)
 		return
 	}
 	release, url, problem := publishSiteVersion(site, req.Slug)

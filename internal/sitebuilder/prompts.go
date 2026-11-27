@@ -74,6 +74,9 @@ type QuestionSet struct {
 	KnownContact Contact    `json:"known_contact"`
 	LookWish     string     `json:"look_wish"`
 	Questions    []Question `json:"questions"`
+	// Forbidden is the planner's judgement that the website is one the builder never
+	// makes (TopicGambling or TopicAdult, see forbidden.go), else empty.
+	Forbidden string `json:"forbidden,omitempty"`
 }
 
 // PlainWordsRule is the language rule for every text a person reads in the builder.
@@ -85,7 +88,8 @@ func QuestionsPrompt(description, uiLanguage string) []Message {
 	system := fmt.Sprintf(`You help people with no technical knowledge plan a website. You read their description, note what it already tells you, and ask only what is still missing to decide what the website contains.
 
 Reply with one JSON object and nothing else:
-{"kind": "<one of: %s>",
+{"forbidden": "<gambling, adult or empty: see the first rule>",
+ "kind": "<one of: %s>",
  "language": "<the language the description is written in: id for Indonesian, en for English>",
  "suggested_name": "<the business, event or person name if the description gives one, else empty>",
  "understood": [{"label": "<what it is, e.g. Usaha, Tempat, Tanggal, Tema, Halaman>", "value": "<what the description says>"}],
@@ -94,6 +98,7 @@ Reply with one JSON object and nothing else:
  "questions": [{"id": "<short id>", "text": "<question>", "multiple": <true when several answers make sense>, "options": ["<2 to 5 options>"], "free": <true only for the one question answered in their own words, with no options>}]}
 
 Rules:
+- "forbidden": "gambling" when the website is for gambling or betting of any kind, or sends people to it (online slots, togel, casino, poker or card games for money, sports betting, lottery, an agent or link to such a site), even in hidden words; "adult" when it is for pornography, sexual content or paid sexual services. Leave it empty for anything else, including a website that warns against these. When it is not empty, still answer with the whole JSON object, with no questions.
 - Write labels, questions and options in %s. %s
 - "understood": 2 to 6 facts the description states (what it is, place, date, theme, what is sold, which pages). Never guess.
 - "known_contact": only details written in the description; leave the rest empty. For an event or a wedding, the place where it is held goes in "address".
