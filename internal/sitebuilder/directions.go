@@ -382,6 +382,28 @@ main > section[data-band]:nth-of-type(even) .bg-surface {
 .marquee-track:hover { animation-play-state: paused; }
 .word-swap { animation: site-word var(--motion-duration) var(--motion-ease) both; }
 
+@keyframes site-fall {
+  0%% { opacity: 0; transform: translate3d(0, 0, 0) rotate(0deg); }
+  10%% { opacity: 1; }
+  85%% { opacity: 1; }
+  100%% { opacity: 0; transform: translate3d(var(--fall-drift, 0px), 105vh, 0) rotate(var(--fall-spin, 360deg)); }
+}
+
+@keyframes site-caret {
+  50%% { opacity: 0; }
+}
+
+@keyframes site-pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.fall-piece { animation: site-fall 6s ease-in both; }
+.type-caret { margin-left: 0.05em; animation: site-caret 0.9s steps(1) infinite; }
+.wa-pop { animation: site-pop var(--motion-duration) var(--motion-ease) 1.2s both; }
+.cover-slide { transition: transform 0.9s var(--motion-ease), opacity 0.9s var(--motion-ease); }
+.cover-gone { transform: translateY(-100%%); opacity: 0.4; }
+
 @media (prefers-reduced-motion: no-preference) {
   [data-reveal] {
     transition: opacity var(--motion-duration) var(--motion-ease), transform var(--motion-duration) var(--motion-ease);
@@ -395,7 +417,9 @@ main > section[data-band]:nth-of-type(even) .bg-surface {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track, .float, .word-swap { animation: none !important; }
+  .marquee-track, .float, .word-swap, .type-caret, .wa-pop { animation: none !important; }
+  .fall-piece { display: none; }
+  .cover-slide { transition: none; }
   .marquee-track { flex-wrap: wrap; width: auto; justify-content: center; }
   .marquee-track [data-copy] { display: none; }
   .lift:hover { transform: none; }

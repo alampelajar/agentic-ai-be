@@ -591,6 +591,32 @@ func TestEveryBlockIsInThePrompt(t *testing.T) {
 	}
 }
 
+// Every finished piece of the kit is described to the agent, so it can use it, and the
+// theme carries the movement rules the new pieces need.
+func TestEveryKitPieceIsInThePrompt(t *testing.T) {
+	index, err := os.ReadFile("template/web/src/kit/index.ts")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := DirectionByKey("warm-editorial")
+	prompt := CodingSystem(Brief{Language: "id"}, d)
+	pieces := regexp.MustCompile(`export \{ (\w+) \} from '\./\w+'`).FindAllStringSubmatch(string(index), -1)
+	if len(pieces) < 20 {
+		t.Fatalf("only %d kit pieces found", len(pieces))
+	}
+	for _, match := range pieces {
+		if !strings.Contains(prompt, match[1]+" {") {
+			t.Errorf("%s is exported by kit/index.ts but not described in the coding prompt", match[1])
+		}
+	}
+	theme := ThemeCSS(d, "", nil)
+	for _, rule := range []string{".fall-piece {", ".type-caret {", ".wa-pop {", ".cover-gone {", ".fall-piece { display: none; }"} {
+		if !strings.Contains(theme, rule) {
+			t.Errorf("theme.css lacks %q", rule)
+		}
+	}
+}
+
 // Build errors keep the file, line and message, without TypeScript's long type shapes.
 func TestShortenErrors(t *testing.T) {
 	long := "web/src/components/Layout.tsx:91:19 Property 'address' does not exist on type '{ name: string; tagline: string; language: \"id\" | \"en\"; pages: SitePage[]; contact: { phone: string; whatsapp: string; email: string; address: string; hours: string; }; social: Record<string, string>; logo: string; }'."
