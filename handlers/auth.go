@@ -242,6 +242,10 @@ func Login(c *gin.Context) {
 		refusePendingDeletion(c, user)
 		return
 	}
+	if suspended(user) {
+		refuseSuspended(c, user)
+		return
+	}
 
 	if user.Role == "" {
 		user.Role = "user"
@@ -581,6 +585,10 @@ func refreshSession(c *gin.Context, cookie refreshCookie) {
 			"ok":      false,
 			"message": "Pengguna tidak ditemukan",
 		})
+		return
+	}
+	if suspended(user) {
+		refuseSuspended(c, user)
 		return
 	}
 

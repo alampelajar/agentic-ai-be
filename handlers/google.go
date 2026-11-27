@@ -163,6 +163,10 @@ func GoogleLogin(c *gin.Context) {
 		refusePendingDeletion(c, user)
 		return
 	}
+	if err == nil && suspended(user) {
+		refuseSuspended(c, user)
+		return
+	}
 
 	if err != nil {
 		// ==========================================
