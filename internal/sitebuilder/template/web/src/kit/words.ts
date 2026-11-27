@@ -14,6 +14,12 @@ const all = {
     guestbookFailed: 'Ucapan belum bisa ditampilkan.',
     guestbookLoading: 'Memuat ucapan...',
     guest: 'Tamu',
+    previous: 'Foto sebelumnya',
+    next: 'Foto berikutnya',
+    photo: 'Foto',
+    openInvitation: 'Buka undangan',
+    dear: 'Kepada Yth.',
+    chat: 'Chat WhatsApp',
   },
   en: {
     days: 'days',
@@ -27,6 +33,12 @@ const all = {
     guestbookFailed: 'Messages cannot be shown right now.',
     guestbookLoading: 'Loading messages...',
     guest: 'Guest',
+    previous: 'Previous photo',
+    next: 'Next photo',
+    photo: 'Photo',
+    openInvitation: 'Open invitation',
+    dear: 'Dear',
+    chat: 'Chat on WhatsApp',
   },
 }
 

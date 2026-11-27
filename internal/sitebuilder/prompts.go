@@ -231,7 +231,7 @@ const neverList = `Never, unless the design direction or the owner's requests sa
 - emoji in headings or used as icons;
 - vague hero text that could belong to any business ("Welcome to our website", "Quality you can trust");
 - heavy shadows, or corners rounder than the direction's shape;
-- movement that does not come from the motion pieces (Reveal, Stagger, CountUp, Marquee, RotatingWords, Parallax, lift, float), more movement than the look's motion level asks for, or movement that hides or delays the main text;
+- movement that does not come from the motion pieces (Reveal, Stagger, CountUp, Marquee, RotatingWords, Parallax, Typewriter, Slideshow, Confetti, InvitationCover, WhatsAppButton, lift, float), more movement than the look's motion level asks for, or movement that hides or delays the main text;
 - placeholder text or pictures.`
 
 // CodingSystem is the system prompt for every model call that writes site code.
@@ -260,7 +260,8 @@ STACK (fixed, nothing else exists)
   FramedPhoto { src, alt, frame?: 'thin'|'arch'|'offset' } one of site.images in a frame.
   PhotoGallery { limit? } the owner's photos in a grid; it shows nothing when there are none.
   Motion pieces (see MOTION): Reveal { from?: 'up'|'down'|'left'|'right'|'fade'|'zoom', delay?: ms, as? } fades a block in when scrolled into view; Stagger { from?, as?, itemAs?, className, itemClassName } shows its children one after another (grid classes go on Stagger); CountUp { to, prefix?, suffix? } counts up to a number written directly (to={12}) that the brief states, never a price or count it does not give (checked); Marquee { items: string[], speed? } slides short words across; RotatingWords { words: string[] } swaps one word inside a headline; Parallax { speed?: 0.05-0.3 } moves a picture slower than the page.
-  Each accepts className to replace its default classes.
+  Pieces used only when the owner asks for them, or as said here: Typewriter { text, speed?: 'slow'|'normal'|'fast', delay?, as? } types one short line letter by letter (as='h1' for a heading; never on long text). Slideshow { photos?: number[] (indexes into site.images), captions?: string[], interval?, shape?: 'wide'|'square'|'tall' } the owner's photos one at a time, moving by themselves and swipeable; it shows nothing without photos. Confetti { kind?: 'petals'|'paper'|'hearts', count?, after? } falls once over the page: at most one, on the main page of a wedding, birthday or celebration (after='invitation-open' when the page has InvitationCover). InvitationCover { label?, title, date?, buttonLabel? } the cover a guest opens first (it greets the guest named in ?to= by itself): at most one, first thing on the main page of an invitation, and only when the owner asks for an opening cover. WhatsAppButton { message?, label? } a round WhatsApp button fixed in the corner of every page: put it once in Layout, never in a page; it shows nothing without a WhatsApp number.
+  Each accepts className to replace its default classes (InvitationCover, Confetti and WhatsAppButton do not).
 FINISHED SECTIONS (import from '../blocks'; build every page from them)
 - They already carry this look: its layout, spacing, colours, buttons and movement. Pass only words and facts. Never style them, never give them className, never put them inside another wrapper or container, never rebuild what one does.
 - Stack them in the order of the page's sections, directly one after another: nothing between them (no Ornament, divider or spacer; the sections already have their own room). Every page starts with Hero (home page) or EventHero (the main page of an invitation or event), or PageIntro (every other page): these hold the page's one h1.

@@ -248,7 +248,7 @@ var tokenRules = []struct {
 	{regexp.MustCompile(`font-\[|fontFamily|font-family`), "a font set in the code; use font-heading or font-body"},
 	{regexp.MustCompile(`\bbg-(linear|gradient|radial|conic)-`), "a gradient; the design direction uses flat colour"},
 	{regexp.MustCompile(`(?i)lorem ipsum`), "placeholder text"},
-	{regexp.MustCompile(`\banimate-(bounce|ping|pulse)\b|requestAnimationFrame|@keyframes`), "own animation code: use the kit's motion pieces (Reveal, Stagger, CountUp, Marquee, RotatingWords, Parallax) and the lift and float classes instead"},
+	{regexp.MustCompile(`\banimate-(bounce|ping|pulse)\b|requestAnimationFrame|@keyframes`), "own animation code: use the kit's motion pieces (Reveal, Stagger, CountUp, Marquee, RotatingWords, Parallax, Typewriter, Slideshow, Confetti) and the lift and float classes instead"},
 	{regexp.MustCompile(`(?i)https?://(images\.unsplash|source\.unsplash|picsum\.photos|placehold|via\.placeholder|placekitten|dummyimage)`), "a picture from the internet; use only site.images and site.logo"},
 }
 
